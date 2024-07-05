@@ -7,12 +7,12 @@
 <meta name="full-screen" content="yes">
 <meta name="theme-color" content="#317EFB" />
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=0" name="viewport">
-<meta name="description" content="[toc] Git基础知识1. 什么是GitGit是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。 git可以看到文件修改记录，如何修改以及修改的人，git历史存储在共享存储库中  1.1 git组件git主要包括三个组件：  存储库：跟踪所有文件修改的容器，保存着团队的所有提交。  1234#创建存储库git init# 日志命令git log">
+<meta name="description" content="Git基础知识1. 什么是GitGit是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。 git可以看到文件修改记录，如何修改以及修改的人，git历史存储在共享存储库中  1.1 git组件git主要包括三个组件：  存储库：跟踪所有文件修改的容器，保存着团队的所有提交。  1234#创建存储库git init# 日志命令git log   工作树：由正">
 <meta property="og:type" content="article">
 <meta property="og:title" content="git学习">
 <meta property="og:url" content="https://jerry609.github.io/2024/07/05/git%E5%AD%A6%E4%B9%A0/index.html">
 <meta property="og:site_name" content="Hexo">
-<meta property="og:description" content="[toc] Git基础知识1. 什么是GitGit是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。 git可以看到文件修改记录，如何修改以及修改的人，git历史存储在共享存储库中  1.1 git组件git主要包括三个组件：  存储库：跟踪所有文件修改的容器，保存着团队的所有提交。  1234#创建存储库git init# 日志命令git log">
+<meta property="og:description" content="Git基础知识1. 什么是GitGit是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。 git可以看到文件修改记录，如何修改以及修改的人，git历史存储在共享存储库中  1.1 git组件git主要包括三个组件：  存储库：跟踪所有文件修改的容器，保存着团队的所有提交。  1234#创建存储库git init# 日志命令git log   工作树：由正">
 <meta property="og:locale">
 <meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
 <meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
@@ -33,7 +33,7 @@
 <meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
 <meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
 <meta property="article:published_time" content="2024-07-05T08:08:45.000Z">
-<meta property="article:modified_time" content="2024-07-05T13:46:38.325Z">
+<meta property="article:modified_time" content="2024-07-05T14:00:21.614Z">
 <meta property="article:author" content="John Doe">
 <meta property="article:tag" content="git">
 <meta name="twitter:card" content="summary">
@@ -80,8 +80,8 @@
 
 
 <!-- Variable -->
-<script>window.ASYNC_CONFIG = {"hostname":"jerry609.github.io","author":"John Doe","root":"/","typed_text":null,"theme_version":"2.2.2","theme":{"switch":true,"default":"style-light"},"favicon":{"logo":"/img/favicon.svg","icon16":"/img/favicon.svg","icon32":"/img/favicon.svg","apple_touch_icon":null,"webmanifest":"/site.webmanifest","visibilitychange":true,"hidden":"/failure.ico","show_text":"(/≧▽≦/)咦！又好了！","hide_text":"(●—●)喔哟，崩溃啦！"},"i18n":{"placeholder":"搜索文章...","empty":"找不到您查询的内容: ${query}","hits":"找到 ${hits} 条结果","hits_time":"找到 ${hits} 条结果（用时 ${time} 毫秒）","author":"本文作者：","copyright_link":"本文链接：","copyright_license_title":"版权声明：","copyright_license_content":"本博客所有文章除特别声明外，均默认采用 undefined 许可协议。","copy_success":"复制成功","copy_failure":"复制失败","open_read_mode":"进入阅读模式","exit_read_mode":"退出阅读模式","notice_outdate_message":"距离上次更新已经 undefined 天了, 文章内容可能已经过时。","sticky":"置顶","just":"刚刚","min":"分钟前","hour":"小时前","day":"天前","month":"个月前"},"swup":false,"plugin":{"flickr_justified_gallery":"https://unpkg.com/flickr-justified-gallery@latest/dist/fjGallery.min.js"},"icons":{"sun":"far fa-sun","moon":"far fa-moon","play":"fas fa-play","email":"far fa-envelope","next":"fas fa-arrow-right","calendar":"far fa-calendar-alt","clock":"far fa-clock","user":"far fa-user","back_top":"fas fa-arrow-up","close":"fas fa-times","search":"fas fa-search","reward":"fas fa-hand-holding-usd","user_tag":"fas fa-user-alt","toc_tag":"fas fa-th-list","read":"fas fa-book-reader","arrows":"fas fa-arrows-alt-h","double_arrows":"fas fa-angle-double-down","copy":"fas fa-copy"},"icontype":"font","highlight":{"plugin":"highlighjs","theme":true,"copy":true,"lang":true,"title":"default","height_limit":false},"toc":{"post_title":true},"live_time":{"start_time":"","prefix":"博客已萌萌哒运行 undefined 天"},"danmu":{"enable":false,"el":".trm-banner"}};</script>
-<script id="async-page-config">window.PAGE_CONFIG = {"isPost":true,"isHome":false,"postUpdate":"2024-07-05 21:46:38"};</script>
+<script>window.ASYNC_CONFIG = {"hostname":"jerry609.github.io","author":"John Doe","root":"/","typed_text":null,"theme_version":"2.2.2","theme":{"switch":true,"default":"style-light"},"favicon":{"logo":"/img/favicon.svg","icon16":"/img/favicon.svg","icon32":"/img/favicon.svg","apple_touch_icon":null,"webmanifest":"/site.webmanifest","visibilitychange":true,"hidden":"/failure.ico","show_text":"(/≧▽≦/)咦！又好了！","hide_text":"(●—●)喔哟，崩溃啦！"},"i18n":{"placeholder":"搜索文章...","empty":"找不到您查询的内容: ${query}","hits":"找到 ${hits} 条结果","hits_time":"找到 ${hits} 条结果（用时 ${time} 毫秒）","author":"本文作者：","copyright_link":"本文链接：","copyright_license_title":"版权声明：","copyright_license_content":"本博客所有文章除特别声明外，均默认采用 undefined 许可协议。","copy_success":"复制成功","copy_failure":"复制失败","open_read_mode":"进入阅读模式","exit_read_mode":"退出阅读模式","notice_outdate_message":"距离上次更新已经 undefined 天了, 文章内容可能已经过时。","sticky":"置顶","just":"刚刚","min":"分钟前","hour":"小时前","day":"天前","month":"个月前"},"swup":false,"plugin":{"flickr_justified_gallery":"https://unpkg.com/flickr-justified-gallery@latest/dist/fjGallery.min.js"},"icons":{"sun":"far fa-sun","moon":"far fa-moon","play":"fas fa-play","email":"far fa-envelope","next":"fas fa-arrow-right","calendar":"far fa-calendar-alt","clock":"far fa-clock","user":"far fa-user","back_top":"fas fa-arrow-up","close":"fas fa-times","search":"fas fa-search","reward":"fas fa-hand-holding-usd","user_tag":"fas fa-user-alt","toc_tag":"fas fa-th-list","read":"fas fa-book-reader","arrows":"fas fa-arrows-alt-h","double_arrows":"fas fa-angle-double-down","copy":"fas fa-copy"},"icontype":"font","highlight":{"plugin":"highlighjs","theme":true,"copy":true,"lang":true,"title":"default","height_limit":false},"toc":{"post_title":false},"live_time":{"start_time":"07/4/2024 10:00:00","prefix":"博客已萌萌哒运行 undefined 天"},"danmu":{"enable":false,"el":".trm-banner"}};</script>
+<script id="async-page-config">window.PAGE_CONFIG = {"isPost":true,"isHome":false,"postUpdate":"2024-07-05 22:00:21"};</script>
 
 <!-- Theme mode css -->
 <link data-swup-theme rel="stylesheet" href="/css/index.css?v=2.2.2" id="trm-switch-style">
@@ -374,8 +374,7 @@
 </div>
 <div class="trm-card ">
     <article id="article-container" class="trm-publication">
-    <p>[toc]</p>
-<h1 id="Git基础知识"><a href="#Git基础知识" class="headerlink" title="Git基础知识"></a>Git基础知识</h1><h2 id="1-什么是Git"><a href="#1-什么是Git" class="headerlink" title="1. 什么是Git"></a>1. 什么是Git</h2><p>Git是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。</p>
+    <h1 id="Git基础知识"><a href="#Git基础知识" class="headerlink" title="Git基础知识"></a>Git基础知识</h1><h2 id="1-什么是Git"><a href="#1-什么是Git" class="headerlink" title="1. 什么是Git"></a>1. 什么是Git</h2><p>Git是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。</p>
 <p>git可以看到文件修改记录，如何修改以及修改的人，git历史存储在共享存储库中</p>
 <p><img src="https://nulab.com/static/775ba7c8ed89fbce217271b1954b1b2e/5a190/02.png" alt="Examples of team works before a version control system and after a version control system"  data-tag='post-image' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
 <h3 id="1-1-git组件"><a href="#1-1-git组件" class="headerlink" title="1.1 git组件"></a>1.1 git组件</h3><p>git主要包括三个组件：</p>
@@ -719,9 +718,29 @@
     
 
     
+        <div class="trm-footer-item">
+            <span>© 2024- 2024</span>
+            <span class="footer-separator"data-separator=" · "></span>
+            <span class="trm-accent-color">Jerry</span>
+        </div>
+    
 
+    
+        <div class="trm-footer-item">
+            <span>
+                由 <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a> 驱动 v7.3.0
+            </span>
+            <span class="footer-separator" data-separator=" | "></span>
+            <span> 
+                主题 - 
+                <a rel="noopener" href='https://github.com/MaLuns/hexo-theme-async' target='_blank'>Async</a>
+                v2.2.2
+            </span>
+        </div>
       
 
+    
+        <div class="trm-footer-item blog-run-long"></div>
      
 
      
@@ -737,8 +756,24 @@
 
             
 
+    <div id="post-toc" class="trm-post-toc">
+      <div class="trm-post-toc-header">
+        目录导航
+				<span id="post-toc-top">
+					置顶
+				</span>
+      </div>
+      <div class="trm-post-toc-content">
+        <ol class="trm-toc"><li class="trm-toc-item trm-toc-level-1" title="Git基础知识"><a rel="nofollow" class="trm-toc-link" href="#Git基础知识"><span class="trm-toc-text">Git基础知识</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-2" title="1. 什么是Git"><a rel="nofollow" class="trm-toc-link" href="#1-什么是Git"><span class="trm-toc-text">1. 什么是Git</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="1.1 git组件"><a rel="nofollow" class="trm-toc-link" href="#1-1-git组件"><span class="trm-toc-text">1.1 git组件</span></a></li><li class="trm-toc-item trm-toc-level-3" title="1.2 工作流程"><a rel="nofollow" class="trm-toc-link" href="#1-2-工作流程"><span class="trm-toc-text">1.2 工作流程</span></a></li><li class="trm-toc-item trm-toc-level-3" title="1.3 git文件的三种状态"><a rel="nofollow" class="trm-toc-link" href="#1-3-git文件的三种状态"><span class="trm-toc-text">1.3 git文件的三种状态</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="2.存储库"><a rel="nofollow" class="trm-toc-link" href="#2-存储库"><span class="trm-toc-text">2.存储库</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="2.1 远程存储库与本地存储库"><a rel="nofollow" class="trm-toc-link" href="#2-1-远程存储库与本地存储库"><span class="trm-toc-text">2.1 远程存储库与本地存储库</span></a></li><li class="trm-toc-item trm-toc-level-3" title="2.2 创建存储库"><a rel="nofollow" class="trm-toc-link" href="#2-2-创建存储库"><span class="trm-toc-text">2.2 创建存储库</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="创建本地存储库"><a rel="nofollow" class="trm-toc-link" href="#创建本地存储库"><span class="trm-toc-text">创建本地存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="创建远程存储库"><a rel="nofollow" class="trm-toc-link" href="#创建远程存储库"><span class="trm-toc-text">创建远程存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="链接本地和远程存储库"><a rel="nofollow" class="trm-toc-link" href="#链接本地和远程存储库"><span class="trm-toc-text">链接本地和远程存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="克隆存储库"><a rel="nofollow" class="trm-toc-link" href="#克隆存储库"><span class="trm-toc-text">克隆存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="查看和操作提交历史"><a rel="nofollow" class="trm-toc-link" href="#查看和操作提交历史"><span class="trm-toc-text">查看和操作提交历史</span></a></li></ol></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="3.记录变更"><a rel="nofollow" class="trm-toc-link" href="#3-记录变更"><span class="trm-toc-text">3.记录变更</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="3.1 进行更改"><a rel="nofollow" class="trm-toc-link" href="#3-1-进行更改"><span class="trm-toc-text">3.1 进行更改</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="工作树（Working Tree）"><a rel="nofollow" class="trm-toc-link" href="#工作树（Working-Tree）"><span class="trm-toc-text">工作树（Working Tree）</span></a></li><li class="trm-toc-item trm-toc-level-4" title="索引（Index 或 Staging Area）"><a rel="nofollow" class="trm-toc-link" href="#索引（Index-或-Staging-Area）"><span class="trm-toc-text">索引（Index 或 Staging Area）</span></a></li><li class="trm-toc-item trm-toc-level-4" title="提交更改到存储库"><a rel="nofollow" class="trm-toc-link" href="#提交更改到存储库"><span class="trm-toc-text">提交更改到存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="查看工作树状态"><a rel="nofollow" class="trm-toc-link" href="#查看工作树状态"><span class="trm-toc-text">查看工作树状态</span></a></li><li class="trm-toc-item trm-toc-level-4" title="添加文件到索引"><a rel="nofollow" class="trm-toc-link" href="#添加文件到索引"><span class="trm-toc-text">添加文件到索引</span></a></li><li class="trm-toc-item trm-toc-level-4" title="从索引中移除文件"><a rel="nofollow" class="trm-toc-link" href="#从索引中移除文件"><span class="trm-toc-text">从索引中移除文件</span></a></li><li class="trm-toc-item trm-toc-level-4" title="提交索引中的更改到存储库"><a rel="nofollow" class="trm-toc-link" href="#提交索引中的更改到存储库"><span class="trm-toc-text">提交索引中的更改到存储库</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="3.2 提交更改"><a rel="nofollow" class="trm-toc-link" href="#3-2-提交更改"><span class="trm-toc-text">3.2 提交更改</span></a></li><li class="trm-toc-item trm-toc-level-3" title="3.3 git提交消息"><a rel="nofollow" class="trm-toc-link" href="#3-3-git提交消息"><span class="trm-toc-text">3.3 git提交消息</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="git commit"><a rel="nofollow" class="trm-toc-link" href="#git-commit"><span class="trm-toc-text">git commit</span></a></li><li class="trm-toc-item trm-toc-level-4" title="git commit -m"><a rel="nofollow" class="trm-toc-link" href="#git-commit-m"><span class="trm-toc-text">git commit -m</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="示例"><a rel="nofollow" class="trm-toc-link" href="#示例"><span class="trm-toc-text">示例</span></a></li><li class="trm-toc-item trm-toc-level-3" title="结论"><a rel="nofollow" class="trm-toc-link" href="#结论"><span class="trm-toc-text">结论</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="4. 还原变更"><a rel="nofollow" class="trm-toc-link" href="#4-还原变更"><span class="trm-toc-text">4. 还原变更</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="4.1 撤销提交"><a rel="nofollow" class="trm-toc-link" href="#4-1-撤销提交"><span class="trm-toc-text">4.1 撤销提交</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.2 移除提交"><a rel="nofollow" class="trm-toc-link" href="#4-2-移除提交"><span class="trm-toc-text">4.2 移除提交</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.3 重置模式"><a rel="nofollow" class="trm-toc-link" href="#4-3-重置模式"><span class="trm-toc-text">4.3 重置模式</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="1. 混合（Mixed）模式"><a rel="nofollow" class="trm-toc-link" href="#1-混合（Mixed）模式"><span class="trm-toc-text">1. 混合（Mixed）模式</span></a></li><li class="trm-toc-item trm-toc-level-4" title="示例"><a rel="nofollow" class="trm-toc-link" href="#示例-1"><span class="trm-toc-text">示例</span></a></li><li class="trm-toc-item trm-toc-level-4" title="2. 软（Soft）模式"><a rel="nofollow" class="trm-toc-link" href="#2-软（Soft）模式"><span class="trm-toc-text">2. 软（Soft）模式</span></a></li><li class="trm-toc-item trm-toc-level-4" title="示例"><a rel="nofollow" class="trm-toc-link" href="#示例-2"><span class="trm-toc-text">示例</span></a></li><li class="trm-toc-item trm-toc-level-4" title="3. 硬（Hard）模式"><a rel="nofollow" class="trm-toc-link" href="#3-硬（Hard）模式"><span class="trm-toc-text">3. 硬（Hard）模式</span></a></li><li class="trm-toc-item trm-toc-level-4" title="示例"><a rel="nofollow" class="trm-toc-link" href="#示例-3"><span class="trm-toc-text">示例</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="注意"><a rel="nofollow" class="trm-toc-link" href="#注意"><span class="trm-toc-text">注意</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="5. 同步到存储库"><a rel="nofollow" class="trm-toc-link" href="#5-同步到存储库"><span class="trm-toc-text">5. 同步到存储库</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="5.1 推送更改"><a rel="nofollow" class="trm-toc-link" href="#5-1-推送更改"><span class="trm-toc-text">5.1 推送更改</span></a></li><li class="trm-toc-item trm-toc-level-3" title="5.2 拉取更改"><a rel="nofollow" class="trm-toc-link" href="#5-2-拉取更改"><span class="trm-toc-text">5.2 拉取更改</span></a></li><li class="trm-toc-item trm-toc-level-3" title="5.3 合并更改"><a rel="nofollow" class="trm-toc-link" href="#5-3-合并更改"><span class="trm-toc-text">5.3 合并更改</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="解决方案：拉取远程更改并合并"><a rel="nofollow" class="trm-toc-link" href="#解决方案：拉取远程更改并合并"><span class="trm-toc-text">解决方案：拉取远程更改并合并</span></a></li><li class="trm-toc-item trm-toc-level-4" title="为什么这样做？"><a rel="nofollow" class="trm-toc-link" href="#为什么这样做？"><span class="trm-toc-text">为什么这样做？</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="5.4 解决合并冲突"><a rel="nofollow" class="trm-toc-link" href="#5-4-解决合并冲突"><span class="trm-toc-text">5.4 解决合并冲突</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="6. 管理git 历史记录"><a rel="nofollow" class="trm-toc-link" href="#6-管理git-历史记录"><span class="trm-toc-text">6. 管理git 历史记录</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="6.1 修改提交"><a rel="nofollow" class="trm-toc-link" href="#6-1-修改提交"><span class="trm-toc-text">6.1 修改提交</span></a></li><li class="trm-toc-item trm-toc-level-3" title="6.2 将提交复制到新分支"><a rel="nofollow" class="trm-toc-link" href="#6-2-将提交复制到新分支"><span class="trm-toc-text">6.2 将提交复制到新分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="6.3 将提交复制到其他分支"><a rel="nofollow" class="trm-toc-link" href="#6-3-将提交复制到其他分支"><span class="trm-toc-text">6.3 将提交复制到其他分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="6.4 合并提交"><a rel="nofollow" class="trm-toc-link" href="#6-4-合并提交"><span class="trm-toc-text">6.4 合并提交</span></a></li></ol></li></ol></li></ol>
+      </div>
+    </div>
+
             
 <div class="trm-fixed-container">
+    
+        <div class="trm-fixed-btn post-toc-btn" data-title="目录">
+            <i class="iconfont fas fa-th-list"></i>
+        </div>
     
     
         <div class="trm-fixed-btn" data-title="阅读模式" onclick="asyncFun.switchReadMode()">
