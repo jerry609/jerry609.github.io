@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="">
+
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+<meta name="x5-fullscreen" content="true">
+<meta name="full-screen" content="yes">
+<meta name="theme-color" content="#317EFB" />
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=0" name="viewport">
+<meta name="description" content="Git基础知识1. 什么是GitGit是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。 git可以看到文件修改记录，如何修改以及修改的人，git历史存储在共享存储库中  1.1 git组件git主要包括三个组件：  存储库：跟踪所有文件修改的容器，保存着团队的所有提交。  1234#创建存储库git init# 日志命令git log   工作树：由正">
+<meta property="og:type" content="article">
+<meta property="og:title" content="git学习">
+<meta property="og:url" content="https://jerry609.github.io/2024/07/05/git%E5%AD%A6%E4%B9%A0/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="Git基础知识1. 什么是GitGit是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。 git可以看到文件修改记录，如何修改以及修改的人，git历史存储在共享存储库中  1.1 git组件git主要包括三个组件：  存储库：跟踪所有文件修改的容器，保存着团队的所有提交。  1234#创建存储库git init# 日志命令git log   工作树：由正">
+<meta property="og:locale">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="article:published_time" content="2024-07-05T08:08:45.000Z">
+<meta property="article:modified_time" content="2024-07-06T03:58:58.000Z">
+<meta property="article:author" content="Jerry">
+<meta property="article:tag" content="git">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://jerry609.github.io/img/404.jpg">
+
+
+<title >git学习</title>
+
+<!-- Favicon -->
+
+    <link href='/img/favicon.svg?v=2.2.4' rel='icon' type='image/png' sizes='16x16' ></link>
+
+
+    <link href='/img/favicon.svg?v=2.2.4' rel='icon' type='image/png' sizes='32x32' ></link>
+
+
+
+    <link href='/site.webmanifest' rel='manifest' ></link>
+
+
+<!-- Plugin -->
+
+
+
+
+    
+<link rel="stylesheet" href="/css/plugins/bootstrap.row.css">
+
+    
+<link rel="stylesheet" href="https://unpkg.com/@fancyapps/ui@4.0/dist/fancybox.css">
+
+    
+    
+
+
+
+
+<!-- Icon -->
+
+    
+<link rel="stylesheet" href="/css/plugins/font-awesome.min.css">
+
+
+
+
+<!-- Variable -->
+<script>window.ASYNC_CONFIG = {"hostname":"jerry609.github.io","author":"Jerry","root":"/","typed_text":["有趣的人"],"theme_version":"2.2.4","theme":{"switch":true,"default":"style-light"},"favicon":{"logo":"/img/favicon.svg","icon16":"/img/favicon.svg","icon32":"/img/favicon.svg","apple_touch_icon":null,"webmanifest":"/site.webmanifest","visibilitychange":true,"hidden":"/failure.ico","show_text":"(/≧▽≦/)咦！又好了！","hide_text":"(●—●)喔哟，崩溃啦！"},"i18n":{"placeholder":"搜索文章...","empty":"找不到您查询的内容: ${query}","hits":"找到 ${hits} 条结果","hits_time":"找到 ${hits} 条结果（用时 ${time} 毫秒）","author":"本文作者：","copyright_link":"本文链接：","copyright_license_title":"版权声明：","copyright_license_content":"本博客所有文章除特别声明外，均默认采用 undefined 许可协议。","copy_success":"复制成功","copy_failure":"复制失败","open_read_mode":"进入阅读模式","exit_read_mode":"退出阅读模式","notice_outdate_message":"距离上次更新已经 undefined 天了, 文章内容可能已经过时。","sticky":"置顶","just":"刚刚","min":"分钟前","hour":"小时前","day":"天前","month":"个月前"},"swup":false,"plugin":{"flickr_justified_gallery":"https://unpkg.com/flickr-justified-gallery@latest/dist/fjGallery.min.js"},"icons":{"sun":"far fa-sun","moon":"far fa-moon","play":"fas fa-play","email":"far fa-envelope","next":"fas fa-arrow-right","calendar":"far fa-calendar-alt","clock":"far fa-clock","user":"far fa-user","back_top":"fas fa-arrow-up","close":"fas fa-times","search":"fas fa-search","reward":"fas fa-hand-holding-usd","toc_tag":"fas fa-th-list","read":"fas fa-book-reader","arrows":"fas fa-arrows-alt-h","double_arrows":"fas fa-angle-double-down","copy":"fas fa-copy"},"icontype":"font","highlight":{"plugin":"highlighjs","theme":true,"copy":true,"lang":true,"title":"default","height_limit":false},"toc":{"post_title":false},"live_time":{"start_time":"07/4/2024 10:00:00","prefix":"博客已萌萌哒运行 undefined 天"},"danmu":{"enable":false,"el":".trm-banner"}};</script>
+<script id="async-page-config">window.PAGE_CONFIG = {"isPost":true,"isHome":false,"postUpdate":"2024-07-06 11:58:58"};</script>
+
+<!-- Theme mode css -->
+<link data-swup-theme rel="stylesheet" href="/css/index.css?v=2.2.4" id="trm-switch-style">
+<script>
+    let defaultMode = ASYNC_CONFIG.theme.default !=='auto' ?  ASYNC_CONFIG.theme.default : (window.matchMedia("(prefers-color-scheme: light)").matches ? 'style-light' : 'style-dark')
+    let catchMode = localStorage.getItem('theme-mode') || defaultMode;
+    let type = catchMode === 'style-dark' ? 'add' : 'remove';
+    document.documentElement.classList[type]('dark')
+</script>
+
+<!-- CDN -->
+
+
+    
+    
+
+
+
+<!-- Site Analytics -->
+
+ 
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+
+  <!-- app wrapper -->
+  <div class="trm-app-frame">
+
+    <!-- page preloader -->
+    <div class="trm-preloader">
+    <div class="trm-holder">
+        <div class="preloader">
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+        </div>
+    </div>
+</div>
+    <!-- page preloader end -->
+
+    <!-- change mode preloader -->
+    <div class="trm-mode-swich-animation-frame">
+    <div class="trm-mode-swich-animation">
+        <i class="i-sun"><i class="iconfont far fa-sun"></i></i>
+        <div class="trm-horizon"></div>
+        <i class="i-moon"><i class="iconfont far fa-moon"></i></i>
+    </div>
+</div>
+    <!-- change mode preloader end -->
+
+      <!-- scroll container -->
+      <div id="trm-dynamic-content" class="trm-swup-animation">
+        <div id="trm-scroll-container" class="trm-scroll-container" style="opacity: 0">
+            <!-- top bar -->
+            <header class="trm-top-bar">
+	<div class="container">
+		<div class="trm-left-side">
+			<!-- logo -->
+<a href="/" class="trm-logo-frame trm-anima-link">
+    
+        <img alt="logo" src="/img/favicon.svg">
+    
+    
+        <div class="trm-logo-text">
+            Zhang<span>Jerry</span>
+        </div>
+    
+</a>
+<!-- logo end -->
+		</div>
+		<div class="trm-right-side">
+			<!-- menu -->
+<div class="trm-menu">
+    <nav>
+        <ul>
+            
+            <li class="menu-item-has-children ">
+                <a  href="/" target="">
+                    首页
+                </a>
+                
+                <ul>
+                    
+                    <li>
+                        <a  href="/archives2/" target="">
+                            archives2
+                        </a>
+                    </li>
+                    
+                </ul>
+                
+            </li>
+            
+            <li class="menu-item-has-children ">
+                <a data-no-swup href="/archives/" target="">
+                    归档
+                </a>
+                
+            </li>
+            
+            <li class="menu-item-has-children ">
+                <a data-no-swup href="/categories/" target="">
+                    分类
+                </a>
+                
+            </li>
+            
+        </ul>
+    </nav>
+</div>
+<!-- menu end -->
+			
+    <!-- mode switcher place -->
+    <div class="trm-mode-switcher-place">
+        <div class="trm-mode-switcher">
+            <i class="iconfont far fa-sun"></i>
+            <input class="tgl tgl-light" id="trm-swich" type="checkbox">
+            <label class="trm-swich" for="trm-swich"></label>
+            <i class="iconfont far fa-moon"></i>
+        </div>
+    </div>
+    <!-- mode switcher place end -->
+
+			
+		</div>
+		<div class="trm-menu-btn">
+			<span></span>
+		</div>
+	</div>
+</header>
+            <!-- top bar end -->
+
+            <!-- body -->
+            
+<div class="trm-content-start">
+    <!-- banner -->
+    <div class="trm-banner">
+    
+    <!-- banner cover -->
+    <img style="object-position:top;object-fit:cover;" alt="banner" class="trm-banner-cover" src="/img/banner.png">
+    <!-- banner cover end -->
+    
+
+    <!-- banner content -->
+    <div class="trm-banner-content trm-overlay">
+        <div class="container">
+            <div class="row">
+                
+                <div class="col-lg-4"></div>
+                
+                <div class="col-lg-8">
+
+                    <!-- banner title -->
+                    <div class="trm-banner-text ">
+                        <div class="trm-label trm-mb-20">
+                            NEWS LETTER
+                        </div>
+                        <h1 class="trm-mb-30 trm-hsmb-font">
+                            git学习
+                        </h1>
+
+                        
+                            <ul class="trm-breadcrumbs trm-label">
+                                <li>
+                                    <a href="/" class="trm-anima-link">Home</a>
+                                </li>
+                                <li>
+                                    <span>
+                                        2024
+                                    </span>
+                                </li>
+                            </ul>
+                        
+                    </div>
+                    <!-- banner title end -->
+
+                    <!-- scroll hint -->
+                    <span id="scroll-triger" class="trm-scroll-hint-frame">
+                        <div class="trm-scroll-hint"></div>
+                        <span class="trm-label">Scroll down</span>
+                    </span>
+                    <!-- scroll hint end -->
+
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- banner content end -->
+</div>
+    <!-- banner end -->
+    <div class="container">
+        <div class="row">
+            
+                <div class="trm-page-sidebar col-lg-4 hidden-sm">
+                    <!-- main card -->
+                    <div class="trm-main-card-frame trm-sidebar">
+    <div class="trm-main-card"> 
+        <!-- card header -->
+<div class="trm-mc-header">
+    <div class="trm-avatar-frame trm-mb-20">
+        <img alt="Avatar" class="trm-avatar" src="/img/Jerry.png">
+    </div>
+    <h5 class="trm-name trm-mb-15">
+        Jerry
+    </h5>
+    
+        <div class="trm-label">
+            成为一个
+            <span class="trm-typed-text">
+                <!-- Words for theme.user.typedText -->
+            </span>
+        </div>
+    
+</div>
+<!-- card header end -->
+        <!-- sidebar social -->
+
+<div class="trm-divider trm-mb-40 trm-mt-40"></div>
+<div class="trm-social">
+    
+        <a href="https://github.com/jerry609" title="github" rel="nofollow" target="_blank">
+            <i class="iconfont fab fa-github"></i>
+        </a>
+    
+</div>
+
+<!-- sidebar social end -->
+        <!-- info -->
+<div class="trm-divider trm-mb-40 trm-mt-40"></div>
+<ul class="trm-table trm-mb-20">
+    
+        <li>
+            <div class="trm-label">
+                地址:
+            </div>
+            <div class="trm-label trm-label-light">
+                福建/北京
+            </div>
+        </li>
+    
+        <li>
+            <div class="trm-label">
+                年龄:
+            </div>
+            <div class="trm-label trm-label-light">
+                6岁100多个月
+            </div>
+        </li>
+    
+</ul>
+<!-- info end -->
+
+        
+    <div class="trm-divider trm-mb-40 trm-mt-40"></div>
+    <!-- action button -->
+    <div class="text-center">
+        <a href="mailto:jeffy353866@gmail.com" class="trm-btn">
+            联系我
+            <i class="iconfont far fa-envelope"></i>
+        </a>
+    </div>
+    <!-- action button end -->
+
+    </div>
+</div>
+                    <!-- main card end -->
+                </div>
+            
+            <div class="trm-page-content col-lg-8">
+                <div id="trm-content" class="trm-content">
+                    <div class="trm-post-info row hidden-sm">
+    <div class="col-sm-4">
+        <div class="trm-card trm-label trm-label-light text-center">
+            <i class="iconfont far fa-calendar-alt trm-icon"></i><br>
+            07/05
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="trm-card trm-label trm-label-light text-center">
+            <i class="iconfont far fa-clock trm-icon"></i><br>
+            16:08
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div id="post-author" class="trm-card trm-label trm-label-light text-center">
+            <i class="iconfont far fa-user trm-icon"></i><br>
+            Jerry
+        </div>
+    </div>
+</div>
+<div class="trm-card ">
+    <article id="article-container" class="trm-publication">
+    <h1 id="Git基础知识"><a href="#Git基础知识" class="headerlink" title="Git基础知识"></a>Git基础知识</h1><h2 id="1-什么是Git"><a href="#1-什么是Git" class="headerlink" title="1. 什么是Git"></a>1. 什么是Git</h2><p>Git是一个用于管理源代码的分布式版本控制系统，对修改文件时记录并保存，可以随时恢复以前的工作版本。</p>
+<p>git可以看到文件修改记录，如何修改以及修改的人，git历史存储在共享存储库中</p>
+<p><img src="https://nulab.com/static/775ba7c8ed89fbce217271b1954b1b2e/5a190/02.png" alt="Examples of team works before a version control system and after a version control system"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="1-1-git组件"><a href="#1-1-git组件" class="headerlink" title="1.1 git组件"></a>1.1 git组件</h3><p>git主要包括三个组件：</p>
+<ul>
+<li>存储库：跟踪所有文件修改的容器，保存着团队的所有提交。</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">#</span><span class="language-bash">创建存储库</span></span><br><span class="line">git init</span><br><span class="line"><span class="meta prompt_"># </span><span class="language-bash">日志命令</span></span><br><span class="line">git log</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>工作树：由正在处理的文件组成，可以查看修改其中的文件。</li>
+</ul>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_"># </span><span class="language-bash">显示工作树状态</span></span><br><span class="line">git status</span><br><span class="line">添加-s选项将只显示已更改的文件名</span><br><span class="line">添加-s选项，后面再接-b选项，将在输出中包含分支名称</span><br></pre></td></tr></table></figure>
+
+
+
+<ul>
+<li>索引：暂存后，工作树中的文件将与存储库中的文件进行比较。对工作树中文件的更改在提交之前被标记为已修改。</li>
+</ul>
+<p><img src="https://nulab.com/static/1736ed1f6051c5c22605cb706d3bc08e/5a190/01.png" alt="Work tree and index"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="1-2-工作流程"><a href="#1-2-工作流程" class="headerlink" title="1.2 工作流程"></a>1.2 工作流程</h3><ol>
+<li><p><strong>修改工作树中的文件</strong><br>这一步是指对工作目录中的文件进行编辑或更改。假设您要修改一个名为<code>example.txt</code>的文件，您可以使用任何文本编辑器打开它并进行更改。</p>
+</li>
+<li><p><strong>暂存要包含在下一次提交中的更改</strong><br>修改文件后，您需要将这些更改添加到暂存区（也称为索引）。暂存是准备提交的更改的过程。使用以下命令将更改添加到暂存区：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git add example.txt</span><br></pre></td></tr></table></figure>
+<p>这条命令会将<code>example.txt</code>文件中的更改添加到暂存区。</p>
+</li>
+<li><p><strong>提交您的更改</strong><br>一旦更改被暂存，您就可以提交这些更改。提交会将暂存区的内容作为一个新的快照永久地存储到Git仓库的历史记录中。使用以下命令提交更改：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git commit -m <span class="string">&quot;这是我对example.txt的更改&quot;</span></span><br></pre></td></tr></table></figure>
+<p>这里的<code>-m</code>选项后面跟着的是提交消息，它是一个描述您此次更改的简短说明。</p>
+</li>
+</ol>
+<h3 id="1-3-git文件的三种状态"><a href="#1-3-git文件的三种状态" class="headerlink" title="1.3 git文件的三种状态"></a>1.3 git文件的三种状态</h3><ul>
+<li>已修改（Modified）：修改后端文件必须使用<code>git add</code>进行暂存</li>
+<li>已暂存（Staged）：使用<code>git commit</code>存储到新快照中</li>
+<li>已提交（committed）</li>
+</ul>
+<p><img src="https://nulab.com/static/d13cdc1344230f603d17b31a5cbd1dae/5a190/02.png" alt="Git components"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<ol>
+<li><p><strong>Untracked</strong></p>
+<ul>
+<li>当文件初次创建在工作目录中，但还未被Git跟踪时，它是处于Untracked状态。要开始跟踪文件，您需要使用以下命令：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git add &lt;file&gt;</span><br></pre></td></tr></table></figure>
+这将文件状态从Untracked转变为Staged。</li>
+</ul>
+</li>
+<li><p><strong>Staged</strong></p>
+<ul>
+<li>文件已经准备好被提交。这意味着它已经被添加到暂存区，等待下一次提交。提交这些暂存的文件，使用：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git commit -m <span class="string">&quot;Your commit message&quot;</span></span><br></pre></td></tr></table></figure>
+提交后，文件状态变为Committed。</li>
+</ul>
+</li>
+<li><p><strong>Modified</strong></p>
+<ul>
+<li>文件已经被修改但尚未暂存。这通常发生在已跟踪的文件被编辑后但还没有被重新暂存。要暂存这些更改，使用：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git add &lt;file&gt;</span><br></pre></td></tr></table></figure>
+这会再次将文件状态变为Staged。</li>
+</ul>
+</li>
+<li><p><strong>Committed</strong></p>
+<ul>
+<li>文件的更改已被永久记录在Git仓库的历史中。一旦文件提交，它返回到Tracked但未修改的状态。如果这些文件再次被修改，则转为Modified状态。</li>
+</ul>
+</li>
+<li><p><strong>其他操作</strong></p>
+<ul>
+<li>如果需要查看文件状态，可以使用：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git status</span><br></pre></td></tr></table></figure></li>
+<li>如果想删除暂存区中的文件（使之回到未跟踪状态），可以使用：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">rm</span> --cached &lt;file&gt;</span><br></pre></td></tr></table></figure></li>
+<li>要查看自上次提交以来你或其他人修改了哪些文件（差异），可以使用：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git diff</span><br></pre></td></tr></table></figure></li>
+</ul>
+</li>
+</ol>
+<h2 id="2-存储库"><a href="#2-存储库" class="headerlink" title="2.存储库"></a>2.存储库</h2><p>存储库 (即 repository) 是用于存储代码的位于中心的文件夹。一旦拥有包含文件和目录的 Git 存储库，就可以开始跟踪更改和版本。</p>
+<h3 id="2-1-远程存储库与本地存储库"><a href="#2-1-远程存储库与本地存储库" class="headerlink" title="2.1 远程存储库与本地存储库"></a>2.1 远程存储库与本地存储库</h3><ul>
+<li><strong>远程存储库</strong>：托管在远程服务器上 (这可以在互联网上或异地服务器上；它甚至可以是不同路径中的同一台机器) 并在多个团队成员之间共享。</li>
+<li><strong>本地存储库</strong>：为单个用户托管在本地机器上。</li>
+</ul>
+<p>写作功能只能在远程存储库上完成</p>
+<p><img src="https://nulab.com/static/fad5a872346523a28ab5575c72ec9638/5a190/01.png" alt="Remote vs local repositories"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="2-2-创建存储库"><a href="#2-2-创建存储库" class="headerlink" title="2.2 创建存储库"></a>2.2 创建存储库</h3><p>创建和管理Git存储库涉及几个关键步骤，从创建本地存储库到设置远程存储库，再到克隆远程存储库的复制，以下是详细指南。</p>
+<h4 id="创建本地存储库"><a href="#创建本地存储库" class="headerlink" title="创建本地存储库"></a>创建本地存储库</h4><ol>
+<li><strong>初始化新仓库</strong>：<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">mkdir my-project</span><br><span class="line">cd my-project</span><br><span class="line">git init</span><br></pre></td></tr></table></figure>
+这些命令创建一个新目录并初始化为Git仓库。</li>
+</ol>
+<h4 id="创建远程存储库"><a href="#创建远程存储库" class="headerlink" title="创建远程存储库"></a>创建远程存储库</h4><ol start="2">
+<li><strong>在GitHub上创建远程存储库</strong>：<ul>
+<li>登录到GitHub账户。</li>
+<li>点击“New repository”。</li>
+<li>填写仓库名称、描述，选择是否公开。</li>
+<li>点击“Create repository”。</li>
+</ul>
+</li>
+</ol>
+<h4 id="链接本地和远程存储库"><a href="#链接本地和远程存储库" class="headerlink" title="链接本地和远程存储库"></a>链接本地和远程存储库</h4><ol start="3">
+<li><p><strong>添加远程仓库地址</strong>：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git remote add origin https://github.com/your-username/my-project.git</span><br></pre></td></tr></table></figure>
+<p>这条命令将远程仓库添加到本地仓库，<code>origin</code>是远程仓库的默认名称。</p>
+</li>
+<li><p><strong>推送更改到远程存储库</strong>：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">echo</span> <span class="string">&quot;# My Project&quot;</span> &gt;&gt; README.md</span><br><span class="line">git add README.md</span><br><span class="line">git commit -m <span class="string">&quot;Initial commit&quot;</span></span><br><span class="line">git push -u origin master</span><br></pre></td></tr></table></figure>
+<p>这会将本地的更改推送到GitHub，并设置默认推送分支。</p>
+</li>
+</ol>
+<h4 id="克隆存储库"><a href="#克隆存储库" class="headerlink" title="克隆存储库"></a>克隆存储库</h4><ol start="5">
+<li><strong>复制远程存储库</strong>：<br>使用<code>git clone</code>命令克隆已有的远程存储库：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">clone</span> https://github.com/username/repository.git</span><br></pre></td></tr></table></figure>
+这将在本地创建一个完整的存储库副本，包括所有分支和提交历史。</li>
+</ol>
+<h4 id="查看和操作提交历史"><a href="#查看和操作提交历史" class="headerlink" title="查看和操作提交历史"></a>查看和操作提交历史</h4><ol start="6">
+<li><strong>查看提交历史</strong>：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">log</span></span><br></pre></td></tr></table></figure>
+这条命令列出所有提交，可以看到每次提交的详细信息，包括作者和日期。</li>
+</ol>
+<h2 id="3-记录变更"><a href="#3-记录变更" class="headerlink" title="3.记录变更"></a>3.记录变更</h2><p>Git 不会自动记录您所做的每个更改。您必须通过在索引中暂存这些更改来告诉 Git 您想要记录哪些更改。暂存后，您可以提交这些更改，以便将它们记录在存储库中。</p>
+<h3 id="3-1-进行更改"><a href="#3-1-进行更改" class="headerlink" title="3.1 进行更改"></a>3.1 进行更改</h3><h4 id="工作树（Working-Tree）"><a href="#工作树（Working-Tree）" class="headerlink" title="工作树（Working Tree）"></a>工作树（Working Tree）</h4><ul>
+<li><strong>定义</strong>：工作树是您的文件系统中一个特定的目录，其中包含了当前Git项目的所有文件。这是您进行日常工作的地方，比如编辑文件、添加新文件以及删除不再需要的文件。</li>
+<li><strong>功能</strong>：工作树反映了文件的当前状态，包括已经提交的文件和尚未暂存或提交的更改。</li>
+</ul>
+<h4 id="索引（Index-或-Staging-Area）"><a href="#索引（Index-或-Staging-Area）" class="headerlink" title="索引（Index 或 Staging Area）"></a>索引（Index 或 Staging Area）</h4><ul>
+<li><strong>定义</strong>：索引，也称为暂存区，位于工作树和Git存储库之间。它是一个中间层，用于存储即将被提交的更改。</li>
+<li><strong>功能</strong>：当您在工作树中执行更改（如修改、添加或删除文件）时，这些更改首先影响的是工作树。要将这些更改提交到存储库，您需要先将它们加入到索引中。</li>
+</ul>
+<p><img src="C:\Users\aDMIN\AppData\Roaming\Typora\typora-user-images\image-20240705201732504.png" alt="image-20240705201732504"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h4 id="提交更改到存储库"><a href="#提交更改到存储库" class="headerlink" title="提交更改到存储库"></a>提交更改到存储库</h4><ul>
+<li><strong>过程</strong>：一旦更改被加入到索引（即执行了<code>git add</code>命令），它们就被标记为准备提交。索引中的状态反映了下一次执行<code>git commit</code>时将保存到存储库的内容。</li>
+<li><strong>提交</strong>：只有当您执行<code>git commit</code>命令时，索引中的更改才会被永久保存到存储库的历史记录中。</li>
+</ul>
+<h4 id="查看工作树状态"><a href="#查看工作树状态" class="headerlink" title="查看工作树状态"></a>查看工作树状态</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git status</span><br></pre></td></tr></table></figure>
+<ul>
+<li>显示当前工作树的状态，包括哪些文件被修改了、哪些文件已经被暂存等。</li>
+</ul>
+<h4 id="添加文件到索引"><a href="#添加文件到索引" class="headerlink" title="添加文件到索引"></a>添加文件到索引</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git add &lt;文件名&gt;</span><br><span class="line">git add .</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这些命令将工作树中的更改添加到索引中。</li>
+</ul>
+<h4 id="从索引中移除文件"><a href="#从索引中移除文件" class="headerlink" title="从索引中移除文件"></a>从索引中移除文件</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git reset &lt;文件名&gt;</span><br></pre></td></tr></table></figure>
+<ul>
+<li>这个命令可以将文件从索引中移除，但不会影响工作树中的文件。</li>
+</ul>
+<h4 id="提交索引中的更改到存储库"><a href="#提交索引中的更改到存储库" class="headerlink" title="提交索引中的更改到存储库"></a>提交索引中的更改到存储库</h4><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git commit -m <span class="string">&quot;提交信息&quot;</span></span><br></pre></td></tr></table></figure>
+<ul>
+<li>将索引中的所有更改提交到存储库的历史记录中。</li>
+</ul>
+<p>通过理解和应用这些组件及命令，您可以有效地使用Git来管理您的项目代码和文档，确保您的开发工作高效、有序。</p>
+<h3 id="3-2-提交更改"><a href="#3-2-提交更改" class="headerlink" title="3.2 提交更改"></a>3.2 提交更改</h3><p><a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/basic-git-commands/#commit-changes-to-local-repository">提交命令</a>允许您在存储库的 Git 历史记录中记录文件更改。</p>
+<p>您提交的每个更改都可以在相应的文件或目录中按时间顺序查看。</p>
+<p><img src="https://nulab.com/static/b6754569eb7f02df198dd87cdaa4fd91/5a190/01.png" alt="Git committing changes"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>40 个字符的校验和哈希可唯一标识每个提交。您可以使用校验和哈希来检索您的存储库中给定提交的状态或更改。每次提交时，Git都会生成一个40字符的哈希值，您可以使用这个哈希值来引用特定的提交。</p>
+<p>将不同类型的更改—例如错误修复、新功能和改进—分离到不同的提交集中，将使您和您的团队成员能够理解为什么以及如何快速进行这些更改。</p>
+<h3 id="3-3-git提交消息"><a href="#3-3-git提交消息" class="headerlink" title="3.3 git提交消息"></a>3.3 git提交消息</h3><h4 id="git-commit"><a href="#git-commit" class="headerlink" title="git commit"></a><code>git commit</code></h4><p>这种方法不在命令行直接提供提交消息，而是打开系统默认的文本编辑器供您编写提交消息。</p>
+<h5 id="步骤："><a href="#步骤：" class="headerlink" title="步骤："></a>步骤：</h5><ol>
+<li>执行 <code>git commit</code>。</li>
+<li>在打开的文本编辑器中输入提交消息，包括标题和详细描述。</li>
+<li>保存并关闭编辑器以完成提交。</li>
+</ol>
+<h5 id="优点："><a href="#优点：" class="headerlink" title="优点："></a>优点：</h5><ul>
+<li>允许详细编写多行提交消息，便于详尽描述更改内容及其原因。</li>
+<li>适合需要详细注释和文档化的复杂提交。</li>
+</ul>
+<h5 id="使用场景："><a href="#使用场景：" class="headerlink" title="使用场景："></a>使用场景：</h5><ul>
+<li>需要提供详细提交说明的场合，尤其是涉及多个文件或复杂更改的提交。</li>
+</ul>
+<h4 id="git-commit-m"><a href="#git-commit-m" class="headerlink" title="git commit -m"></a><code>git commit -m</code></h4><p>这种方法通过命令行直接附加简短的提交消息，通常用于快速提交小更改。</p>
+<h5 id="步骤：-1"><a href="#步骤：-1" class="headerlink" title="步骤："></a>步骤：</h5><ol>
+<li>执行 <code>git commit -m &quot;提交消息&quot;</code>。</li>
+<li>可以使用多个 <code>-m</code> 选项添加更详细的描述。</li>
+</ol>
+<h5 id="优点：-1"><a href="#优点：-1" class="headerlink" title="优点："></a>优点：</h5><ul>
+<li>快速简便，适合日常的小更改。</li>
+<li>避免打开文本编辑器，加快提交过程。</li>
+</ul>
+<h5 id="使用场景：-1"><a href="#使用场景：-1" class="headerlink" title="使用场景："></a>使用场景：</h5><ul>
+<li>日常开发中需要快速提交的情况。</li>
+<li>更改较小或不需要多行详细说明的提交。</li>
+</ul>
+<h3 id="示例"><a href="#示例" class="headerlink" title="示例"></a>示例</h3><ul>
+<li><p><strong>使用 <code>git commit</code></strong>:</p>
+<p>提交更改时，您需要输入<a target="_blank" rel="noopener" href="https://nulab.com/learn/software-development/git-commit-messages-bold-daring/">提交信息</a>。提交消息应该简洁准确地描述您所做的更改。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git commit</span><br></pre></td></tr></table></figure>
+<p>为了使消息一致且易于理解，请尝试以下 Git 提交消息模板：</p>
+<ul>
+<li><strong>第 1 行</strong>：提交更改的内容摘要ts changed by commits</li>
+<li><strong>第 2 行</strong>：空行</li>
+<li><strong>第 3 行</strong>：变更原因</li>
+</ul>
+</li>
+<li><p><strong>使用 <code>git commit -m</code></strong>:</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git commit -m <span class="string">&quot;修正了用户登录表单的输入验证错误&quot;</span></span><br></pre></td></tr></table></figure></li>
+</ul>
+<h3 id="结论"><a href="#结论" class="headerlink" title="结论"></a>结论</h3><p>选择使用 <code>git commit</code> 或 <code>git commit -m</code> 应基于提交的复杂性、需要的详细程度以及团队的工作流程。清晰和详细的提交消息是推荐的做法，有助于未来的代码维护和项目的可追溯性。</p>
+<h2 id="4-还原变更"><a href="#4-还原变更" class="headerlink" title="4. 还原变更"></a>4. 还原变更</h2><p>当您进行新的提交时，Git 会存储项目的快照，以便您可以在需要时返回到较早的版本。撤消更改的方法主要有两种：<code>git revert</code> 和 <code>git reset</code>。</p>
+<h3 id="4-1-撤销提交"><a href="#4-1-撤销提交" class="headerlink" title="4.1 撤销提交"></a>4.1 撤销提交</h3><p>使用<a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/basic-git-commands/#undo-changes-from-previous-commit">git revert 命令</a>撤消以前的提交。这是撤消更改的最常用方法。</p>
+<p>Revert 命令可创建一个新的提交，用于恢复先前提交所做的更改。它允许您撤消不需要的更改，而无需完全移除提交或修改存储库的历史记录。它是一个有用的工具，用于管理对 Git 存储库的更改，同时保留其历史记录。</p>
+<p>虽然你可以用<a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-commit-history-commands/#remove-previous-commit">git reset</a>或<a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-commit-history-commands/#modify--move-past-commit-and-messages">git rebase -i</a> 命令，从历史记录中删除先前的提交，但一般不建议这样做，因为这会导致远程存储库与其他成员的本地存储库不同。</p>
+<p><img src="https://nulab.com/static/a2a38d64c5ba292ebe90131fa8b5cebe/5a190/01.png" alt="Diagram of reverting commits."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="4-2-移除提交"><a href="#4-2-移除提交" class="headerlink" title="4.2 移除提交"></a>4.2 移除提交</h3><p>使用 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-commit-history-commands/#remove-previous-commit">git reset 命令</a>使 HEAD 指向先前的提交。您可以通过进入重置模式来指定重置命令的范围。</p>
+<p><img src="https://nulab.com/static/fe406c70d0d2dadf3b773a5039f86a3f/5a190/02.png" alt="Diagram of removing commits."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="4-3-重置模式"><a href="#4-3-重置模式" class="headerlink" title="4.3 重置模式"></a>4.3 重置模式</h3><p>在Git中，<code>git reset</code> 是一个强大的命令，用于撤销提交或更改。它有三种主要的模式：混合（Mixed）、软（Soft）和硬（Hard），每种模式适用于不同的场景。以下是每种模式的详细解释和示例。</p>
+<p><img src="https://nulab.com/static/925a1cd132fedda88283db1110772810/5a190/03.png" alt="Diagram showcasing reset modes."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h4 id="1-混合（Mixed）模式"><a href="#1-混合（Mixed）模式" class="headerlink" title="1. 混合（Mixed）模式"></a>1. 混合（Mixed）模式</h4><ul>
+<li><strong>描述</strong>：<code>git reset --mixed</code> 是默认的重置模式。它会重置索引（暂存区）到指定的提交，但不会更改工作目录中的文件。已暂存的更改会被撤销，但工作目录中的更改会保留下来。</li>
+<li><strong>用途</strong>：当你想取消暂存的更改，但不想丢失对文件所做的任何修改时，使用混合模式。</li>
+</ul>
+<h4 id="示例-1"><a href="#示例-1" class="headerlink" title="示例"></a>示例</h4><p>假设你有多个文件暂存准备提交，突然意识到需要重新审查一些更改：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git reset --mixed HEAD~1</span><br></pre></td></tr></table></figure>
+<p>这会将HEAD指针回退到前一次提交，所有暂存的更改将返回到工作目录。</p>
+<h4 id="2-软（Soft）模式"><a href="#2-软（Soft）模式" class="headerlink" title="2. 软（Soft）模式"></a>2. 软（Soft）模式</h4><ul>
+<li><strong>描述</strong>：<code>git reset --soft</code> 只会重置HEAD到指定的提交，但不会更改索引（暂存区）或工作目录。这意味着所有当前暂存的更改仍然保持暂存状态。</li>
+<li><strong>用途</strong>：适用于重新提交。例如，如果你的提交消息不正确或者提交了错误的文件，你可以用这个命令撤销提交，但保留更改以便重新提交。</li>
+</ul>
+<h4 id="示例-2"><a href="#示例-2" class="headerlink" title="示例"></a>示例</h4><p>你提交了一个更改，但立即意识到提交消息写错了：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git reset --soft HEAD~1</span><br></pre></td></tr></table></figure>
+<p>然后你可以重新暂存你的更改（如果需要）并使用新的提交消息再次提交：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git commit -m <span class="string">&quot;正确的提交消息&quot;</span></span><br></pre></td></tr></table></figure>
+
+<h4 id="3-硬（Hard）模式"><a href="#3-硬（Hard）模式" class="headerlink" title="3. 硬（Hard）模式"></a>3. 硬（Hard）模式</h4><ul>
+<li><strong>描述</strong>：<code>git reset --hard</code> 会重置HEAD、索引和工作目录。任何暂存或未暂存的更改都将被清除，回退到指定的提交状态。</li>
+<li><strong>用途</strong>：当你想彻底撤销所有更改，包括工作目录中的更改时使用。这是一个危险的操作，因为它会丢失所有未提交的更改。</li>
+</ul>
+<h4 id="示例-3"><a href="#示例-3" class="headerlink" title="示例"></a>示例</h4><p>假设你正在实验一些代码更改，但结果完全不如预期，你决定放弃这些更改：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git reset --hard HEAD~1</span><br></pre></td></tr></table></figure>
+<p>这会将你的项目状态回退到前一次提交，丢弃所有当前的更改。</p>
+<h3 id="注意"><a href="#注意" class="headerlink" title="注意"></a>注意</h3><p>使用 <code>git reset</code> 时要非常小心，特别是使用 <code>--hard</code> 选项。一旦执行了硬重置，未提交的更改就会永久丢失。在进行任何重置操作之前，确保已经正确备份了必要的数据。</p>
+<h2 id="5-同步到存储库"><a href="#5-同步到存储库" class="headerlink" title="5. 同步到存储库"></a>5. 同步到存储库</h2><p>远程存储库可以位于私人服务器、与您不同的计算机上，或者通过某些项目管理软件托管，例如 <a target="_blank" rel="noopener" href="https://nulab.com/workflows/version-control/">Backlog</a>。</p>
+<p>无论您在哪里托管，都需要经常将本地存储库与远程存储库同步，以便与其他团队成员共享更改内容。</p>
+<p>您可以使用三个命令同步存储库：</p>
+<ul>
+<li><p><a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/remote-git-commands/#create--push-branch-changes-to-remote-repository">git push</a></p>
+</li>
+<li><p><a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/remote-git-commands/#get--merge-latest-branch-changes-from-remote-repository">git pull</a></p>
+</li>
+<li><p><a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-branch-commands/#merge-branches">git merge</a></p>
+</li>
+</ul>
+<h3 id="5-1-推送更改"><a href="#5-1-推送更改" class="headerlink" title="5.1 推送更改"></a>5.1 推送更改</h3><p>要与他人共享更改，必须使用 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/remote-git-commands/#create--push-branch-changes-to-remote-repository">git push</a>命令。这将更新远程存储库并将其与本地存储库同步。</p>
+<p><img src="https://nulab.com/static/35f6ca4373c7ddd9c4d77a46495140c5/5a190/01.png" alt="Diagram of pushing changes."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="5-2-拉取更改"><a href="#5-2-拉取更改" class="headerlink" title="5.2 拉取更改"></a>5.2 拉取更改</h3><p>每当有人将他们的更改推送到共享的远程存储库时，您的本地存储库就会过时。要将本地存储库与新更新的远程存储库重新同步，只需运行 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/remote-git-commands/#get--merge-latest-branch-changes-from-remote-repository">git pull 命令</a>。</p>
+<p>当运行拉取命令时，最新的修订历史记录会从远程存储库下载并导入到您的本地存储库。</p>
+<h3 id="5-3-合并更改"><a href="#5-3-合并更改" class="headerlink" title="5.3 合并更改"></a>5.3 合并更改</h3><p>如果本地的存储库过时，则远程推送会被拒绝。当您的本地存储库版本落后于远程存储库时，尝试向远程存储库推送更改确实可能会遇到问题。这通常发生在其他人已经向远程存储库提交了新的更改，而您的本地存储库尚未更新这些更改时。在这种情况下，Git 会拒绝推送，以防止您无意中覆盖别人的工作。</p>
+<h4 id="解决方案：拉取远程更改并合并"><a href="#解决方案：拉取远程更改并合并" class="headerlink" title="解决方案：拉取远程更改并合并"></a>解决方案：拉取远程更改并合并</h4><p>为了解决这个问题，您需要先将远程存储库的更改拉取到本地存储库中，解决可能的冲突，并在本地测试更改，确保一切正常后，再尝试推送。这里是解决步骤：</p>
+<ol>
+<li><p><strong>拉取远程存储库的更改</strong>：<br>使用 <code>git pull</code> 命令。这个命令实际上是 <code>git fetch</code> 和 <code>git merge</code> 的组合。它首先从远程存储库抓取最新的分支状态，然后将这些更改合并到您当前的分支中。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git pull origin your-branch-name</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>解决合并冲突</strong>：<br>如果存在冲突，Git 将提示您解决。您需要手动打开冲突的文件，并决定如何合并更改。编辑完毕后，您需要添加已解决冲突的文件到暂存区：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git add &lt;冲突文件&gt;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>完成合并</strong>：<br>一旦冲突解决并且所有更改都已暂存，您可以通过以下命令完成合并：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git commit</span><br></pre></td></tr></table></figure>
+<p>这通常会打开一个编辑器让您输入合并提交的消息，但如果您使用的是默认设置，通常会有一个自动生成的合并提交消息。</p>
+</li>
+<li><p><strong>再次推送</strong>：<br>解决冲突并合并更改后，您应该能够成功推送到远程存储库：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git push origin your-branch-name</span><br></pre></td></tr></table></figure></li>
+</ol>
+<p><img src="https://nulab.com/static/2e49227db3f41d50cf381b533dece47b/5a190/01.png" alt="Diagram of a ouddated repo."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>在这种情况下，您可以使用 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-branch-commands/#merge-branches">git merge 命令</a>在推送前整合远程分支的本地副本的最新修改。Git 强制执行此操作以确保其他成员所做的更改可保留在版本历史记录中。</p>
+<h4 id="为什么这样做？"><a href="#为什么这样做？" class="headerlink" title="为什么这样做？"></a>为什么这样做？</h4><p>Git 鼓励开发者频繁地同步他们的工作，这有助于减少合并冲突的复杂性，也确保了团队成员之间的工作是协调一致的。当您试图推送过时的分支时，Git 拒绝推送是一种安全措施，以防止潜在的代码丢失或覆盖。</p>
+<p>总之，保持您的本地存储库与远程存储库同步是良好的版本控制实践。当遇到推送拒绝时，通过 <code>git pull</code> 来合并远程更改通常是解决这种问题的标准方法。</p>
+<p><img src="https://nulab.com/static/43189904f00529e66b6fe2cde2f2f9e1/5a190/02.png" alt="Diagram of a merging latest changes."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>在合并期间，Git 将尝试自动应用历史更改并将它们与当前分支合并。但是如果有冲突，会报错提示你手动解决。</p>
+<h3 id="5-4-解决合并冲突"><a href="#5-4-解决合并冲突" class="headerlink" title="5.4 解决合并冲突"></a>5.4 解决合并冲突</h3><p>在正确完成合并之前，您可能会遇到需要解决的冲突。例如，如果两个或多个成员在两个不同的分支 (即远程和本地分支) 中对文件的同一部分进行更改，Git 无法自动合并它们。</p>
+<p>发生这种情况时，Git 会在冲突文件中添加冲突解决标记。这些标记可帮助您确定文件的哪些部分需要手动处理。</p>
+<p><img src="https://nulab.com/static/9460e387f1fc9f89dbae7dac74c8bd0e/5a190/01.png" alt="Diagram of a merging change."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>Git用<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>，<code>=======</code>，<code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>标记出不同分支的内容，在继续创建合并提交之前，您必须依照下列所示方式解决冲突部分。</p>
+<p><img src="https://nulab.com/static/681659d85e311b0f3040a5e847c4da26/5a190/02.png" alt="Diagram of a merging change."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h2 id="6-管理git-历史记录"><a href="#6-管理git-历史记录" class="headerlink" title="6. 管理git 历史记录"></a>6. 管理git 历史记录</h2><p>有时需要修改本地提交历史记录。示例场景包括需要更改您的<a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-basics/managing-git-history/learn/software-development/git-commit-messages-bold-daring/">提交信息</a>，更新提交顺序，或将提交压缩在一起。</p>
+<h3 id="6-1-修改提交"><a href="#6-1-修改提交" class="headerlink" title="6.1 修改提交"></a>6.1 修改提交</h3><p>您可以通过运行 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-commit-history-commands/#modify-previous-commit-and-messages">git commit –amend 命令</a>修改同一分支中的最新提交。这个命令可以方便地将新的或更新的文件添加到上一次提交中。这也是一种编辑提交消息或将提交消息添加到上一次提交的简便方法。</p>
+<p><img src="https://nulab.com/static/60282668f3b1694c6aae8b942f467125/5a190/01.png" alt="Diagram using the git ammend command."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="6-2-将提交复制到新分支"><a href="#6-2-将提交复制到新分支" class="headerlink" title="6.2 将提交复制到新分支"></a>6.2 将提交复制到新分支</h3><p>变基是将在一个分支上提交的所有更改复制到新分支的过程。</p>
+<p>运行 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-commit-history-commands/#modify--move-past-commit-and-messages">git rebase 命令</a>并加上<code>-i</code>选项以重写、替换、删除和合并历史记录中的个别提交。</p>
+<p>您也可以使用变基命令来：</p>
+<ul>
+<li>重写过去的提交信息</li>
+<li>将一组提交压缩在一起</li>
+<li>添加尚未提交的文件</li>
+</ul>
+<p><img src="https://nulab.com/static/2fbd9d1dbbc7fef578b1b2643c041d38/5a190/01.png" alt="Diagram of reabsing."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="6-3-将提交复制到其他分支"><a href="#6-3-将提交复制到其他分支" class="headerlink" title="6.3 将提交复制到其他分支"></a>6.3 将提交复制到其他分支</h3><p>您可以使用 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-commit-history-commands/#copy-commit-from-another-branch">git cherry-pick 命令</a>将现有提交从另一个分支复制到存储库中的当前分支。</p>
+<p>Cherry-picking 可以让您：</p>
+<ul>
+<li>将提交从错误的分支移动到正确的分支。</li>
+<li>根据另一个分支的现有提交，为当前分支添加提交。</li>
+</ul>
+<p><img src="https://nulab.com/static/a949dbd7b0f4d70ae43f51e5d602d8c1/5a190/01.png" alt="Diagram using the cherry-pick command."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="6-4-合并提交"><a href="#6-4-合并提交" class="headerlink" title="6.4 合并提交"></a>6.4 合并提交</h3><p>压缩是将多个提交合并为一个提交的过程。</p>
+<p>如果你运行 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-branch-commands/#merge-branches">git merge 命令</a>和<code>--squash</code>选项，一个新的提交会将来自一个分支的所有提交组合在一起。然后该提交可以合并到当前分支中。</p>
+<p><img src="https://nulab.com/static/b5e0bf82199dd485cf522cf54d0671a2/5a190/01.png" alt="Diagram using the squash command."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+
+</article>
+    
+    
+
+</div>
+<div class="trm-post-next-prev row">
+    <div class="col-lg-12">
+        <!-- title -->
+        <h5 class="trm-title-with-divider">
+            其他文章
+            <span data-number="02"></span>
+        </h5>
+    </div>
+    
+        <div class="col-lg-6">
+    <div class="trm-blog-card trm-scroll-animation">
+        <a href="/2024/07/06/GIT%E5%8D%8F%E4%BD%9C/" class="trm-cover-frame trm-anima-link">
+            
+            
+                <img alt="cover" class="no-fancybox" src="/img/block.jpg">
+            
+        </a>
+        
+        <div class="trm-card-descr">
+            <div class="trm-label trm-category trm-mb-20">
+                <a href=" /categories/%E4%B8%93%E4%B8%9A%E7%9F%A5%E8%AF%86/">
+                    专业知识
+                </a>
+            </div>
+            <h5>
+                <a href="/2024/07/06/GIT%E5%8D%8F%E4%BD%9C/" class="trm-anima-link">
+                    git协作
+                </a>
+            </h5>
+            <div class="trm-divider trm-mb-20 trm-mt-20"></div>
+            <ul class="trm-card-data trm-label">
+                <li>24/07/06</li>
+                <li>15:40</li>
+                
+                
+            </ul>
+        </div>
+    </div>
+</div>
+    
+    
+</div>
+
+    
+
+
+
+                    <div class="trm-divider footer-divider"></div>
+
+                    <!-- footer -->
+                    <footer class="trm-footer-card trm-scroll-animation">
+
+    
+
+    
+        <div class="trm-footer-item">
+            <span>© 2024 - 2025</span>
+            <span class="footer-separator"data-separator=" · "></span>
+            <span class="trm-accent-color">Jerry</span>
+        </div>
+    
+
+    
+        <div class="trm-footer-item">
+            <span>
+                由 <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a> 驱动 v7.3.0
+            </span>
+            <span class="footer-separator" data-separator=" | "></span>
+            <span> 
+                主题 - 
+                <a rel="noopener" href='https://github.com/MaLuns/hexo-theme-async' target='_blank'>Async</a>
+                v2.2.4
+            </span>
+        </div>
+      
+
+    
+        <div class="trm-footer-item blog-run-long"></div>
+     
+
+     
+</footer>
+                    <!-- footer end -->
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+            <!-- body end -->
+
+            
+
+    <div id="post-toc" class="trm-post-toc">
+      <div class="trm-post-toc-header">
+        目录导航
+				<span id="post-toc-top">
+					置顶
+				</span>
+      </div>
+      <div class="trm-post-toc-content">
+        <ol class="trm-toc"><li class="trm-toc-item trm-toc-level-1" title="Git基础知识"><a rel="nofollow" class="trm-toc-link" href="#Git基础知识"><span class="trm-toc-text">Git基础知识</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-2" title="1. 什么是Git"><a rel="nofollow" class="trm-toc-link" href="#1-什么是Git"><span class="trm-toc-text">1. 什么是Git</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="1.1 git组件"><a rel="nofollow" class="trm-toc-link" href="#1-1-git组件"><span class="trm-toc-text">1.1 git组件</span></a></li><li class="trm-toc-item trm-toc-level-3" title="1.2 工作流程"><a rel="nofollow" class="trm-toc-link" href="#1-2-工作流程"><span class="trm-toc-text">1.2 工作流程</span></a></li><li class="trm-toc-item trm-toc-level-3" title="1.3 git文件的三种状态"><a rel="nofollow" class="trm-toc-link" href="#1-3-git文件的三种状态"><span class="trm-toc-text">1.3 git文件的三种状态</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="2.存储库"><a rel="nofollow" class="trm-toc-link" href="#2-存储库"><span class="trm-toc-text">2.存储库</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="2.1 远程存储库与本地存储库"><a rel="nofollow" class="trm-toc-link" href="#2-1-远程存储库与本地存储库"><span class="trm-toc-text">2.1 远程存储库与本地存储库</span></a></li><li class="trm-toc-item trm-toc-level-3" title="2.2 创建存储库"><a rel="nofollow" class="trm-toc-link" href="#2-2-创建存储库"><span class="trm-toc-text">2.2 创建存储库</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="创建本地存储库"><a rel="nofollow" class="trm-toc-link" href="#创建本地存储库"><span class="trm-toc-text">创建本地存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="创建远程存储库"><a rel="nofollow" class="trm-toc-link" href="#创建远程存储库"><span class="trm-toc-text">创建远程存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="链接本地和远程存储库"><a rel="nofollow" class="trm-toc-link" href="#链接本地和远程存储库"><span class="trm-toc-text">链接本地和远程存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="克隆存储库"><a rel="nofollow" class="trm-toc-link" href="#克隆存储库"><span class="trm-toc-text">克隆存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="查看和操作提交历史"><a rel="nofollow" class="trm-toc-link" href="#查看和操作提交历史"><span class="trm-toc-text">查看和操作提交历史</span></a></li></ol></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="3.记录变更"><a rel="nofollow" class="trm-toc-link" href="#3-记录变更"><span class="trm-toc-text">3.记录变更</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="3.1 进行更改"><a rel="nofollow" class="trm-toc-link" href="#3-1-进行更改"><span class="trm-toc-text">3.1 进行更改</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="工作树（Working Tree）"><a rel="nofollow" class="trm-toc-link" href="#工作树（Working-Tree）"><span class="trm-toc-text">工作树（Working Tree）</span></a></li><li class="trm-toc-item trm-toc-level-4" title="索引（Index 或 Staging Area）"><a rel="nofollow" class="trm-toc-link" href="#索引（Index-或-Staging-Area）"><span class="trm-toc-text">索引（Index 或 Staging Area）</span></a></li><li class="trm-toc-item trm-toc-level-4" title="提交更改到存储库"><a rel="nofollow" class="trm-toc-link" href="#提交更改到存储库"><span class="trm-toc-text">提交更改到存储库</span></a></li><li class="trm-toc-item trm-toc-level-4" title="查看工作树状态"><a rel="nofollow" class="trm-toc-link" href="#查看工作树状态"><span class="trm-toc-text">查看工作树状态</span></a></li><li class="trm-toc-item trm-toc-level-4" title="添加文件到索引"><a rel="nofollow" class="trm-toc-link" href="#添加文件到索引"><span class="trm-toc-text">添加文件到索引</span></a></li><li class="trm-toc-item trm-toc-level-4" title="从索引中移除文件"><a rel="nofollow" class="trm-toc-link" href="#从索引中移除文件"><span class="trm-toc-text">从索引中移除文件</span></a></li><li class="trm-toc-item trm-toc-level-4" title="提交索引中的更改到存储库"><a rel="nofollow" class="trm-toc-link" href="#提交索引中的更改到存储库"><span class="trm-toc-text">提交索引中的更改到存储库</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="3.2 提交更改"><a rel="nofollow" class="trm-toc-link" href="#3-2-提交更改"><span class="trm-toc-text">3.2 提交更改</span></a></li><li class="trm-toc-item trm-toc-level-3" title="3.3 git提交消息"><a rel="nofollow" class="trm-toc-link" href="#3-3-git提交消息"><span class="trm-toc-text">3.3 git提交消息</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="git commit"><a rel="nofollow" class="trm-toc-link" href="#git-commit"><span class="trm-toc-text">git commit</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-5" title="步骤："><a rel="nofollow" class="trm-toc-link" href="#步骤："><span class="trm-toc-text">步骤：</span></a></li><li class="trm-toc-item trm-toc-level-5" title="优点："><a rel="nofollow" class="trm-toc-link" href="#优点："><span class="trm-toc-text">优点：</span></a></li><li class="trm-toc-item trm-toc-level-5" title="使用场景："><a rel="nofollow" class="trm-toc-link" href="#使用场景："><span class="trm-toc-text">使用场景：</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-4" title="git commit -m"><a rel="nofollow" class="trm-toc-link" href="#git-commit-m"><span class="trm-toc-text">git commit -m</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-5" title="步骤："><a rel="nofollow" class="trm-toc-link" href="#步骤：-1"><span class="trm-toc-text">步骤：</span></a></li><li class="trm-toc-item trm-toc-level-5" title="优点："><a rel="nofollow" class="trm-toc-link" href="#优点：-1"><span class="trm-toc-text">优点：</span></a></li><li class="trm-toc-item trm-toc-level-5" title="使用场景："><a rel="nofollow" class="trm-toc-link" href="#使用场景：-1"><span class="trm-toc-text">使用场景：</span></a></li></ol></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="示例"><a rel="nofollow" class="trm-toc-link" href="#示例"><span class="trm-toc-text">示例</span></a></li><li class="trm-toc-item trm-toc-level-3" title="结论"><a rel="nofollow" class="trm-toc-link" href="#结论"><span class="trm-toc-text">结论</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="4. 还原变更"><a rel="nofollow" class="trm-toc-link" href="#4-还原变更"><span class="trm-toc-text">4. 还原变更</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="4.1 撤销提交"><a rel="nofollow" class="trm-toc-link" href="#4-1-撤销提交"><span class="trm-toc-text">4.1 撤销提交</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.2 移除提交"><a rel="nofollow" class="trm-toc-link" href="#4-2-移除提交"><span class="trm-toc-text">4.2 移除提交</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.3 重置模式"><a rel="nofollow" class="trm-toc-link" href="#4-3-重置模式"><span class="trm-toc-text">4.3 重置模式</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="1. 混合（Mixed）模式"><a rel="nofollow" class="trm-toc-link" href="#1-混合（Mixed）模式"><span class="trm-toc-text">1. 混合（Mixed）模式</span></a></li><li class="trm-toc-item trm-toc-level-4" title="示例"><a rel="nofollow" class="trm-toc-link" href="#示例-1"><span class="trm-toc-text">示例</span></a></li><li class="trm-toc-item trm-toc-level-4" title="2. 软（Soft）模式"><a rel="nofollow" class="trm-toc-link" href="#2-软（Soft）模式"><span class="trm-toc-text">2. 软（Soft）模式</span></a></li><li class="trm-toc-item trm-toc-level-4" title="示例"><a rel="nofollow" class="trm-toc-link" href="#示例-2"><span class="trm-toc-text">示例</span></a></li><li class="trm-toc-item trm-toc-level-4" title="3. 硬（Hard）模式"><a rel="nofollow" class="trm-toc-link" href="#3-硬（Hard）模式"><span class="trm-toc-text">3. 硬（Hard）模式</span></a></li><li class="trm-toc-item trm-toc-level-4" title="示例"><a rel="nofollow" class="trm-toc-link" href="#示例-3"><span class="trm-toc-text">示例</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="注意"><a rel="nofollow" class="trm-toc-link" href="#注意"><span class="trm-toc-text">注意</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="5. 同步到存储库"><a rel="nofollow" class="trm-toc-link" href="#5-同步到存储库"><span class="trm-toc-text">5. 同步到存储库</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="5.1 推送更改"><a rel="nofollow" class="trm-toc-link" href="#5-1-推送更改"><span class="trm-toc-text">5.1 推送更改</span></a></li><li class="trm-toc-item trm-toc-level-3" title="5.2 拉取更改"><a rel="nofollow" class="trm-toc-link" href="#5-2-拉取更改"><span class="trm-toc-text">5.2 拉取更改</span></a></li><li class="trm-toc-item trm-toc-level-3" title="5.3 合并更改"><a rel="nofollow" class="trm-toc-link" href="#5-3-合并更改"><span class="trm-toc-text">5.3 合并更改</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="解决方案：拉取远程更改并合并"><a rel="nofollow" class="trm-toc-link" href="#解决方案：拉取远程更改并合并"><span class="trm-toc-text">解决方案：拉取远程更改并合并</span></a></li><li class="trm-toc-item trm-toc-level-4" title="为什么这样做？"><a rel="nofollow" class="trm-toc-link" href="#为什么这样做？"><span class="trm-toc-text">为什么这样做？</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="5.4 解决合并冲突"><a rel="nofollow" class="trm-toc-link" href="#5-4-解决合并冲突"><span class="trm-toc-text">5.4 解决合并冲突</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="6. 管理git 历史记录"><a rel="nofollow" class="trm-toc-link" href="#6-管理git-历史记录"><span class="trm-toc-text">6. 管理git 历史记录</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="6.1 修改提交"><a rel="nofollow" class="trm-toc-link" href="#6-1-修改提交"><span class="trm-toc-text">6.1 修改提交</span></a></li><li class="trm-toc-item trm-toc-level-3" title="6.2 将提交复制到新分支"><a rel="nofollow" class="trm-toc-link" href="#6-2-将提交复制到新分支"><span class="trm-toc-text">6.2 将提交复制到新分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="6.3 将提交复制到其他分支"><a rel="nofollow" class="trm-toc-link" href="#6-3-将提交复制到其他分支"><span class="trm-toc-text">6.3 将提交复制到其他分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="6.4 合并提交"><a rel="nofollow" class="trm-toc-link" href="#6-4-合并提交"><span class="trm-toc-text">6.4 合并提交</span></a></li></ol></li></ol></li></ol>
+      </div>
+    </div>
+
+            
+<div class="trm-fixed-container">
+    
+        <div class="trm-fixed-btn post-toc-btn" data-title="目录">
+            <i class="iconfont fas fa-th-list"></i>
+        </div>
+    
+    
+        <div class="trm-fixed-btn" data-title="阅读模式" onclick="asyncFun.switchReadMode()">
+            <i class="iconfont fas fa-book-reader"></i>
+        </div>
+    
+    
+        <div class="trm-fixed-btn hidden-md" data-title="单栏和双栏切换" onclick="asyncFun.switchSingleColumn()">
+            <i class="iconfont fas fa-arrows-alt-h"></i>
+        </div>
+    
+    <div id="trm-back-top" class="trm-fixed-btn" data-title="回到顶部">
+        <i class="iconfont fas fa-arrow-up"></i>
+    </div>
+</div>
+        </div>
+      </div>
+      <!-- scroll container end -->
+  </div>
+  <!-- app wrapper end -->
+
+  
+  <!-- Plugin -->
+
+
+
+
+    
+    
+<script src="https://unpkg.com/@fancyapps/ui@4.0/dist/fancybox.umd.js"></script>
+
+    
+
+    
+        <script src="/js/plugins/typing.js?v=2.2.4"></script>
+    
+
+    
+
+    <!-- 数学公式 -->
+    
+
+    <!-- 评论插件 -->
+    
+        
+
+        
+    
+
+		
+
+
+
+
+    <!-- Service Worker -->
+    
+    <!-- baidu push -->
+    
+
+
+<script id="async-script" src="/js/main.js?v=2.2.4"></script>
+
+<!-- CDN -->
+
+
+    
+
+    
+
+    
+
+
+
+</body>
+
+</html>

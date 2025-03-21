@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="">
+
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+<meta name="x5-fullscreen" content="true">
+<meta name="full-screen" content="yes">
+<meta name="theme-color" content="#317EFB" />
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=0" name="viewport">
+<meta name="description" content="GIT协作冲突在版本控制系统中，特别是在使用Git时，冲突（Conflict）指的是当多个团队成员对同一个文件的相同部分进行更改并尝试合并这些更改时发生的问题。冲突通常出现在合并分支、重基（rebase）操作或应用补丁时，因为这些操作涉及将一个分支的更改整合到另一个分支上。 冲突的发生情况冲突发生的典型情况包括：  编辑冲突：两个或更多开发者修改了同一个文件的同一部分。例如，如果开发者A删除了一个">
+<meta property="og:type" content="article">
+<meta property="og:title" content="git协作">
+<meta property="og:url" content="https://jerry609.github.io/2024/07/06/GIT%E5%8D%8F%E4%BD%9C/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="GIT协作冲突在版本控制系统中，特别是在使用Git时，冲突（Conflict）指的是当多个团队成员对同一个文件的相同部分进行更改并尝试合并这些更改时发生的问题。冲突通常出现在合并分支、重基（rebase）操作或应用补丁时，因为这些操作涉及将一个分支的更改整合到另一个分支上。 冲突的发生情况冲突发生的典型情况包括：  编辑冲突：两个或更多开发者修改了同一个文件的同一部分。例如，如果开发者A删除了一个">
+<meta property="og:locale">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="og:image" content="https://jerry609.github.io/img/404.jpg">
+<meta property="article:published_time" content="2024-07-06T07:40:55.000Z">
+<meta property="article:modified_time" content="2024-07-06T07:40:18.000Z">
+<meta property="article:author" content="Jerry">
+<meta property="article:tag" content="git">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://jerry609.github.io/img/404.jpg">
+
+
+<title >git协作</title>
+
+<!-- Favicon -->
+
+    <link href='/img/favicon.svg?v=2.2.4' rel='icon' type='image/png' sizes='16x16' ></link>
+
+
+    <link href='/img/favicon.svg?v=2.2.4' rel='icon' type='image/png' sizes='32x32' ></link>
+
+
+
+    <link href='/site.webmanifest' rel='manifest' ></link>
+
+
+<!-- Plugin -->
+
+
+
+
+    
+<link rel="stylesheet" href="/css/plugins/bootstrap.row.css">
+
+    
+<link rel="stylesheet" href="https://unpkg.com/@fancyapps/ui@4.0/dist/fancybox.css">
+
+    
+    
+
+
+
+
+<!-- Icon -->
+
+    
+<link rel="stylesheet" href="/css/plugins/font-awesome.min.css">
+
+
+
+
+<!-- Variable -->
+<script>window.ASYNC_CONFIG = {"hostname":"jerry609.github.io","author":"Jerry","root":"/","typed_text":["有趣的人"],"theme_version":"2.2.4","theme":{"switch":true,"default":"style-light"},"favicon":{"logo":"/img/favicon.svg","icon16":"/img/favicon.svg","icon32":"/img/favicon.svg","apple_touch_icon":null,"webmanifest":"/site.webmanifest","visibilitychange":true,"hidden":"/failure.ico","show_text":"(/≧▽≦/)咦！又好了！","hide_text":"(●—●)喔哟，崩溃啦！"},"i18n":{"placeholder":"搜索文章...","empty":"找不到您查询的内容: ${query}","hits":"找到 ${hits} 条结果","hits_time":"找到 ${hits} 条结果（用时 ${time} 毫秒）","author":"本文作者：","copyright_link":"本文链接：","copyright_license_title":"版权声明：","copyright_license_content":"本博客所有文章除特别声明外，均默认采用 undefined 许可协议。","copy_success":"复制成功","copy_failure":"复制失败","open_read_mode":"进入阅读模式","exit_read_mode":"退出阅读模式","notice_outdate_message":"距离上次更新已经 undefined 天了, 文章内容可能已经过时。","sticky":"置顶","just":"刚刚","min":"分钟前","hour":"小时前","day":"天前","month":"个月前"},"swup":false,"plugin":{"flickr_justified_gallery":"https://unpkg.com/flickr-justified-gallery@latest/dist/fjGallery.min.js"},"icons":{"sun":"far fa-sun","moon":"far fa-moon","play":"fas fa-play","email":"far fa-envelope","next":"fas fa-arrow-right","calendar":"far fa-calendar-alt","clock":"far fa-clock","user":"far fa-user","back_top":"fas fa-arrow-up","close":"fas fa-times","search":"fas fa-search","reward":"fas fa-hand-holding-usd","toc_tag":"fas fa-th-list","read":"fas fa-book-reader","arrows":"fas fa-arrows-alt-h","double_arrows":"fas fa-angle-double-down","copy":"fas fa-copy"},"icontype":"font","highlight":{"plugin":"highlighjs","theme":true,"copy":true,"lang":true,"title":"default","height_limit":false},"toc":{"post_title":false},"live_time":{"start_time":"07/4/2024 10:00:00","prefix":"博客已萌萌哒运行 undefined 天"},"danmu":{"enable":false,"el":".trm-banner"}};</script>
+<script id="async-page-config">window.PAGE_CONFIG = {"isPost":true,"isHome":false,"postUpdate":"2024-07-06 15:40:18"};</script>
+
+<!-- Theme mode css -->
+<link data-swup-theme rel="stylesheet" href="/css/index.css?v=2.2.4" id="trm-switch-style">
+<script>
+    let defaultMode = ASYNC_CONFIG.theme.default !=='auto' ?  ASYNC_CONFIG.theme.default : (window.matchMedia("(prefers-color-scheme: light)").matches ? 'style-light' : 'style-dark')
+    let catchMode = localStorage.getItem('theme-mode') || defaultMode;
+    let type = catchMode === 'style-dark' ? 'add' : 'remove';
+    document.documentElement.classList[type]('dark')
+</script>
+
+<!-- CDN -->
+
+
+    
+    
+
+
+
+<!-- Site Analytics -->
+
+ 
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+
+  <!-- app wrapper -->
+  <div class="trm-app-frame">
+
+    <!-- page preloader -->
+    <div class="trm-preloader">
+    <div class="trm-holder">
+        <div class="preloader">
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+            <div></div>
+        </div>
+    </div>
+</div>
+    <!-- page preloader end -->
+
+    <!-- change mode preloader -->
+    <div class="trm-mode-swich-animation-frame">
+    <div class="trm-mode-swich-animation">
+        <i class="i-sun"><i class="iconfont far fa-sun"></i></i>
+        <div class="trm-horizon"></div>
+        <i class="i-moon"><i class="iconfont far fa-moon"></i></i>
+    </div>
+</div>
+    <!-- change mode preloader end -->
+
+      <!-- scroll container -->
+      <div id="trm-dynamic-content" class="trm-swup-animation">
+        <div id="trm-scroll-container" class="trm-scroll-container" style="opacity: 0">
+            <!-- top bar -->
+            <header class="trm-top-bar">
+	<div class="container">
+		<div class="trm-left-side">
+			<!-- logo -->
+<a href="/" class="trm-logo-frame trm-anima-link">
+    
+        <img alt="logo" src="/img/favicon.svg">
+    
+    
+        <div class="trm-logo-text">
+            Zhang<span>Jerry</span>
+        </div>
+    
+</a>
+<!-- logo end -->
+		</div>
+		<div class="trm-right-side">
+			<!-- menu -->
+<div class="trm-menu">
+    <nav>
+        <ul>
+            
+            <li class="menu-item-has-children ">
+                <a  href="/" target="">
+                    首页
+                </a>
+                
+                <ul>
+                    
+                    <li>
+                        <a  href="/archives2/" target="">
+                            archives2
+                        </a>
+                    </li>
+                    
+                </ul>
+                
+            </li>
+            
+            <li class="menu-item-has-children ">
+                <a data-no-swup href="/archives/" target="">
+                    归档
+                </a>
+                
+            </li>
+            
+            <li class="menu-item-has-children ">
+                <a data-no-swup href="/categories/" target="">
+                    分类
+                </a>
+                
+            </li>
+            
+        </ul>
+    </nav>
+</div>
+<!-- menu end -->
+			
+    <!-- mode switcher place -->
+    <div class="trm-mode-switcher-place">
+        <div class="trm-mode-switcher">
+            <i class="iconfont far fa-sun"></i>
+            <input class="tgl tgl-light" id="trm-swich" type="checkbox">
+            <label class="trm-swich" for="trm-swich"></label>
+            <i class="iconfont far fa-moon"></i>
+        </div>
+    </div>
+    <!-- mode switcher place end -->
+
+			
+		</div>
+		<div class="trm-menu-btn">
+			<span></span>
+		</div>
+	</div>
+</header>
+            <!-- top bar end -->
+
+            <!-- body -->
+            
+<div class="trm-content-start">
+    <!-- banner -->
+    <div class="trm-banner">
+    
+    <!-- banner cover -->
+    <img style="object-position:top;object-fit:cover;" alt="banner" class="trm-banner-cover" src="/img/banner.png">
+    <!-- banner cover end -->
+    
+
+    <!-- banner content -->
+    <div class="trm-banner-content trm-overlay">
+        <div class="container">
+            <div class="row">
+                
+                <div class="col-lg-4"></div>
+                
+                <div class="col-lg-8">
+
+                    <!-- banner title -->
+                    <div class="trm-banner-text ">
+                        <div class="trm-label trm-mb-20">
+                            NEWS LETTER
+                        </div>
+                        <h1 class="trm-mb-30 trm-hsmb-font">
+                            git协作
+                        </h1>
+
+                        
+                            <ul class="trm-breadcrumbs trm-label">
+                                <li>
+                                    <a href="/" class="trm-anima-link">Home</a>
+                                </li>
+                                <li>
+                                    <span>
+                                        2024
+                                    </span>
+                                </li>
+                            </ul>
+                        
+                    </div>
+                    <!-- banner title end -->
+
+                    <!-- scroll hint -->
+                    <span id="scroll-triger" class="trm-scroll-hint-frame">
+                        <div class="trm-scroll-hint"></div>
+                        <span class="trm-label">Scroll down</span>
+                    </span>
+                    <!-- scroll hint end -->
+
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- banner content end -->
+</div>
+    <!-- banner end -->
+    <div class="container">
+        <div class="row">
+            
+                <div class="trm-page-sidebar col-lg-4 hidden-sm">
+                    <!-- main card -->
+                    <div class="trm-main-card-frame trm-sidebar">
+    <div class="trm-main-card"> 
+        <!-- card header -->
+<div class="trm-mc-header">
+    <div class="trm-avatar-frame trm-mb-20">
+        <img alt="Avatar" class="trm-avatar" src="/img/Jerry.png">
+    </div>
+    <h5 class="trm-name trm-mb-15">
+        Jerry
+    </h5>
+    
+        <div class="trm-label">
+            成为一个
+            <span class="trm-typed-text">
+                <!-- Words for theme.user.typedText -->
+            </span>
+        </div>
+    
+</div>
+<!-- card header end -->
+        <!-- sidebar social -->
+
+<div class="trm-divider trm-mb-40 trm-mt-40"></div>
+<div class="trm-social">
+    
+        <a href="https://github.com/jerry609" title="github" rel="nofollow" target="_blank">
+            <i class="iconfont fab fa-github"></i>
+        </a>
+    
+</div>
+
+<!-- sidebar social end -->
+        <!-- info -->
+<div class="trm-divider trm-mb-40 trm-mt-40"></div>
+<ul class="trm-table trm-mb-20">
+    
+        <li>
+            <div class="trm-label">
+                地址:
+            </div>
+            <div class="trm-label trm-label-light">
+                福建/北京
+            </div>
+        </li>
+    
+        <li>
+            <div class="trm-label">
+                年龄:
+            </div>
+            <div class="trm-label trm-label-light">
+                6岁100多个月
+            </div>
+        </li>
+    
+</ul>
+<!-- info end -->
+
+        
+    <div class="trm-divider trm-mb-40 trm-mt-40"></div>
+    <!-- action button -->
+    <div class="text-center">
+        <a href="mailto:jeffy353866@gmail.com" class="trm-btn">
+            联系我
+            <i class="iconfont far fa-envelope"></i>
+        </a>
+    </div>
+    <!-- action button end -->
+
+    </div>
+</div>
+                    <!-- main card end -->
+                </div>
+            
+            <div class="trm-page-content col-lg-8">
+                <div id="trm-content" class="trm-content">
+                    <div class="trm-post-info row hidden-sm">
+    <div class="col-sm-4">
+        <div class="trm-card trm-label trm-label-light text-center">
+            <i class="iconfont far fa-calendar-alt trm-icon"></i><br>
+            07/06
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="trm-card trm-label trm-label-light text-center">
+            <i class="iconfont far fa-clock trm-icon"></i><br>
+            15:40
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div id="post-author" class="trm-card trm-label trm-label-light text-center">
+            <i class="iconfont far fa-user trm-icon"></i><br>
+            Jerry
+        </div>
+    </div>
+</div>
+<div class="trm-card ">
+    <article id="article-container" class="trm-publication">
+    <h1 id="GIT协作"><a href="#GIT协作" class="headerlink" title="GIT协作"></a>GIT协作</h1><h2 id="冲突"><a href="#冲突" class="headerlink" title="冲突"></a>冲突</h2><p>在版本控制系统中，特别是在使用Git时，<strong>冲突</strong>（Conflict）指的是当多个团队成员对同一个文件的相同部分进行更改并尝试合并这些更改时发生的问题。冲突通常出现在合并分支、重基（rebase）操作或应用补丁时，因为这些操作涉及将一个分支的更改整合到另一个分支上。</p>
+<h3 id="冲突的发生情况"><a href="#冲突的发生情况" class="headerlink" title="冲突的发生情况"></a>冲突的发生情况</h3><p>冲突发生的典型情况包括：</p>
+<ol>
+<li><p><strong>编辑冲突</strong>：<br>两个或更多开发者修改了同一个文件的同一部分。例如，如果开发者A删除了一个函数，而开发者B在同一函数中添加了一些新代码，当这两个分支合并时，Git无法自动决定哪个版本是正确的。</p>
+</li>
+<li><p><strong>文件冲突</strong>：<br>一个开发者修改了一个文件，而另一个开发者删除了同一个文件，或两个开发者重命名&#x2F;移动了同一个文件但目标不同。</p>
+</li>
+</ol>
+<h3 id="解决冲突"><a href="#解决冲突" class="headerlink" title="解决冲突"></a>解决冲突</h3><p>当冲突发生时，Git会标记冲突的文件，并在文件内容中插入特定的标记，指示冲突的位置。这些标记分为以下几部分：</p>
+<ul>
+<li><strong>开始冲突标记</strong> <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>：此标记后跟的是当前分支的内容。</li>
+<li><strong>分隔符</strong> <code>=======</code>：分隔当前分支内容和其他分支的内容。</li>
+<li><strong>结束冲突标记</strong> <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code>：此标记后跟的是合并进来的分支的内容。</li>
+</ul>
+<p>例如，如果在两个分支上对同一文件的同一行进行了不同的更改，Git无法自动合并，文件将包含类似以下内容：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD</span><br><span class="line">console.log(&quot;This is the version in the current branch.&quot;);</span><br><span class="line">=======</span><br><span class="line">console.log(&quot;This is the version in the branch being merged.&quot;);</span><br><span class="line">&gt;&gt;&gt;&gt;&gt;&gt;&gt; feature-branch</span><br></pre></td></tr></table></figure>
+
+<h3 id="如何处理冲突"><a href="#如何处理冲突" class="headerlink" title="如何处理冲突"></a>如何处理冲突</h3><p>解决冲突通常涉及以下步骤：</p>
+<ol>
+<li><p><strong>识别冲突</strong>：<br>使用 <code>git status</code> 查看哪些文件存在冲突。</p>
+</li>
+<li><p><strong>手动编辑文件</strong>：<br>打开冲突文件，查看冲突标记，并决定保留哪个版本的更改，或者可能合并这两个版本的更改。</p>
+</li>
+<li><p><strong>标记文件为已解决</strong>：<br>解决完冲突后，使用 <code>git add &lt;file&gt;</code> 命令将文件标记为已解决。这告诉Git您已经手动解决了这些冲突。</p>
+</li>
+<li><p><strong>完成合并</strong>：<br>一旦所有冲突都被解决并标记，完成合并过程，通常是通过 <code>git commit</code> 命令。通常，Git会提供一个默认的合并提交消息，确认即可。</p>
+</li>
+</ol>
+<p>处理冲突需要细致的注意力，确保合并后的结果符合预期，同时保持代码的功能和完整性。在团队环境中，有效的沟通和代码审查可以大大减少冲突的发生。</p>
+<h2 id="1-分支"><a href="#1-分支" class="headerlink" title="1 分支"></a>1 分支</h2><h3 id="1-1-什么是Git分支"><a href="#1-1-什么是Git分支" class="headerlink" title="1.1 什么是Git分支"></a>1.1 什么是Git分支</h3><p>在处理不同任务的时候开不同的分支，把不同的任务区别开</p>
+<p><img src="https://nulab.com/static/d60533b51b59b170390354f506ecd7e6/5a190/01.png" alt="Diagram of git branches."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>多个不同的分支可以合并成一个分支，各个分支互不影响，除非拉取新的更改</p>
+<p><img src="https://nulab.com/static/2b1b3450c0069d0cbd97d70e48c7a81c/5a190/02.png" alt="Diagram of multiple projects."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>为每个任务创建分支是个值得采用的做法，可以更好的追溯变更。</p>
+<h3 id="1-2-创建分支"><a href="#1-2-创建分支" class="headerlink" title="1.2 创建分支"></a>1.2 创建分支</h3><p>创建新的分支不会更改存储库，只是指出了提交。如下图所示，使用 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-branch-commands/#create-branch">git branch 命令</a>创建一个名为<code>issue1</code>的分支，存储库将保持不变，只是为当前提交添加了一个新指针。</p>
+<p><img src="https://nulab.com/static/9db92c2b966108297153a413c085a468/5a190/01.png" alt="Diagram of creating branches."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h2 id="2-切换分支"><a href="#2-切换分支" class="headerlink" title="2 切换分支"></a>2 切换分支</h2><p><a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-branch-commands/#switch-branches">git checkout 命令</a>可更新工作树中的文件，以匹配存储在您希望切换到的分支中的版本。类似于切换目录或者工作区。</p>
+<h3 id="2-1-指向分支"><a href="#2-1-指向分支" class="headerlink" title="2.1 指向分支"></a>2.1 指向分支</h3><p>HEAD 用于表示分支的当前快照。对于一个新的存储库，在默认情况下，Git 会将 HEAD 指向主分支。更改 HEAD 指向的位置将更新您的活动分支。</p>
+<p>~ (代字号) 和 ^ (插入符号) 指向相对于特定提交的位置。这些符号与提交引用一起使用，通常是 HEAD 或提交哈希(hash)。</p>
+<ul>
+<li><strong>~</strong> 指的是祖先 (多少代取决于~后的数字)。<ul>
+<li><strong>HEAD~1</strong> 指的是提交的第一个父级。</li>
+<li><strong>HEAD~2</strong> 指的是提交的第一个祖父级。</li>
+</ul>
+</li>
+<li><strong>^</strong> 指的是合并提交的父级。<ul>
+<li><strong>HEAD^1</strong> 指的是 HEAD 的第一个父级，其中 head 是合并提交。</li>
+<li><strong>HEAD^2</strong> 指的是 HEAD 的第一个祖父级，其中 head 是合并提交。</li>
+</ul>
+</li>
+</ul>
+<p>合并提交中的提交可以有多个父项。</p>
+<p><img src="https://nulab.com/static/798273a2f02143bda2603d4c743ffdc2/5a190/01.png" alt="Diagram of git symbols pointing to specific positions."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="2-2-暂存分支"><a href="#2-2-暂存分支" class="headerlink" title="2.2 暂存分支"></a>2.2 暂存分支</h3><p>当您在使用Git进行版本控制时，可能会遇到需要在多个分支之间切换的情况，同时又希望保留未提交的更改。这时，Git提供了一些策略来处理这些未提交的更改，以便您可以无碍地在不同分支间进行工作。</p>
+<h4 id="切换分支与未提交更改的处理"><a href="#切换分支与未提交更改的处理" class="headerlink" title="切换分支与未提交更改的处理"></a>切换分支与未提交更改的处理</h4><ol>
+<li><p><strong>基本行为</strong>：</p>
+<ul>
+<li>当您在工作树中有未提交的更改（包括新文件、修改或删除的文件）时，这些更改可以被带到新分支上，前提是不会与新分支的文件产生冲突。</li>
+<li>如果您提交了这些更改，它们将仅存在于您切换到的新分支上。</li>
+</ul>
+</li>
+<li><p><strong>冲突防止切换</strong>：</p>
+<ul>
+<li>如果存在冲突（即，当前分支的未提交更改与目标分支的文件内容不兼容），Git不会允许您直接切换分支。这是为了防止潜在的代码丢失。</li>
+</ul>
+</li>
+</ol>
+<h4 id="使用-Stash-临时保存更改"><a href="#使用-Stash-临时保存更改" class="headerlink" title="使用 Stash 临时保存更改"></a>使用 Stash 临时保存更改</h4><p>为了解决在分支间切换时带来的问题，Git 提供了一个称为 <code>stash</code> 的功能，允许您临时存储未提交的更改，以便您可以清洁地切换到其他分支继续工作。</p>
+<h4 id="Stash-的工作原理："><a href="#Stash-的工作原理：" class="headerlink" title="Stash 的工作原理："></a>Stash 的工作原理：</h4><ul>
+<li><p><strong>存储更改</strong>：<br>使用 <code>git stash</code> 或 <code>git stash push</code> 命令将当前工作树中的更改保存起来，这样您的工作树就回到了干净的状态（如同刚刚克隆仓库后的状态）。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git stash</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>列出存储的更改</strong>：<br>可以通过 <code>git stash list</code> 查看所有存储的更改条目。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git stash list</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>恢复更改</strong>：<br>当您需要恢复之前存储的更改时，可以使用 <code>git stash pop</code>（应用最近的更改并从stash列表中移除它）或 <code>git stash apply</code>（应用更改但保留在stash列表中）。</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git stash pop</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>让我们通过一个具体的例子来说明如何使用 <code>git stash</code> 来管理工作区中未提交的更改，使您能够在不同的分支之间灵活切换。</p>
+<h4 id="场景设定"><a href="#场景设定" class="headerlink" title="场景设定"></a>场景设定</h4><p>假设您正在开发一个新功能，在分支 <code>feature-x</code> 上工作。在您开发的过程中，突然接到通知需要立刻解决主分支 <code>main</code> 上的一个紧急bug。</p>
+<p>此时，您的工作区有未提交的更改，这些更改还不够稳定，不能直接提交。同时，您需要切换到 <code>main</code> 分支来修复bug。</p>
+<h4 id="使用-Git-Stash"><a href="#使用-Git-Stash" class="headerlink" title="使用 Git Stash"></a>使用 Git Stash</h4><ol>
+<li><p><strong>保存当前更改</strong><br>在您的 <code>feature-x</code> 分支上，使用以下命令将所有未提交的更改（包括暂存和未暂存的）存入stash：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git stash push -m <span class="string">&quot;WIP: Feature X adjustments&quot;</span></span><br></pre></td></tr></table></figure>
+<p>这里的 <code>-m</code> 选项允许您为stash项添加一个描述性消息，便于以后识别和恢复。</p>
+</li>
+<li><p><strong>查看Stash列表</strong><br>输入以下命令查看当前保存的stash项：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git stash list</span><br></pre></td></tr></table></figure>
+<p>这会显示所有stash项，包括您刚刚添加的。</p>
+</li>
+<li><p><strong>切换到主分支</strong><br>清理了工作区后，您现在可以安全地切换到 <code>main</code> 分支：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git checkout main</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>进行紧急修复</strong><br>在 <code>main</code> 分支上进行必要的更改并提交。这可能包括测试、修改和提交修复：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git add .</span><br><span class="line">git commit -m <span class="string">&quot;Fix critical bug in main&quot;</span></span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>切换回功能分支</strong><br>修复完成后，切换回您的功能分支：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git checkout feature-x</span><br></pre></td></tr></table></figure>
+</li>
+<li><p><strong>恢复之前的工作</strong><br>使用以下命令将之前stashed的更改重新应用到工作区：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git stash pop</span><br></pre></td></tr></table></figure>
+<p>这将应用最近的stash项并从stash列表中删除它。</p>
+</li>
+</ol>
+</li>
+</ul>
+<h2 id="3-远程分支"><a href="#3-远程分支" class="headerlink" title="3 远程分支"></a>3 远程分支</h2><h3 id="3-1-快进合并"><a href="#3-1-快进合并" class="headerlink" title="3.1 快进合并"></a>3.1 快进合并</h3><p>在Git中，<strong>快进合并</strong>（fast-forward merge）是一种特殊类型的合并，它发生在当一条分支可以直接前进到另一条分支的末端时，无需进行任何实际的合并操作。这种情况通常发生在没有新的并行提交影响这两个分支的情况下，即当前分支的末端提交是要合并分支的基础上直接发展出来的提交。</p>
+<h4 id="快进合并的工作机制"><a href="#快进合并的工作机制" class="headerlink" title="快进合并的工作机制"></a>快进合并的工作机制</h4><ol>
+<li><p><strong>简化的视图</strong>：<br>当一个分支的所有提交都在另一个分支的直接历史线上时，就可以进行快进合并。这意味着可以简单地将接收分支的指针（HEAD）前移到源分支的最新提交，而不需要创建一个新的合并提交。</p>
+</li>
+<li><p><strong>没有分支点</strong>：<br>快进合并不会创建一个新的合并提交，因为它仅仅涉及指针的移动。这样做保持了项目历史的线性和简洁。</p>
+</li>
+</ol>
+<h4 id="快进合并的场景"><a href="#快进合并的场景" class="headerlink" title="快进合并的场景"></a>快进合并的场景</h4><p>假设您有两个分支：<code>main</code> 和 <code>feature</code>。<code>feature</code> 分支从<code>main</code>分支分出来，<code>main</code>分支在此期间没有新的提交，而<code>feature</code>分支有若干提交。当你决定将<code>feature</code>分支合并回<code>main</code>分支时：</p>
+<ul>
+<li><strong>操作</strong>：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git checkout main</span><br><span class="line">git merge feature</span><br></pre></td></tr></table></figure></li>
+<li><strong>结果</strong>：<br>如果<code>main</code>分支在<code>feature</code>分出后没有新的提交，Git会执行快进合并，直接将<code>main</code>分支的HEAD指针移动到<code>feature</code>分支的最新提交。这样，<code>main</code>分支现在包含了所有<code>feature</code>分支的更改。</li>
+</ul>
+<h4 id="非快进合并"><a href="#非快进合并" class="headerlink" title="非快进合并"></a>非快进合并</h4><p>相对于快进合并，<strong>非快进合并</strong>发生在当目标分支自分支点以来有新的提交时，即两个分支都有各自独立的提交。在这种情况下，Git无法简单地进行指针前移，因为这样会丢失目标分支上的更改。</p>
+<ul>
+<li><strong>操作</strong>：<br>如果你想确保即使可以进行快进合并也要创建一个新的合并提交，可以使用<code>--no-ff</code>选项：<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git merge --no-ff feature</span><br></pre></td></tr></table></figure></li>
+<li><strong>结果</strong>：<br>这将强制Git创建一个新的合并提交，即使是快进合并也不例外。这样做可以保留分支信息和合并历史。</li>
+</ul>
+<h4 id="快进合并的影响"><a href="#快进合并的影响" class="headerlink" title="快进合并的影响"></a>快进合并的影响</h4><p>快进合并的优点是保持了历史的清洁和线性，但在某些情况下，保留分支的合并历史（非快进合并）可能更有助于了解项目历史的结构和重要决策。选择使用哪种合并策略取决于团队的偏好和项目的特定需求。</p>
+<h3 id="3-2-拉取（git-pull）"><a href="#3-2-拉取（git-pull）" class="headerlink" title="3.2 拉取（git pull）"></a>3.2 拉取（git pull）</h3><p>您可以使用 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/remote-git-commands/#get--merge-latest-branch-changes-from-remote-repository">git pull 命令</a>将远程存储库中的最新更改应用到本地存储库。</p>
+<p>例如，假设远程分支位于本地分支的上游。远程分支将包含本地分支的所有更改，如下所示。</p>
+<p><img src="https://nulab.com/static/552cafbef8bd4368b619449e22702322/5a190/01.png" alt="Diagram displaying an updatream branch."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<ul>
+<li>远程分支在本地分支的上游。</li>
+</ul>
+<p>在这种情况下，如果我们要将远程分支 (origin&#x2F;main) 的合并应用到我们的本地分支 (main)，这将是一个快进合并。</p>
+<p><img src="https://nulab.com/static/99a76c2026cd715b8a71fbdce94dc836/5a190/02.png" alt="Diagram displaying a fast-forward merge."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>但是如果本地 main 分支中的更改不存在于远程 origin&#x2F;main 分支中，则拉取命令将执行合并，且将创建将这些更改绑定在一起的合并提交。</p>
+<p><img src="https://nulab.com/static/04a22a905afb3b77b2a29d5673d147fc/5a190/03.png" alt="Diagram displaying a merge and commit before a pull."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<ul>
+<li>如果本地分支与远程分支不同，Git 必须在拉取之前合并和提交。</li>
+</ul>
+<p>执行拉取时，会在本地存储库中自动创建合并提交。如果存在冲突，您将必须解决冲突并手动提交合并。</p>
+<p>如果没有冲突，提交将自动合并。</p>
+<p><img src="https://nulab.com/static/d309d34e7532888bd28c7927986bcda7/5a190/04.png" alt="Diagram displaying no conflict auto merge."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="3-3-获取（git-fetch）"><a href="#3-3-获取（git-fetch）" class="headerlink" title="3.3 获取（git fetch）"></a>3.3 获取（git fetch）</h3><p>只要没有冲突，在执行拉取时，来自远程分支的更改会自动合并到您当前的本地分支。如果您想获取远程的修改但又不想将它们合并到您当前的本地分支中，您可以执行 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/remote-git-commands/#inspect-branch-changes-in-remote-repository">git fetch 命令</a>。</p>
+<p>获取将从远程下载本地分支上尚不存在的更改。获取<code>FETCH_HEAD ref</code> 将跟踪从远程存储库中获取的更改。</p>
+<p>当远程和本地分支都包含不同的后代时，修订历史记录将如下所示：</p>
+<p><img src="https://nulab.com/static/b09fbb0d1698552ce2c82485596cad1b/5a190/01.png" alt="Diagram displaying revision history of branches with different mains."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'>远程和本地分支具有不同 main 时的修订历史记录。</p>
+<p>更改获取后，您可以通过合并获取_HEAD 或执行拉取将这些更改应用到本地存储库。</p>
+<p><img src="https://nulab.com/static/b68e824f42434f8f5a8403112fad766b/5a190/02.png" alt="Diagram displaying changes applied to local repo after mergeing."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'>合并后，更改将应用于本地存储库。</p>
+<p>一旦获取<code>FETCH_HEAD</code>合并，修订历史记录将产生与<code>git pull</code>操作相同的结果。拉取是同时执行获取和合并操作。</p>
+<h4 id="git-fetch-vs-git-pull"><a href="#git-fetch-vs-git-pull" class="headerlink" title="git fetch vs. git pull"></a><code>git fetch</code> vs. <code>git pull</code></h4><ol>
+<li><p><strong>git fetch</strong></p>
+<ul>
+<li><strong>用途</strong>：<code>git fetch</code> 仅仅从远程仓库下载到本地仓库中尚不存在的更改，但不会自动合并或修改您的当前工作。</li>
+<li><strong>结果</strong>：执行 <code>git fetch</code> 后，您的本地仓库将包含远程仓库的最新更改，但这些更改不会影响您的任何工作分支，除非您显式合并它们。</li>
+<li><strong>修订历史</strong>：<code>FETCH_HEAD</code> 是一个特殊的引用，它指向刚刚从远程仓库获取的最新提交。</li>
+</ul>
+</li>
+<li><p><strong>git pull</strong></p>
+<ul>
+<li><strong>用途</strong>：<code>git pull</code> 是 <code>git fetch</code> 和 <code>git merge</code> 的组合。它不仅下载最新的远程更改，还会尝试将这些更改合并到当前分支中。</li>
+<li><strong>结果</strong>：如果合并成功（没有冲突），您的当前分支将自动更新以包括远程分支的更改。</li>
+<li><strong>修订历史</strong>：如果合并成功，您的本地分支修订历史将包括这些远程更改。</li>
+</ul>
+</li>
+</ol>
+<h4 id="具体使用示例"><a href="#具体使用示例" class="headerlink" title="具体使用示例"></a>具体使用示例</h4><p><strong>（1）使用 <code>git fetch</code> 检查远程更改</strong></p>
+<p>假设您正在本地的 <code>master</code> 分支上工作，并想查看远程仓库（如 <code>origin</code>）中的更新，但不立即合并这些更改：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git fetch origin</span><br></pre></td></tr></table></figure>
+
+<p>执行此命令后，您可以使用以下命令检查远程分支的状态而不影响您的本地分支：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">log</span> --oneline master..origin/master</span><br></pre></td></tr></table></figure>
+
+<p>这会显示从远程 <code>master</code> 分支获取的提交，这些提交还没有被合并到您的本地 <code>master</code> 分支。</p>
+<p><strong>（2） 合并 <code>FETCH_HEAD</code></strong></p>
+<p>如果您决定要将这些更改合并到您的本地分支，可以使用：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git merge FETCH_HEAD</span><br></pre></td></tr></table></figure>
+
+<p>这会将从 <code>git fetch</code> 获取的更改合并到您当前的分支中。</p>
+<p><strong>（3）使用 <code>git pull</code> 直接更新和合并</strong></p>
+<p>如果您确定要立即获取并合并远程分支的更改，可以直接使用：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git pull origin master</span><br></pre></td></tr></table></figure>
+
+<p>这条命令等同于先执行 <code>git fetch origin master</code> 然后执行 <code>git merge origin/master</code>。</p>
+<h3 id="3-4-推送（git-push）"><a href="#3-4-推送（git-push）" class="headerlink" title="3.4 推送（git push）"></a>3.4 推送（git push）</h3><p>在将本地分支推送到远程存储库之前，所有提交都可用。换句话说，您可以按照自己的节奏在本地分支工作，而不会影响其他团队成员。</p>
+<p>当您将本地分支推送到远程时，Git 将<strong>快进合并</strong>到目标存储库。</p>
+<p>但是，如果推送导致<strong>非快进合并</strong>，Git 将拒绝您的推送以防止您覆盖以前的提交。在这种情况下，您必须拉取最新的远程更改并再次推送。</p>
+<p><img src="https://nulab.com/static/3e0c50ddab2f8082c59684ef26624ece/5a190/01.png" alt="Diagram displaying git push command."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h2 id="4-分支的工作流程"><a href="#4-分支的工作流程" class="headerlink" title="4 分支的工作流程"></a>4 分支的工作流程</h2><p>在<a target="_blank" rel="noopener" href="https://nvie.com/posts/a-successful-git-branching-model/">成功的Git分支模型</a>中，提到的五种分支类型，每种都具有特定的作用和管理规则。这些分支类型协助团队在不同的开发阶段进行组织和管理，确保软件开发流程的清晰性和效率。以下是对这些分支的概述和整理：</p>
+<h3 id="1-主分支（Main-Branch）"><a href="#1-主分支（Main-Branch）" class="headerlink" title="1. 主分支（Main Branch）"></a>1. 主分支（Main Branch）</h3><ul>
+<li><strong>别称</strong>: <code>master</code> 或 <code>main</code></li>
+<li><strong>用途</strong>: 包含生产环境中的代码，始终保持稳定且可部署。</li>
+<li><strong>特点</strong>: 通常用于合并其他分支的成果，如新功能、修补或发布准备。不直接在此分支上进行日常工作。</li>
+</ul>
+<h3 id="2-功能分支（Feature-Branches）"><a href="#2-功能分支（Feature-Branches）" class="headerlink" title="2. 功能分支（Feature Branches）"></a>2. 功能分支（Feature Branches）</h3><ul>
+<li><strong>别称</strong>: 主题分支</li>
+<li><strong>用途</strong>: 用于开发新功能或实验，每个分支通常源自主分支或开发分支，并最终合并回去。</li>
+<li><strong>特点</strong>: 提供了一个隔离的环境，允许开发者在不影响主分支稳定性的情况下工作，便于代码审查和管理。</li>
+</ul>
+<h3 id="3-发布分支（Release-Branches）"><a href="#3-发布分支（Release-Branches）" class="headerlink" title="3. 发布分支（Release Branches）"></a>3. 发布分支（Release Branches）</h3><ul>
+<li><strong>用途</strong>: 用于准备即将发布的版本。从开发分支（如<code>develop</code>）分出，进行最后的测试和微调。</li>
+<li><strong>特点</strong>: 主要处理bug修复、文档生成和其他发布任务。一旦版本准备就绪并确认可以发布，发布分支将合并到主分支和开发分支中，随后关闭。</li>
+</ul>
+<h3 id="4-修补分支（Hotfix-Branches）"><a href="#4-修补分支（Hotfix-Branches）" class="headerlink" title="4. 修补分支（Hotfix Branches）"></a>4. 修补分支（Hotfix Branches）</h3><ul>
+<li><strong>用途</strong>: 快速修复生产环境中的紧急问题。这些分支从主分支分出，并在问题解决后立即合并回主分支和开发分支。</li>
+<li><strong>特点</strong>: 旨在迅速解决生产中的关键问题，确保对正在进行的开发活动的干扰最小。</li>
+</ul>
+<h3 id="5-开发分支（Development-Branch）"><a href="#5-开发分支（Development-Branch）" class="headerlink" title="5. 开发分支（Development Branch）"></a>5. 开发分支（Development Branch）</h3><ul>
+<li><strong>别称</strong>: 集成分支，通常命名为<code>develop</code></li>
+<li><strong>用途</strong>: 包含所有为下一版本准备好的功能，是功能分支合并的目标。</li>
+<li><strong>特点</strong>: 在发布周期的大部分时间内保持活跃，用于集成即将发布的功能。在发布前，通常会从中创建一个发布分支。</li>
+</ul>
+<p>这些分支策略提供了清晰的结构框架，帮助团队高效管理复杂的开发流程，优化协作和交付速度。根据项目和组织的需求，团队可以对这些策略进行调整，以最适合自己的工作方式。</p>
+<p><img src="https://nulab.com/static/3a74e458deec1ddd454b858cf71a680d/5a190/01.png" alt="Basic Git branching workflow with main, feature, release, hotfix, and develop branches."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="4-1-主分支"><a href="#4-1-主分支" class="headerlink" title="4.1 主分支"></a>4.1 主分支</h3><p>在存储库中进行第一次提交时，默认情况下 Git 会自动创建一个主分支。随后的提交将在主分支下进行，直到您决定创建并切换到另一个分支。</p>
+<p>驻留在主分支的代码库是生产就绪的。当最新的提交准备好用于特定版本时，它将被赋予一个发布标签。</p>
+<p><img src="https://nulab.com/static/e30465a90ee5ae829b5c5296bac4235f/5a190/01.png" alt="Changes are committed to the main branch."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="4-2-功能发布"><a href="#4-2-功能发布" class="headerlink" title="4.2 功能发布"></a>4.2 功能发布</h3><p>当您开始处理新功能或 bug 修复时，您应该创建一个功能分支 (即主题分支)。功能分支通常是在开发分支之外创建的。在功能的整个开发生命周期中，该主题分支可以驻留在您的本地机器中。</p>
+<p>每当您准备好将变更集与开发分支合并时，您将把这个分支推送到远程存储库。</p>
+<p><img src="https://nulab.com/static/1a6fb338fe0bc48efa1bb91159eb4331/5a190/01.png" alt="Image of a feature branch"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h3 id="4-3-发布分支"><a href="#4-3-发布分支" class="headerlink" title="4.3 发布分支"></a>4.3 发布分支</h3><p>当您推出新版本时，您会创建一个发布分支。发布分支可帮助您确保新功能的正常运行。</p>
+<p>按照惯例，在命名发布分支时以前缀<code>release-</code>开头。</p>
+<p>通常当它接近生产就绪时，您会在开发分支之外创建发布分支。</p>
+<p>团队成员应仅解决此分支上的 bug 修复和与发布相关的问题。这允许其他团队成员继续将新功能推送到开发分支，而不会中断发布的工作流程。</p>
+<p>准备发布时，将发布分支与主分支合并，并为新创建的合并提交标记发布编号。</p>
+<p>您还应该将发布分支与开发分支合并，以便主分支和开发分支都可从发布分支接收最新的更改&#x2F;bug 修复。</p>
+<h3 id="4-4-修补分支"><a href="#4-4-修补分支" class="headerlink" title="4.4 修补分支"></a>4.4 修补分支</h3><p>当您需要快速向生产代码库添加关键修复时，您可以在主分支之外创建一个修补分支。</p>
+<p>按照惯例，在命名修补分支时以前缀<code>hotfix-</code>开头。</p>
+<p>修补分支的优点是它允许您快速发布补丁，并将更改与主分支合并，而无需等待下一个版本。</p>
+<p>修补分支也应该与开发分支合并。</p>
+<h3 id="4-5-开发分支"><a href="#4-5-开发分支" class="headerlink" title="4.5 开发分支"></a>4.5 开发分支</h3><p>您的团队应该始终保持开发分支 (即集成分支) 的稳定。您的团队从这个分支创建新的分支，它可以在生产环境中运行。持续集成工具，例如 <a target="_blank" rel="noopener" href="https://support.nulab.com/hc/en-us/articles/8843171401625-Jenkins">Jenkins</a> 可以做到这一点。</p>
+<p>当一些更改需要合并到开发分支时，创建一个功能&#x2F;分支来处理通常是个好主意。</p>
+<h3 id="4-6-Git分支工作流程示例"><a href="#4-6-Git分支工作流程示例" class="headerlink" title="4.6 Git分支工作流程示例"></a>4.6 Git分支工作流程示例</h3><p>在这个Git分支策略工作流程示例中，我们通过处理一个实际场景来阐明如何在开发新功能的同时快速响应并修复生产中的bug。这种分支策略有效地结合了开发&#x2F;集成分支和功能&#x2F;主题分支的使用，确保开发流程的连续性和灵活性。</p>
+<h3 id="分支策略工作流程步骤详解"><a href="#分支策略工作流程步骤详解" class="headerlink" title="分支策略工作流程步骤详解"></a>分支策略工作流程步骤详解</h3><h4 id="1-发现生产中的Bug"><a href="#1-发现生产中的Bug" class="headerlink" title="1. 发现生产中的Bug"></a>1. <strong>发现生产中的Bug</strong></h4><ul>
+<li>在开发新功能的同时，生产环境中出现了一个bug。为了不干扰当前的功能开发，需要创建一个专门的bug修复分支。<img src="https://nulab.com/static/64c6b72c9b739fb734a50a1d6094a443/5a190/01.png" alt="On the way of work on a topic branch to add functions, it becomes necessary to fix bugs."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></li>
+</ul>
+<h4 id="2-创建Bug修复分支"><a href="#2-创建Bug修复分支" class="headerlink" title="2. 创建Bug修复分支"></a>2. <strong>创建Bug修复分支</strong></h4><ul>
+<li>从开发分支（通常是<code>develop</code>）分出一个新的分支来专门处理这个bug。这保证了bug修复工作与功能开发工作的隔离。<img src="https://nulab.com/static/482b6176fb4514674a79990a76011166/5a190/02.png" alt="You can start working independently from the addition of functions by creating a new topic branch for fixing bugs."  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></li>
+</ul>
+<h4 id="3-修复Bug并合并"><a href="#3-修复Bug并合并" class="headerlink" title="3. 修复Bug并合并"></a>3. <strong>修复Bug并合并</strong></h4><ul>
+<li>在这个新的bug修复分支上进行工作，一旦完成修复，就将这个分支合并回开发分支。这一步确保所有的bug修复都会反映到主要的开发线上。</li>
+</ul>
+<p><img src="https://nulab.com/static/7cc379aed15319e29fe0329de4a64d55/5a190/03.png" alt="You can make it public by including it in the original branch"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h4 id="4-返回到功能分支"><a href="#4-返回到功能分支" class="headerlink" title="4. 返回到功能分支"></a>4. <strong>返回到功能分支</strong></h4><ul>
+<li>修复完bug后，切换回原先的功能分支继续新功能的开发。</li>
+</ul>
+<p><img src="https://nulab.com/static/d0570d35da8cf1282e0feb5379a977d3/5a190/04.png" alt="You can go back to the original branch to continue working on the addition of functions"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h4 id="5-同步开发分支的更改"><a href="#5-同步开发分支的更改" class="headerlink" title="5. 同步开发分支的更改"></a>5. <strong>同步开发分支的更改</strong></h4><ul>
+<li>开发新功能时，您可能需要刚刚合并到开发分支上的修复。这需要您将开发分支的更改（包括bug修复）整合到您的功能分支上。</li>
+<li>您可以通过以下两种方式来实现：<ul>
+<li><strong>合并（Merge）</strong>：将开发分支合并到您的功能分支，这将保留两个分支的历史。</li>
+<li><strong>变基（Rebase）</strong>：将您的功能分支变基到最新的开发分支上。这使得历史更为线性，好像您是在最新的开发状态基础上开始添加新功能。</li>
+</ul>
+</li>
+</ul>
+<h4 id="6-使用变基进行同步"><a href="#6-使用变基进行同步" class="headerlink" title="6. 使用变基进行同步"></a>6. <strong>使用变基进行同步</strong></h4><ul>
+<li>选择使用变基来更新您的功能分支，这样您的分支看起来就像是直接基于最新的开发分支开始的。这样可以使项目历史更清晰，也更易于理解。</li>
+</ul>
+<h4 id="7-继续功能开发"><a href="#7-继续功能开发" class="headerlink" title="7. 继续功能开发"></a>7. <strong>继续功能开发</strong></h4><ul>
+<li>完成变基后，您的功能分支现在包含了必要的bug修复。您可以继续开发新功能，确保所依赖的代码是最新且稳定的。</li>
+</ul>
+<h2 id="5-整合分支"><a href="#5-整合分支" class="headerlink" title="5 整合分支"></a>5 整合分支</h2><ul>
+<li><strong>合并方法</strong>：保留合并分支的所有更改和历史记录。多次合并后，修订历史记录可能会变得复杂。</li>
+<li><strong>变基方法</strong>：维护一个干净的修订历史记录，因为合并的提交会附加在目标分支的末尾。与合并的方法相比，冲突可能更频繁地发生。</li>
+</ul>
+<p>为了使您的修订历史记录保持简洁，您可以在将功能分支合并到开发分支之前，将功能分支变基。这会导致快进合并，而不会创建额外的合并提交。</p>
+<h3 id="5-1-合并分支"><a href="#5-1-合并分支" class="headerlink" title="5.1 合并分支"></a>5.1 合并分支</h3><p>您可以使用 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-branch-commands/#merge-branches">git merge 指令</a>来将多个分支集成。</p>
+<p>考虑下面的情况。有两个分支：一个<code>bugfix</code>分支，其中有一些来自<code>main</code>分支的提交。</p>
+<p><img src="https://nulab.com/static/8e4669099d5d6f52f1615f6f782d2152/5a190/01.png" alt="Branch"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>在这种情况下，将“bugfix“合并回“主要“分支并不是什么大问题。那是因为自从创建“bugfix”分支以来，“主要“分支没有改变。Git 将通过将“主要“分支位置移动到“bugfix“分支的最新位置来合并它。这种合并称为“快进“。</p>
+<p><img src="https://nulab.com/static/f617076d2bf6d0504aa51e362cea9342/5a190/02.png" alt="Fast-forward merge"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>然而，在下面的示例中，自从<code>bugfix</code>分支出来后，<code>main</code>分支已经更新了几次。在这两个分支上执行合并时，必须组合来自<code>bugfix</code>和<code>main</code>分支的更改。</p>
+<p><img src="https://nulab.com/static/f014779fb05caff4401520c480230148/5a190/03.png" alt="It has advanced more than when a branch is divided"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>对于这种合并，创建一个“合并提交“并将“主要“位置更新为新创建的合并提交。</p>
+<p><img src="https://nulab.com/static/2268f09bc1aacd72a54da33e7318b123/5a190/04.png" alt="Merge commit incorporating both changes"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>即使快进合并是可能的，您仍然可以明确地强制它在没有快进合并的情况下进行合并。</p>
+<p><img src="https://nulab.com/static/e25c4039d74d5b2be21720dd3a01e618/5a190/05.png" alt="Non fast-forward merge"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>如上所示，非快进合并保留了<code>bugfix</code>分支。这让您更清楚地了解功能分支<code>bugfix</code>。您可以轻松找到功能分支的开始或结束位置，并跟踪对功能分支所做的更改。</p>
+<h3 id="5-2-将分支变基"><a href="#5-2-将分支变基" class="headerlink" title="5.2 将分支变基"></a>5.2 将分支变基</h3><p>要获得更清晰的修订历史记录，您可以使用 <a target="_blank" rel="noopener" href="https://nulab.com/zh-cn/learn/software-development/git-tutorial/git-commands-settings/git-commit-history-commands/#modify--move-past-commit-and-messages">git rebase 命令</a>来整合您的分支。</p>
+<p>假设我们有两个具有非快进合并场景的分支。</p>
+<p><img src="https://nulab.com/static/1b7c55ac526a6ed881c14c58095944d1/5a190/01.png" alt="Branch"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>变基将导致分支历史记录看起来类似于下面的示例。</p>
+<p><img src="https://nulab.com/static/eb7918c2bbcb5ccd3193fa4affacfe4b/5a190/02.png" alt="Unify branches by using rebase"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>当您将<code>bugfix</code>分支变基到主分支时，来自<code>bugfix</code>分支的提交将被重播并附加到主分支的末尾。结果是<code>bugfix</code>分支历史记录中的单个简单提交串流。</p>
+<p>如果在附加提交时发生冲突，Git 会要求您解决冲突，然后再继续对其他提交进行变基。</p>
+<p><img src="https://nulab.com/static/3f70e989e6e03852eee799d6ac8dc15c/5a190/03.png" alt="Unify branches by using rebase"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<p>变基不会移动<code>main</code>的位置。在任何情况下，您都可以在变基后进行快进或从<code>bugfix</code>到<code>main</code>的干净合并。</p>
+<p><img src="https://nulab.com/static/fa184cc78d5378a72f01fd2dc70f4100/5a190/04.png" alt="Unify branches by using rebase"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h2 id="6-标签"><a href="#6-标签" class="headerlink" title="6 标签"></a>6 标签</h2><p>Git 标签标记并标记历史记录中的特定提交。标签通常用于指示发布版本，发布名称 (即 v1.0) 是标签的名称。</p>
+<p>Git 标签有两种类型：</p>
+<ul>
+<li>轻量标签</li>
+<li>附注标签</li>
+</ul>
+<p>轻量标签类似于不会改变的分支。它只是直接指向历史记录中的特定提交。轻量标签主要在您的本地工作区中暂时使用。</p>
+<p>附注标签是校验和的，通常在计划标记重要提交时使用。您可以添加消息、签名、日期以及标记者的姓名和电子邮件。</p>
+<p><img src="https://nulab.com/static/78f4a82667973baddc9a3234fc94639a/5a190/01.png" alt="Git tags in the main branch"  data-tag='post-image' onload='this.onload=null;this.style.opacity=1;' loading="lazy" onerror='this.onerror=null;this.src="/img/404.jpg"'></p>
+<h2 id="7-查看变更"><a href="#7-查看变更" class="headerlink" title="7 查看变更"></a>7 查看变更</h2><p><strong>（1）git diff</strong></p>
+<p><strong>用途</strong>：<code>git diff</code> 命令用于显示工作目录中未暂存的文件修改和暂存的文件修改之间的差异，或比较两个提交之间的差异。</p>
+<p><strong>功能详解</strong>：</p>
+<ul>
+<li><strong>未暂存的变更</strong>：<code>git diff</code> 默认显示工作目录中所有未暂存的变更。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git diff</span><br></pre></td></tr></table></figure></li>
+<li><strong>暂存的变更</strong>：使用 <code>git diff --staged</code> 或 <code>git diff --cached</code> 查看已暂存的变更。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git diff --staged</span><br></pre></td></tr></table></figure></li>
+<li><strong>两个提交之间的差异</strong>：指定两个提交的哈希值来查看它们之间的差异。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git diff commit1 commit2</span><br></pre></td></tr></table></figure></li>
+</ul>
+<p><strong>（2）git show</strong></p>
+<p><strong>用途</strong>：<code>git show</code> 命令用于显示一个对象（通常是提交）的类型、大小、内容等信息。</p>
+<p><strong>功能详解</strong>：</p>
+<ul>
+<li><strong>查看特定提交</strong>：显示单个提交的详细信息，包括提交的差异和元数据。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git show [commit-hash]</span><br></pre></td></tr></table></figure></li>
+</ul>
+<p><strong>（3）git log</strong></p>
+<p><strong>用途</strong>：<code>git log</code> 命令用于查看提交历史记录，可以与不同的选项组合使用，以查看特定的历史变更。</p>
+<p><strong>功能详解</strong>：</p>
+<ul>
+<li><strong>查看特定文件的提交历史</strong>：显示指定文件的提交历史，包括相关的更改。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">log</span> -p [filename]</span><br></pre></td></tr></table></figure></li>
+<li><strong>图形化显示分支合并历史</strong>：使用图形选项查看更直观的分支历史。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">log</span> --graph --oneline --all</span><br></pre></td></tr></table></figure></li>
+</ul>
+<p><strong>（4）git blame</strong></p>
+<p><strong>用途</strong>：<code>git blame</code> 命令用于显示每一行文件的最后修改者信息，非常有用于追踪特定行的变更历史。</p>
+<p><strong>功能详解</strong>：</p>
+<ul>
+<li><strong>查看文件修改者</strong>：逐行显示文件的修改记录，包括提交哈希和作者。<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git blame [filename]</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h2 id="其他"><a href="#其他" class="headerlink" title="其他"></a>其他</h2><p><code>git status</code> 和 <code>git log</code> 是两个基本的 Git 命令，它们在日常 Git 使用中扮演着不同的角色。这两个命令提供的信息有着根本的区别，分别关注当前工作区的状态和项目的提交历史。</p>
+<h3 id="git-status"><a href="#git-status" class="headerlink" title="git status"></a>git status</h3><p><strong>用途</strong>：<code>git status</code> 命令用于显示 Git 工作目录和暂存区的状态。它是诊断和解决代码中状态相关问题的首选工具。</p>
+<p><strong>主要功能</strong>：</p>
+<ul>
+<li>显示哪些文件处于修改状态（已修改但未暂存）。</li>
+<li>显示哪些文件已暂存待提交（已修改并已暂存）。</li>
+<li>显示当前工作目录与指定分支（通常是当前分支）的差异。</li>
+<li>提示如何暂存或取消暂存更改，以及如何回滚对文件的修改。</li>
+<li>提供当前分支和其上游分支的同步状态（前提是设置了上游分支）。</li>
+</ul>
+<p><strong>输出示例</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">On branch main</span><br><span class="line">Your branch is up to date with &#x27;origin/main&#x27;.</span><br><span class="line"></span><br><span class="line">Changes to be committed:</span><br><span class="line">  (use &quot;git restore --staged &lt;file&gt;...&quot; to unstage)</span><br><span class="line">	new file:   example.txt</span><br><span class="line"></span><br><span class="line">Changes not staged for commit:</span><br><span class="line">  (use &quot;git add &lt;file&gt;...&quot; to update what will be committed)</span><br><span class="line">  (use &quot;git restore &lt;file&gt;...&quot; to discard changes in working directory)</span><br><span class="line">	modified:   readme.md</span><br><span class="line"></span><br><span class="line">Untracked files:</span><br><span class="line">  (use &quot;git add &lt;file&gt;...&quot; to include in what will be committed)</span><br><span class="line">	sample.txt</span><br></pre></td></tr></table></figure>
+
+<h3 id="git-log"><a href="#git-log" class="headerlink" title="git log"></a>git log</h3><p><strong>用途</strong>：<code>git log</code> 命令用于显示当前分支的提交历史。它可以帮助开发者回顾和审查项目的发展过程。</p>
+<p><strong>主要功能</strong>：</p>
+<ul>
+<li>显示提交历史，包括提交的哈希值、作者、日期和提交消息。</li>
+<li>可以通过各种选项来定制显示的日志，如日期范围、作者、文件更改历史等。</li>
+<li>支持图形化显示历史，通过<code>--graph</code>选项展示分支合并历史。</li>
+</ul>
+<p><strong>输出示例</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">commit fa3e98197e714dbf123681f6927a05538db6aa56 (HEAD -&gt; main, origin/main, origin/HEAD)</span><br><span class="line">Author: John Doe &lt;john@example.com&gt;</span><br><span class="line">Date:   Wed Sep 15 14:56:29 2021 +0200</span><br><span class="line"></span><br><span class="line">    Add new feature</span><br><span class="line"></span><br><span class="line">commit aea57694cd1bfeda98234aeccc8ae202b58db2b4</span><br><span class="line">Author: Jane Smith &lt;jane@example.com&gt;</span><br><span class="line">Date:   Tue Sep 14 12:48:53 2021 +0200</span><br><span class="line"></span><br><span class="line">    Update README.md</span><br></pre></td></tr></table></figure>
+
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><ul>
+<li><strong>git status</strong> 用于查看工作目录和暂存区的当前状态，是了解当前工作进度和状态的最直接的工具。</li>
+<li><strong>git log</strong> 用于查看提交历史，帮助你了解项目的版本历史和过去的开发活动。</li>
+</ul>
+<p>这两个命令在日常的 Git 使用中非常关键，为开发者提供了关于项目状态和历史的重要信息。</p>
+
+</article>
+    
+    
+
+</div>
+<div class="trm-post-next-prev row">
+    <div class="col-lg-12">
+        <!-- title -->
+        <h5 class="trm-title-with-divider">
+            其他文章
+            <span data-number="02"></span>
+        </h5>
+    </div>
+    
+        <div class="col-lg-6">
+    <div class="trm-blog-card trm-scroll-animation">
+        <a href="/2024/07/07/%E5%9B%BD%E5%80%BA/" class="trm-cover-frame trm-anima-link">
+            
+            
+                <img alt="cover" class="no-fancybox" src="/img/block.jpg">
+            
+        </a>
+        
+        <div class="trm-card-descr">
+            <div class="trm-label trm-category trm-mb-20">
+                <a href=" /categories/%E6%94%BF%E6%B2%BB%E7%BB%8F%E6%B5%8E/">
+                    政治经济
+                </a>
+            </div>
+            <h5>
+                <a href="/2024/07/07/%E5%9B%BD%E5%80%BA/" class="trm-anima-link">
+                    国债
+                </a>
+            </h5>
+            <div class="trm-divider trm-mb-20 trm-mt-20"></div>
+            <ul class="trm-card-data trm-label">
+                <li>24/07/07</li>
+                <li>11:50</li>
+                
+                
+            </ul>
+        </div>
+    </div>
+</div>
+    
+    
+        <div class="col-lg-6">
+    <div class="trm-blog-card trm-scroll-animation">
+        <a href="/2024/07/05/git%E5%AD%A6%E4%B9%A0/" class="trm-cover-frame trm-anima-link">
+            
+            
+                <img alt="cover" class="no-fancybox" src="/img/block.jpg">
+            
+        </a>
+        
+        <div class="trm-card-descr">
+            <div class="trm-label trm-category trm-mb-20">
+                <a href=" /categories/%E4%B8%93%E4%B8%9A%E7%9F%A5%E8%AF%86/">
+                    专业知识
+                </a>
+            </div>
+            <h5>
+                <a href="/2024/07/05/git%E5%AD%A6%E4%B9%A0/" class="trm-anima-link">
+                    git学习
+                </a>
+            </h5>
+            <div class="trm-divider trm-mb-20 trm-mt-20"></div>
+            <ul class="trm-card-data trm-label">
+                <li>24/07/05</li>
+                <li>16:08</li>
+                
+                
+            </ul>
+        </div>
+    </div>
+</div>
+    
+</div>
+
+    
+
+
+
+                    <div class="trm-divider footer-divider"></div>
+
+                    <!-- footer -->
+                    <footer class="trm-footer-card trm-scroll-animation">
+
+    
+
+    
+        <div class="trm-footer-item">
+            <span>© 2024 - 2025</span>
+            <span class="footer-separator"data-separator=" · "></span>
+            <span class="trm-accent-color">Jerry</span>
+        </div>
+    
+
+    
+        <div class="trm-footer-item">
+            <span>
+                由 <a href="https://hexo.io" target="_blank" rel="noopener">Hexo</a> 驱动 v7.3.0
+            </span>
+            <span class="footer-separator" data-separator=" | "></span>
+            <span> 
+                主题 - 
+                <a rel="noopener" href='https://github.com/MaLuns/hexo-theme-async' target='_blank'>Async</a>
+                v2.2.4
+            </span>
+        </div>
+      
+
+    
+        <div class="trm-footer-item blog-run-long"></div>
+     
+
+     
+</footer>
+                    <!-- footer end -->
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+            <!-- body end -->
+
+            
+
+    <div id="post-toc" class="trm-post-toc">
+      <div class="trm-post-toc-header">
+        目录导航
+				<span id="post-toc-top">
+					置顶
+				</span>
+      </div>
+      <div class="trm-post-toc-content">
+        <ol class="trm-toc"><li class="trm-toc-item trm-toc-level-1" title="GIT协作"><a rel="nofollow" class="trm-toc-link" href="#GIT协作"><span class="trm-toc-text">GIT协作</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-2" title="冲突"><a rel="nofollow" class="trm-toc-link" href="#冲突"><span class="trm-toc-text">冲突</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="冲突的发生情况"><a rel="nofollow" class="trm-toc-link" href="#冲突的发生情况"><span class="trm-toc-text">冲突的发生情况</span></a></li><li class="trm-toc-item trm-toc-level-3" title="解决冲突"><a rel="nofollow" class="trm-toc-link" href="#解决冲突"><span class="trm-toc-text">解决冲突</span></a></li><li class="trm-toc-item trm-toc-level-3" title="如何处理冲突"><a rel="nofollow" class="trm-toc-link" href="#如何处理冲突"><span class="trm-toc-text">如何处理冲突</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="1 分支"><a rel="nofollow" class="trm-toc-link" href="#1-分支"><span class="trm-toc-text">1 分支</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="1.1 什么是Git分支"><a rel="nofollow" class="trm-toc-link" href="#1-1-什么是Git分支"><span class="trm-toc-text">1.1 什么是Git分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="1.2 创建分支"><a rel="nofollow" class="trm-toc-link" href="#1-2-创建分支"><span class="trm-toc-text">1.2 创建分支</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="2 切换分支"><a rel="nofollow" class="trm-toc-link" href="#2-切换分支"><span class="trm-toc-text">2 切换分支</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="2.1 指向分支"><a rel="nofollow" class="trm-toc-link" href="#2-1-指向分支"><span class="trm-toc-text">2.1 指向分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="2.2 暂存分支"><a rel="nofollow" class="trm-toc-link" href="#2-2-暂存分支"><span class="trm-toc-text">2.2 暂存分支</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="切换分支与未提交更改的处理"><a rel="nofollow" class="trm-toc-link" href="#切换分支与未提交更改的处理"><span class="trm-toc-text">切换分支与未提交更改的处理</span></a></li><li class="trm-toc-item trm-toc-level-4" title="使用 Stash 临时保存更改"><a rel="nofollow" class="trm-toc-link" href="#使用-Stash-临时保存更改"><span class="trm-toc-text">使用 Stash 临时保存更改</span></a></li><li class="trm-toc-item trm-toc-level-4" title="Stash 的工作原理："><a rel="nofollow" class="trm-toc-link" href="#Stash-的工作原理："><span class="trm-toc-text">Stash 的工作原理：</span></a></li><li class="trm-toc-item trm-toc-level-4" title="场景设定"><a rel="nofollow" class="trm-toc-link" href="#场景设定"><span class="trm-toc-text">场景设定</span></a></li><li class="trm-toc-item trm-toc-level-4" title="使用 Git Stash"><a rel="nofollow" class="trm-toc-link" href="#使用-Git-Stash"><span class="trm-toc-text">使用 Git Stash</span></a></li></ol></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="3 远程分支"><a rel="nofollow" class="trm-toc-link" href="#3-远程分支"><span class="trm-toc-text">3 远程分支</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="3.1 快进合并"><a rel="nofollow" class="trm-toc-link" href="#3-1-快进合并"><span class="trm-toc-text">3.1 快进合并</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="快进合并的工作机制"><a rel="nofollow" class="trm-toc-link" href="#快进合并的工作机制"><span class="trm-toc-text">快进合并的工作机制</span></a></li><li class="trm-toc-item trm-toc-level-4" title="快进合并的场景"><a rel="nofollow" class="trm-toc-link" href="#快进合并的场景"><span class="trm-toc-text">快进合并的场景</span></a></li><li class="trm-toc-item trm-toc-level-4" title="非快进合并"><a rel="nofollow" class="trm-toc-link" href="#非快进合并"><span class="trm-toc-text">非快进合并</span></a></li><li class="trm-toc-item trm-toc-level-4" title="快进合并的影响"><a rel="nofollow" class="trm-toc-link" href="#快进合并的影响"><span class="trm-toc-text">快进合并的影响</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="3.2 拉取（git pull）"><a rel="nofollow" class="trm-toc-link" href="#3-2-拉取（git-pull）"><span class="trm-toc-text">3.2 拉取（git pull）</span></a></li><li class="trm-toc-item trm-toc-level-3" title="3.3 获取（git fetch）"><a rel="nofollow" class="trm-toc-link" href="#3-3-获取（git-fetch）"><span class="trm-toc-text">3.3 获取（git fetch）</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="git fetch vs. git pull"><a rel="nofollow" class="trm-toc-link" href="#git-fetch-vs-git-pull"><span class="trm-toc-text">git fetch vs. git pull</span></a></li><li class="trm-toc-item trm-toc-level-4" title="具体使用示例"><a rel="nofollow" class="trm-toc-link" href="#具体使用示例"><span class="trm-toc-text">具体使用示例</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-3" title="3.4 推送（git push）"><a rel="nofollow" class="trm-toc-link" href="#3-4-推送（git-push）"><span class="trm-toc-text">3.4 推送（git push）</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="4 分支的工作流程"><a rel="nofollow" class="trm-toc-link" href="#4-分支的工作流程"><span class="trm-toc-text">4 分支的工作流程</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="1. 主分支（Main Branch）"><a rel="nofollow" class="trm-toc-link" href="#1-主分支（Main-Branch）"><span class="trm-toc-text">1. 主分支（Main Branch）</span></a></li><li class="trm-toc-item trm-toc-level-3" title="2. 功能分支（Feature Branches）"><a rel="nofollow" class="trm-toc-link" href="#2-功能分支（Feature-Branches）"><span class="trm-toc-text">2. 功能分支（Feature Branches）</span></a></li><li class="trm-toc-item trm-toc-level-3" title="3. 发布分支（Release Branches）"><a rel="nofollow" class="trm-toc-link" href="#3-发布分支（Release-Branches）"><span class="trm-toc-text">3. 发布分支（Release Branches）</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4. 修补分支（Hotfix Branches）"><a rel="nofollow" class="trm-toc-link" href="#4-修补分支（Hotfix-Branches）"><span class="trm-toc-text">4. 修补分支（Hotfix Branches）</span></a></li><li class="trm-toc-item trm-toc-level-3" title="5. 开发分支（Development Branch）"><a rel="nofollow" class="trm-toc-link" href="#5-开发分支（Development-Branch）"><span class="trm-toc-text">5. 开发分支（Development Branch）</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.1 主分支"><a rel="nofollow" class="trm-toc-link" href="#4-1-主分支"><span class="trm-toc-text">4.1 主分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.2 功能发布"><a rel="nofollow" class="trm-toc-link" href="#4-2-功能发布"><span class="trm-toc-text">4.2 功能发布</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.3 发布分支"><a rel="nofollow" class="trm-toc-link" href="#4-3-发布分支"><span class="trm-toc-text">4.3 发布分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.4 修补分支"><a rel="nofollow" class="trm-toc-link" href="#4-4-修补分支"><span class="trm-toc-text">4.4 修补分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.5 开发分支"><a rel="nofollow" class="trm-toc-link" href="#4-5-开发分支"><span class="trm-toc-text">4.5 开发分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="4.6 Git分支工作流程示例"><a rel="nofollow" class="trm-toc-link" href="#4-6-Git分支工作流程示例"><span class="trm-toc-text">4.6 Git分支工作流程示例</span></a></li><li class="trm-toc-item trm-toc-level-3" title="分支策略工作流程步骤详解"><a rel="nofollow" class="trm-toc-link" href="#分支策略工作流程步骤详解"><span class="trm-toc-text">分支策略工作流程步骤详解</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-4" title="1. 发现生产中的Bug"><a rel="nofollow" class="trm-toc-link" href="#1-发现生产中的Bug"><span class="trm-toc-text">1. 发现生产中的Bug</span></a></li><li class="trm-toc-item trm-toc-level-4" title="2. 创建Bug修复分支"><a rel="nofollow" class="trm-toc-link" href="#2-创建Bug修复分支"><span class="trm-toc-text">2. 创建Bug修复分支</span></a></li><li class="trm-toc-item trm-toc-level-4" title="3. 修复Bug并合并"><a rel="nofollow" class="trm-toc-link" href="#3-修复Bug并合并"><span class="trm-toc-text">3. 修复Bug并合并</span></a></li><li class="trm-toc-item trm-toc-level-4" title="4. 返回到功能分支"><a rel="nofollow" class="trm-toc-link" href="#4-返回到功能分支"><span class="trm-toc-text">4. 返回到功能分支</span></a></li><li class="trm-toc-item trm-toc-level-4" title="5. 同步开发分支的更改"><a rel="nofollow" class="trm-toc-link" href="#5-同步开发分支的更改"><span class="trm-toc-text">5. 同步开发分支的更改</span></a></li><li class="trm-toc-item trm-toc-level-4" title="6. 使用变基进行同步"><a rel="nofollow" class="trm-toc-link" href="#6-使用变基进行同步"><span class="trm-toc-text">6. 使用变基进行同步</span></a></li><li class="trm-toc-item trm-toc-level-4" title="7. 继续功能开发"><a rel="nofollow" class="trm-toc-link" href="#7-继续功能开发"><span class="trm-toc-text">7. 继续功能开发</span></a></li></ol></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="5 整合分支"><a rel="nofollow" class="trm-toc-link" href="#5-整合分支"><span class="trm-toc-text">5 整合分支</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="5.1 合并分支"><a rel="nofollow" class="trm-toc-link" href="#5-1-合并分支"><span class="trm-toc-text">5.1 合并分支</span></a></li><li class="trm-toc-item trm-toc-level-3" title="5.2 将分支变基"><a rel="nofollow" class="trm-toc-link" href="#5-2-将分支变基"><span class="trm-toc-text">5.2 将分支变基</span></a></li></ol></li><li class="trm-toc-item trm-toc-level-2" title="6 标签"><a rel="nofollow" class="trm-toc-link" href="#6-标签"><span class="trm-toc-text">6 标签</span></a></li><li class="trm-toc-item trm-toc-level-2" title="7 查看变更"><a rel="nofollow" class="trm-toc-link" href="#7-查看变更"><span class="trm-toc-text">7 查看变更</span></a></li><li class="trm-toc-item trm-toc-level-2" title="其他"><a rel="nofollow" class="trm-toc-link" href="#其他"><span class="trm-toc-text">其他</span></a><ol class="trm-toc-child"><li class="trm-toc-item trm-toc-level-3" title="git status"><a rel="nofollow" class="trm-toc-link" href="#git-status"><span class="trm-toc-text">git status</span></a></li><li class="trm-toc-item trm-toc-level-3" title="git log"><a rel="nofollow" class="trm-toc-link" href="#git-log"><span class="trm-toc-text">git log</span></a></li><li class="trm-toc-item trm-toc-level-3" title="总结"><a rel="nofollow" class="trm-toc-link" href="#总结"><span class="trm-toc-text">总结</span></a></li></ol></li></ol></li></ol>
+      </div>
+    </div>
+
+            
+<div class="trm-fixed-container">
+    
+        <div class="trm-fixed-btn post-toc-btn" data-title="目录">
+            <i class="iconfont fas fa-th-list"></i>
+        </div>
+    
+    
+        <div class="trm-fixed-btn" data-title="阅读模式" onclick="asyncFun.switchReadMode()">
+            <i class="iconfont fas fa-book-reader"></i>
+        </div>
+    
+    
+        <div class="trm-fixed-btn hidden-md" data-title="单栏和双栏切换" onclick="asyncFun.switchSingleColumn()">
+            <i class="iconfont fas fa-arrows-alt-h"></i>
+        </div>
+    
+    <div id="trm-back-top" class="trm-fixed-btn" data-title="回到顶部">
+        <i class="iconfont fas fa-arrow-up"></i>
+    </div>
+</div>
+        </div>
+      </div>
+      <!-- scroll container end -->
+  </div>
+  <!-- app wrapper end -->
+
+  
+  <!-- Plugin -->
+
+
+
+
+    
+    
+<script src="https://unpkg.com/@fancyapps/ui@4.0/dist/fancybox.umd.js"></script>
+
+    
+
+    
+        <script src="/js/plugins/typing.js?v=2.2.4"></script>
+    
+
+    
+
+    <!-- 数学公式 -->
+    
+
+    <!-- 评论插件 -->
+    
+        
+
+        
+    
+
+		
+
+
+
+
+    <!-- Service Worker -->
+    
+    <!-- baidu push -->
+    
+
+
+<script id="async-script" src="/js/main.js?v=2.2.4"></script>
+
+<!-- CDN -->
+
+
+    
+
+    
+
+    
+
+
+
+</body>
+
+</html>
