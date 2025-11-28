@@ -2,9 +2,8 @@
 import { Image } from 'astro:assets'
 
 import PageLayout from '@/layouts/CommonPage.astro'
-import ProjectSection from '@/components/projects/ProjectSection.astro'
 
-const headings = []
+const headings: { depth: number; slug: string; text: string }[] = []
 ---
 
 <PageLayout title='Projects' {headings} view>
