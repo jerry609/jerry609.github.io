@@ -4,7 +4,7 @@ import { Image } from 'astro:assets'
 import PageLayout from '@/layouts/CommonPage.astro'
 import ProjectSection from '@/components/projects/ProjectSection.astro'
 
-const headings = [{ depth: 2, slug: 'projects', text: 'Projects' }]
+const headings = []
 ---
 
 <PageLayout title='Projects' {headings} view>
@@ -18,16 +18,7 @@ const headings = [{ depth: 2, slug: 'projects', text: 'Projects' }]
     />
   </p>
 
-  <h2 id='projects'>Projects</h2>
-  <ProjectSection
-    projects={[
-      {
-        name: 'Jerry, Zhang Ruijie',
-        description: '',
-        links: [{ type: 'github', href: 'https://github.com/jerry609' }]
-      }
-    ]}
-  />
+  <p>项目整理中...</p>
 </PageLayout>
 
 <style>
