@@ -7,24 +7,24 @@ const { problems } = Astro.props
 ---
 
 <div class="w-full overflow-hidden rounded-xl border border-border">
-  <table class="w-full text-sm text-left">
+  <table class="w-full text-sm table-fixed">
     <thead class="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border">
       <tr>
-        <th scope="col" class="px-4 py-3 w-16 text-center">Status</th>
-        <th scope="col" class="px-4 py-3">Problem</th>
-        <th scope="col" class="px-4 py-3 w-24 text-center">Difficulty</th>
+        <th scope="col" class="w-20 px-4 py-3 text-center">Status</th>
+        <th scope="col" class="px-4 py-3 text-left">Problem</th>
+        <th scope="col" class="w-28 px-4 py-3 text-center">Difficulty</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-border">
       {problems.map((p) => (
-        <tr class="bg-card hover:bg-muted/50 transition-colors">
-          <td class="px-4 py-3 text-center">
+        <tr class="bg-card hover:bg-muted/30 transition-colors">
+          <td class="w-20 px-4 py-4 text-center align-middle">
             <input type='checkbox' class='prob-check' data-link={p.link} />
           </td>
-          <td class="px-4 py-3 font-medium">
-            <a href={p.link} target='_blank' class='text-primary hover:underline decoration-primary/50 underline-offset-4'>{p.name}</a>
+          <td class="px-4 py-4 text-left align-middle">
+            <a href={p.link} target='_blank' class='text-primary font-medium hover:underline decoration-primary/50 underline-offset-4'>{p.name}</a>
           </td>
-          <td class="px-4 py-3 text-center">
+          <td class="w-28 px-4 py-4 text-center align-middle">
             <span class={`diff diff-${p.difficulty.toLowerCase()}`}>{p.difficulty}</span>
           </td>
         </tr>
