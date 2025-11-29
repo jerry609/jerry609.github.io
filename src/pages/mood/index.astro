@@ -11,7 +11,7 @@ const renderedMoods = await Promise.all(sortedMoods.map(async (entry) => {
 }))
 ---
 
-<PageLayout title='Mood'>
+<PageLayout title='Mood' comment>
   <div class='space-y-8 mt-4'>
     {renderedMoods.map(({ entry, Content }) => (
       <div class='relative pl-8 before:absolute before:left-0 before:top-2 before:h-full before:w-[2px] before:bg-border last:before:hidden'>
