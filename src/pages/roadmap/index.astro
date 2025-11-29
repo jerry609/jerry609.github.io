@@ -180,23 +180,23 @@ const topics: Record<string, Topic> = {
 
 const nodes = [
   { id: 'arrays-hashing', x: 350, y: 30 },
-  { id: 'two-pointers', x: 200, y: 120 },
-  { id: 'stack', x: 500, y: 120 },
-  { id: 'binary-search', x: 80, y: 220 },
-  { id: 'sliding-window', x: 350, y: 220 },
-  { id: 'linked-list', x: 620, y: 220 },
-  { id: 'trees', x: 350, y: 320 },
-  { id: 'tries', x: 180, y: 420 },
-  { id: 'backtracking', x: 520, y: 420 },
-  { id: 'heap', x: 80, y: 520 },
-  { id: 'graphs', x: 350, y: 520 },
-  { id: '1d-dp', x: 620, y: 520 },
-  { id: 'intervals', x: 50, y: 620 },
-  { id: 'greedy', x: 200, y: 620 },
-  { id: 'advanced-graphs', x: 350, y: 620 },
-  { id: '2d-dp', x: 500, y: 620 },
-  { id: 'bit-manipulation', x: 650, y: 620 },
-  { id: 'math-geometry', x: 500, y: 720 }
+  { id: 'two-pointers', x: 200, y: 160 },
+  { id: 'stack', x: 500, y: 160 },
+  { id: 'binary-search', x: 80, y: 290 },
+  { id: 'sliding-window', x: 350, y: 290 },
+  { id: 'linked-list', x: 620, y: 290 },
+  { id: 'trees', x: 350, y: 420 },
+  { id: 'tries', x: 180, y: 550 },
+  { id: 'backtracking', x: 520, y: 550 },
+  { id: 'heap', x: 80, y: 680 },
+  { id: 'graphs', x: 350, y: 680 },
+  { id: '1d-dp', x: 620, y: 680 },
+  { id: 'intervals', x: 50, y: 810 },
+  { id: 'greedy', x: 200, y: 810 },
+  { id: 'advanced-graphs', x: 350, y: 810 },
+  { id: '2d-dp', x: 500, y: 810 },
+  { id: 'bit-manipulation', x: 650, y: 810 },
+  { id: 'math-geometry', x: 500, y: 940 }
 ]
 
 const edges = [
@@ -234,7 +234,7 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
   </p>
 
   <div class='roadmap-box'>
-    <svg class='roadmap-svg' viewBox='0 0 800 800'>
+    <svg class='roadmap-svg' viewBox='0 0 800 1050'>
       {edges.map(([from, to]) => {
         const a = nodes.find(n => n.id === from)
         const b = nodes.find(n => n.id === to)
@@ -355,86 +355,86 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
   .roadmap-box { 
     overflow-x: auto; 
     padding: 2rem; 
-    border: 1px solid #333; 
+    border: 1px solid #475569; 
     border-radius: 1rem; 
-    background-color: #111827;
-    background-image: radial-gradient(#374151 1px, transparent 1px);
+    background-color: #1e293b;
+    background-image: radial-gradient(#475569 1px, transparent 1px);
     background-size: 24px 24px;
   }
   .roadmap-svg { min-width: 800px; display: block; margin: 0 auto; }
-  .edge-line { fill: none; stroke: #4b5563; stroke-width: 2; opacity: 0.5; transition: stroke 0.3s; }
+  .edge-line { fill: none; stroke: #94a3b8; stroke-width: 3; opacity: 0.6; transition: stroke 0.3s; }
   
   .node-box { cursor: pointer; transition: transform 0.2s; }
   .node-box:hover { transform: translate(0, -2px); }
-  .node-box rect { fill: #4338ca; stroke: #6366f1; stroke-width: 2; transition: all 0.3s; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); }
-  .node-box text { fill: #fff; font-size: 12px; font-weight: 600; text-anchor: middle; pointer-events: none; }
-  .node-box:hover rect { fill: #4f46e5; stroke: #818cf8; filter: drop-shadow(0 6px 8px rgba(0,0,0,0.4)); }
+  .node-box rect { fill: #2563eb; stroke: #60a5fa; stroke-width: 2; transition: all 0.3s; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); }
+  .node-box text { fill: #fff; font-size: 14px; font-weight: 700; text-anchor: middle; pointer-events: none; letter-spacing: 0.5px; }
+  .node-box:hover rect { fill: #3b82f6; stroke: #93c5fd; filter: drop-shadow(0 6px 8px rgba(0,0,0,0.4)); }
 
-  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 50; backdrop-filter: blur(4px); }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 50; backdrop-filter: blur(4px); }
   .modal.hidden { display: none; }
   
   @keyframes modalIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
   .modal-inner { 
-    background: #0f172a; 
-    color: #e2e8f0; 
+    background: #1e293b; 
+    color: #f1f5f9; 
     border-radius: 1rem; 
     width: min(900px, 95%); 
     max-height: 90vh; 
     overflow-y: auto; 
-    padding: 2rem; 
+    padding: 2.5rem; 
     position: relative; 
-    border: 1px solid #1e293b;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    border: 1px solid #475569;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
     animation: modalIn 0.2s ease-out;
   }
 
   .close-btn { 
-    position: absolute; top: 1rem; right: 1rem; 
-    width: 2rem; height: 2rem; 
+    position: absolute; top: 1.5rem; right: 1.5rem; 
+    width: 2.5rem; height: 2.5rem; 
     border-radius: 50%; 
-    border: 1px solid #334155; 
-    background: #1e293b; 
-    color: #94a3b8; 
+    border: 1px solid #475569; 
+    background: #334155; 
+    color: #cbd5e1; 
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; transition: all 0.2s;
   }
-  .close-btn:hover { background: #334155; color: #fff; border-color: #475569; }
+  .close-btn:hover { background: #475569; color: #fff; border-color: #64748b; }
   
-  .modal-inner h2 { text-align: center; font-size: 1.5rem; margin-bottom: 0.5rem; font-weight: 700; color: #f8fafc; }
-  .count-text { text-align: center; color: #94a3b8; margin-bottom: 1rem; font-variant-numeric: tabular-nums; }
+  .modal-inner h2 { text-align: center; font-size: 1.8rem; margin-bottom: 0.5rem; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .count-text { text-align: center; color: #cbd5e1; margin-bottom: 1.5rem; font-variant-numeric: tabular-nums; font-size: 1.1rem; }
   
-  .bar-track { height: 8px; background: #1e293b; border-radius: 4px; margin-bottom: 1.5rem; overflow: hidden; }
-  .bar-fill { height: 100%; width: 0; background: #22c55e; border-radius: 4px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+  .bar-track { height: 10px; background: #334155; border-radius: 5px; margin-bottom: 2rem; overflow: hidden; }
+  .bar-fill { height: 100%; width: 0; background: #4ade80; border-radius: 5px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
   
-  .prereq-box { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; justify-content: center; }
-  .prereq-card { background: #1e293b; padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #334155; font-size: 0.9rem; }
-  .prereq-card b { display: block; color: #60a5fa; margin-bottom: 0.1rem; }
-  .prereq-card small { color: #94a3b8; }
+  .prereq-box { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; justify-content: center; }
+  .prereq-card { background: #334155; padding: 0.75rem 1.25rem; border-radius: 0.75rem; border: 1px solid #475569; font-size: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+  .prereq-card b { display: block; color: #60a5fa; margin-bottom: 0.25rem; }
+  .prereq-card small { color: #cbd5e1; }
   
-  .prob-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
-  .prob-table th { text-align: left; padding: 0.75rem; color: #64748b; font-weight: 600; border-bottom: 1px solid #334155; }
-  .prob-table td { padding: 0.75rem; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
+  .prob-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 1rem; }
+  .prob-table th { text-align: left; padding: 1rem; color: #e2e8f0; font-weight: 700; border-bottom: 2px solid #475569; }
+  .prob-table td { padding: 1rem; border-bottom: 1px solid #334155; color: #f1f5f9; }
   .prob-table tr:last-child td { border-bottom: none; }
-  .prob-table tr:hover td { background: #1e293b; }
+  .prob-table tr:hover td { background: #334155; }
   
-  .star { color: #475569; width: 24px; }
-  .star svg { width: 16px; height: 16px; }
+  .star { color: #94a3b8; width: 32px; }
+  .star svg { width: 20px; height: 20px; }
   
-  .prob-table a { color: #60a5fa; text-decoration: none; transition: color 0.2s; }
+  .prob-table a { color: #60a5fa; text-decoration: none; transition: color 0.2s; font-weight: 500; }
   .prob-table a:hover { color: #93c5fd; text-decoration: underline; }
   
-  .diff { font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 0.25rem; display: inline-block; }
-  .diff-easy { color: #22c55e; background: rgba(34, 197, 94, 0.1); }
-  .diff-medium { color: #eab308; background: rgba(234, 179, 8, 0.1); }
-  .diff-hard { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+  .diff { font-size: 0.85rem; font-weight: 700; padding: 0.3rem 0.8rem; border-radius: 9999px; display: inline-block; text-align: center; min-width: 80px; }
+  .diff-easy { color: #22c55e; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.2); }
+  .diff-medium { color: #eab308; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.2); }
+  .diff-hard { color: #ef4444; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.2); }
   
   /* Custom Checkbox */
   input[type='checkbox'] {
     appearance: none;
-    width: 1.2rem; height: 1.2rem;
-    border: 2px solid #475569;
-    border-radius: 4px;
-    background: #0f172a;
+    width: 1.5rem; height: 1.5rem;
+    border: 2px solid #64748b;
+    border-radius: 6px;
+    background: #1e293b;
     cursor: pointer;
     position: relative;
     transition: all 0.2s;
@@ -446,10 +446,10 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
   input[type='checkbox']:checked::after {
     content: '';
     position: absolute;
-    left: 4px; top: 1px;
-    width: 5px; height: 10px;
+    left: 6px; top: 2px;
+    width: 6px; height: 12px;
     border: solid white;
-    border-width: 0 2px 2px 0;
+    border-width: 0 3px 3px 0;
     transform: rotate(45deg);
   }
 </style>
