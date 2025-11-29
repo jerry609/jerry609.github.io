@@ -56,4 +56,17 @@ const docs = defineCollection({
     })
 })
 
-export const collections = { blog, docs }
+// Define mood collection
+const mood = defineCollection({
+  loader: glob({ base: './src/content/mood', pattern: '**/*.{md,mdx}' }),
+  schema: () =>
+    z.object({
+      publishDate: z.coerce.date(),
+      updatedDate: z.coerce.date().optional(),
+      tags: z.array(z.string()).default([]),
+      title: z.string().optional(),
+      draft: z.boolean().default(false)
+    })
+})
+
+export const collections = { blog, docs, mood }
