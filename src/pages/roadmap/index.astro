@@ -255,7 +255,9 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
 
   <div id='modal' class='modal hidden'>
     <div class='modal-inner'>
-      <button id='close-btn' class='close-btn'></button>
+      <button id='close-btn' class='close-btn'>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
       <h2 id='modal-title'></h2>
       <p id='modal-count' class='count-text'></p>
       <div class='bar-track'><div id='bar-fill' class='bar-fill'></div></div>
@@ -279,25 +281,64 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
     const prereqBox = document.getElementById('prereq-box')
     const probBody = document.getElementById('prob-body')
 
+    // LocalStorage Key
+    const STORAGE_KEY = 'algo-roadmap-progress'
+    let progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
+    }
+
+    function updateProgress(topicId) {
+      const total = topics[topicId].problems.length
+      const completed = topics[topicId].problems.filter(p => progress[p.link]).length
+      const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
+      
+      countEl.textContent = `${completed} / ${total} (${percent}%)`
+      barFill.style.width = `${percent}%`
+    }
+
     function open(id) {
       const d = topics[id]
       if (!d) return
+      
+      modal.dataset.activeTopic = id
       titleEl.textContent = d.title
-      countEl.textContent = `0 / ${d.problems.length}`
-      barFill.style.width = '0%'
+      
       prereqBox.innerHTML = d.prerequisites.map(p => 
         `<div class='prereq-card'><b>${p.name}</b><small>${p.course}</small></div>`
       ).join('')
-      probBody.innerHTML = d.problems.map(p => `
+      
+      probBody.innerHTML = d.problems.map(p => {
+        const isChecked = progress[p.link] ? 'checked' : ''
+        return `
         <tr>
-          <td><input type='checkbox'/></td>
-          <td class='star'></td>
-          <td><a href='${p.link}' target='_blank'>${p.name} </a></td>
+          <td><input type='checkbox' class='prob-check' data-link='${p.link}' ${isChecked}/></td>
+          <td class='star'>
+             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </td>
+          <td><a href='${p.link}' target='_blank'>${p.name}</a></td>
           <td class='diff diff-${p.difficulty.toLowerCase()}'>${p.difficulty}</td>
         </tr>
-      `).join('')
+      `}).join('')
+      
+      updateProgress(id)
       modal.classList.remove('hidden')
     }
+
+    // Event Delegation for Checkboxes
+    probBody.addEventListener('change', (e) => {
+      if (e.target.classList.contains('prob-check')) {
+        const link = e.target.dataset.link
+        if (e.target.checked) {
+          progress[link] = true
+        } else {
+          delete progress[link]
+        }
+        save()
+        updateProgress(modal.dataset.activeTopic)
+      }
+    })
 
     document.querySelectorAll('.node-box').forEach(el => {
       el.addEventListener('click', () => open(el.dataset.id))
@@ -311,35 +352,104 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
 </script>
 
 <style>
-  .roadmap-box { overflow-x: auto; padding: 1rem; border: 1px solid #333; border-radius: 1rem; background: #111827; }
-  .roadmap-svg { min-width: 800px; display: block; }
-  .edge-line { fill: none; stroke: #4b5563; stroke-width: 2; opacity: 0.5; }
-  .node-box { cursor: pointer; }
-  .node-box rect { fill: #4338ca; stroke: #6366f1; stroke-width: 2; }
-  .node-box text { fill: #fff; font-size: 12px; font-weight: 600; text-anchor: middle; }
-  .node-box:hover rect { fill: #4f46e5; }
+  .roadmap-box { 
+    overflow-x: auto; 
+    padding: 2rem; 
+    border: 1px solid #333; 
+    border-radius: 1rem; 
+    background-color: #111827;
+    background-image: radial-gradient(#374151 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .roadmap-svg { min-width: 800px; display: block; margin: 0 auto; }
+  .edge-line { fill: none; stroke: #4b5563; stroke-width: 2; opacity: 0.5; transition: stroke 0.3s; }
+  
+  .node-box { cursor: pointer; transition: transform 0.2s; }
+  .node-box:hover { transform: translate(0, -2px); }
+  .node-box rect { fill: #4338ca; stroke: #6366f1; stroke-width: 2; transition: all 0.3s; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)); }
+  .node-box text { fill: #fff; font-size: 12px; font-weight: 600; text-anchor: middle; pointer-events: none; }
+  .node-box:hover rect { fill: #4f46e5; stroke: #818cf8; filter: drop-shadow(0 6px 8px rgba(0,0,0,0.4)); }
 
-  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 50; backdrop-filter: blur(4px); }
   .modal.hidden { display: none; }
-  .modal-inner { background: #0f172a; color: #e2e8f0; border-radius: 1rem; width: min(900px, 95%); max-height: 90vh; overflow-y: auto; padding: 2rem; position: relative; }
-  .close-btn { position: absolute; top: 1rem; right: 1rem; width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid #475569; background: transparent; color: #fff; font-size: 1.2rem; cursor: pointer; }
-  .close-btn:hover { background: #334155; }
-  .modal-inner h2 { text-align: center; font-size: 1.4rem; margin-bottom: 0.5rem; }
-  .count-text { text-align: center; color: #94a3b8; margin-bottom: 0.5rem; }
-  .bar-track { height: 8px; background: #1e293b; border-radius: 4px; margin-bottom: 1rem; }
-  .bar-fill { height: 100%; width: 0; background: #22c55e; border-radius: 4px; transition: width 0.3s; }
-  .prereq-box { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
-  .prereq-card { background: #1e293b; padding: 0.5rem 0.75rem; border-radius: 0.5rem; }
-  .prereq-card b { display: block; color: #60a5fa; }
-  .prereq-card small { color: #64748b; }
-  .prob-table { width: 100%; border-collapse: collapse; }
-  .prob-table th, .prob-table td { padding: 0.6rem 0.4rem; border-bottom: 1px solid #1e293b; text-align: left; }
-  .prob-table th { color: #94a3b8; font-weight: 500; }
-  .star { color: #fbbf24; cursor: pointer; }
-  .prob-table a { color: #60a5fa; text-decoration: none; }
-  .prob-table a:hover { text-decoration: underline; }
-  .diff { font-size: 0.75rem; font-weight: 600; }
-  .diff-easy { color: #22c55e; }
-  .diff-medium { color: #eab308; }
-  .diff-hard { color: #ef4444; }
+  
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+  .modal-inner { 
+    background: #0f172a; 
+    color: #e2e8f0; 
+    border-radius: 1rem; 
+    width: min(900px, 95%); 
+    max-height: 90vh; 
+    overflow-y: auto; 
+    padding: 2rem; 
+    position: relative; 
+    border: 1px solid #1e293b;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    animation: modalIn 0.2s ease-out;
+  }
+
+  .close-btn { 
+    position: absolute; top: 1rem; right: 1rem; 
+    width: 2rem; height: 2rem; 
+    border-radius: 50%; 
+    border: 1px solid #334155; 
+    background: #1e293b; 
+    color: #94a3b8; 
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .close-btn:hover { background: #334155; color: #fff; border-color: #475569; }
+  
+  .modal-inner h2 { text-align: center; font-size: 1.5rem; margin-bottom: 0.5rem; font-weight: 700; color: #f8fafc; }
+  .count-text { text-align: center; color: #94a3b8; margin-bottom: 1rem; font-variant-numeric: tabular-nums; }
+  
+  .bar-track { height: 8px; background: #1e293b; border-radius: 4px; margin-bottom: 1.5rem; overflow: hidden; }
+  .bar-fill { height: 100%; width: 0; background: #22c55e; border-radius: 4px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+  
+  .prereq-box { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.5rem; justify-content: center; }
+  .prereq-card { background: #1e293b; padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #334155; font-size: 0.9rem; }
+  .prereq-card b { display: block; color: #60a5fa; margin-bottom: 0.1rem; }
+  .prereq-card small { color: #94a3b8; }
+  
+  .prob-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  .prob-table th { text-align: left; padding: 0.75rem; color: #64748b; font-weight: 600; border-bottom: 1px solid #334155; }
+  .prob-table td { padding: 0.75rem; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
+  .prob-table tr:last-child td { border-bottom: none; }
+  .prob-table tr:hover td { background: #1e293b; }
+  
+  .star { color: #475569; width: 24px; }
+  .star svg { width: 16px; height: 16px; }
+  
+  .prob-table a { color: #60a5fa; text-decoration: none; transition: color 0.2s; }
+  .prob-table a:hover { color: #93c5fd; text-decoration: underline; }
+  
+  .diff { font-size: 0.75rem; font-weight: 700; padding: 0.2rem 0.5rem; border-radius: 0.25rem; display: inline-block; }
+  .diff-easy { color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+  .diff-medium { color: #eab308; background: rgba(234, 179, 8, 0.1); }
+  .diff-hard { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+  
+  /* Custom Checkbox */
+  input[type='checkbox'] {
+    appearance: none;
+    width: 1.2rem; height: 1.2rem;
+    border: 2px solid #475569;
+    border-radius: 4px;
+    background: #0f172a;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+  }
+  input[type='checkbox']:checked {
+    background: #22c55e;
+    border-color: #22c55e;
+  }
+  input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px; top: 1px;
+    width: 5px; height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
 </style>
