@@ -179,24 +179,24 @@ const topics: Record<string, Topic> = {
 }
 
 const nodes = [
-  { id: 'arrays-hashing', x: 350, y: 30 },
-  { id: 'two-pointers', x: 200, y: 160 },
-  { id: 'stack', x: 500, y: 160 },
-  { id: 'binary-search', x: 80, y: 290 },
-  { id: 'sliding-window', x: 350, y: 290 },
-  { id: 'linked-list', x: 620, y: 290 },
-  { id: 'trees', x: 350, y: 420 },
-  { id: 'tries', x: 180, y: 550 },
-  { id: 'backtracking', x: 520, y: 550 },
-  { id: 'heap', x: 80, y: 680 },
-  { id: 'graphs', x: 350, y: 680 },
-  { id: '1d-dp', x: 620, y: 680 },
-  { id: 'intervals', x: 50, y: 810 },
-  { id: 'greedy', x: 200, y: 810 },
-  { id: 'advanced-graphs', x: 350, y: 810 },
-  { id: '2d-dp', x: 500, y: 810 },
-  { id: 'bit-manipulation', x: 650, y: 810 },
-  { id: 'math-geometry', x: 500, y: 940 }
+  { id: 'arrays-hashing', x: 400, y: 30 },
+  { id: 'two-pointers', x: 180, y: 180 },
+  { id: 'stack', x: 620, y: 180 },
+  { id: 'binary-search', x: 50, y: 330 },
+  { id: 'sliding-window', x: 400, y: 330 },
+  { id: 'linked-list', x: 750, y: 330 },
+  { id: 'trees', x: 400, y: 480 },
+  { id: 'tries', x: 150, y: 630 },
+  { id: 'backtracking', x: 650, y: 630 },
+  { id: 'heap', x: 50, y: 780 },
+  { id: 'graphs', x: 400, y: 780 },
+  { id: '1d-dp', x: 750, y: 780 },
+  { id: 'intervals', x: 50, y: 930 },
+  { id: 'greedy', x: 230, y: 930 },
+  { id: 'advanced-graphs', x: 410, y: 930 },
+  { id: '2d-dp', x: 590, y: 930 },
+  { id: 'bit-manipulation', x: 770, y: 930 },
+  { id: 'math-geometry', x: 590, y: 1080 }
 ]
 
 const edges = [
@@ -233,9 +233,36 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
     <a href='https://neetcode.io/roadmap' target='_blank' class='text-primary hover:underline'>NeetCode</a>。
   </p>
 
-  <div class='roadmap-box'>
-    <svg class='roadmap-svg' viewBox='0 0 1000 900' xmlns='http://www.w3.org/2000/svg'>
-      <g id='canvas' transform='translate(0,0)'>
+  <div class='roadmap-container'>
+    <!-- Mini-map and controls -->
+    <div class='roadmap-controls'>
+      <div class='mini-map'>
+        <svg class='mini-map-svg' viewBox='0 0 1000 1200' xmlns='http://www.w3.org/2000/svg'>
+          {edges.map(([from, to]) => {
+            const a = nodes.find(n => n.id === from)
+            const b = nodes.find(n => n.id === to)
+            if (!a || !b) return null
+            const rectW = 180, rectH = 64
+            const x1 = a.x + rectW / 2, y1 = a.y + rectH / 2
+            const x2 = b.x + rectW / 2, y2 = b.y
+            return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke='#475569' stroke-width='6' />
+          })}
+          {nodes.map(n => (
+            <rect x={n.x} y={n.y} width='180' height='64' rx='8' fill='#334155' stroke='#60a5fa' stroke-width='4' />
+          ))}
+          <rect id='mini-viewport' class='mini-viewport' x='0' y='0' width='1000' height='900' fill='rgba(96, 165, 250, 0.15)' stroke='#60a5fa' stroke-width='8' />
+        </svg>
+      </div>
+      <button id='reset-btn' class='reset-btn' title='Reset View'>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        <span>Reset</span>
+      </button>
+      <div class='zoom-info' id='zoom-info'>100%</div>
+    </div>
+
+    <div class='roadmap-box'>
+      <svg class='roadmap-svg' viewBox='0 0 1000 1200' xmlns='http://www.w3.org/2000/svg'>
+        <g id='canvas' transform='translate(0,0) scale(1)'>
         {edges.map(([from, to]) => {
           const a = nodes.find(n => n.id === from)
           const b = nodes.find(n => n.id === to)
@@ -255,6 +282,7 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
       </g>
     </svg>
   </div>
+</div>
 
   <div id='modal' class='modal hidden'>
     <div class='modal-inner'>
@@ -354,9 +382,43 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
         // Panning / Dragging the canvas
         const svg = document.querySelector('.roadmap-svg')
         const canvas = document.getElementById('canvas')
+        const miniViewport = document.getElementById('mini-viewport')
+        const resetBtn = document.getElementById('reset-btn')
+        const zoomInfo = document.getElementById('zoom-info')
+        
         let isPanning = false
         let startX = 0, startY = 0
         let panX = 0, panY = 0
+        let scale = 1
+        const minScale = 0.3, maxScale = 2.5
+
+        function updateTransform() {
+          canvas.setAttribute('transform', `translate(${panX},${panY}) scale(${scale})`)
+          zoomInfo.textContent = `${Math.round(scale * 100)}%`
+          updateMiniMap()
+        }
+
+        function updateMiniMap() {
+          if (!miniViewport) return
+          // viewport in SVG coordinates
+          const vw = 1000 / scale
+          const vh = 1200 / scale
+          const vx = -panX / scale
+          const vy = -panY / scale
+          miniViewport.setAttribute('x', vx)
+          miniViewport.setAttribute('y', vy)
+          miniViewport.setAttribute('width', vw)
+          miniViewport.setAttribute('height', vh)
+        }
+
+        function resetView() {
+          panX = 0
+          panY = 0
+          scale = 1
+          updateTransform()
+        }
+
+        resetBtn.addEventListener('click', resetView)
 
         svg.style.cursor = 'grab'
 
@@ -373,7 +435,8 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
           if (!isPanning) return
           const dx = e.clientX - startX
           const dy = e.clientY - startY
-          canvas.setAttribute('transform', `translate(${panX + dx},${panY + dy})`)
+          canvas.setAttribute('transform', `translate(${panX + dx},${panY + dy}) scale(${scale})`)
+          updateMiniMap()
         })
 
         document.addEventListener('mouseup', (e) => {
@@ -384,30 +447,91 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
           panY += dy
           isPanning = false
           svg.style.cursor = 'grab'
+          updateMiniMap()
         })
 
+        // Zoom with Ctrl+Wheel
+        svg.addEventListener('wheel', (e) => {
+          if (!e.ctrlKey) return
+          e.preventDefault()
+          const rect = svg.getBoundingClientRect()
+          const mouseX = e.clientX - rect.left
+          const mouseY = e.clientY - rect.top
+          
+          // Convert mouse position to SVG coordinates
+          const svgX = (mouseX / rect.width) * 1000
+          const svgY = (mouseY / rect.height) * 1200
+          
+          const oldScale = scale
+          const delta = e.deltaY > 0 ? 0.9 : 1.1
+          scale = Math.min(maxScale, Math.max(minScale, scale * delta))
+          
+          // Adjust pan to zoom towards mouse position
+          panX = panX - (svgX - panX / oldScale) * (scale - oldScale)
+          panY = panY - (svgY - panY / oldScale) * (scale - oldScale)
+          
+          updateTransform()
+        }, { passive: false })
+
         // Touch support
+        // Touch support for panning and pinch-zoom
+        let lastTouchDist = 0
+        let lastTouchCenter = { x: 0, y: 0 }
+        
         svg.addEventListener('touchstart', (e) => {
-          if (e.touches.length !== 1) return
-          isPanning = true
-          startX = e.touches[0].clientX
-          startY = e.touches[0].clientY
+          if (e.touches.length === 1) {
+            isPanning = true
+            startX = e.touches[0].clientX
+            startY = e.touches[0].clientY
+          } else if (e.touches.length === 2) {
+            isPanning = false
+            const t1 = e.touches[0], t2 = e.touches[1]
+            lastTouchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+            lastTouchCenter = { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 }
+          }
         }, { passive: true })
 
         document.addEventListener('touchmove', (e) => {
-          if (!isPanning || e.touches.length !== 1) return
-          const dx = e.touches[0].clientX - startX
-          const dy = e.touches[0].clientY - startY
-          canvas.setAttribute('transform', `translate(${panX + dx},${panY + dy})`)
+          if (e.touches.length === 1 && isPanning) {
+            const dx = e.touches[0].clientX - startX
+            const dy = e.touches[0].clientY - startY
+            canvas.setAttribute('transform', `translate(${panX + dx},${panY + dy}) scale(${scale})`)
+            updateMiniMap()
+          } else if (e.touches.length === 2) {
+            const t1 = e.touches[0], t2 = e.touches[1]
+            const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+            const center = { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 }
+            
+            // Pinch zoom
+            if (lastTouchDist > 0) {
+              const delta = dist / lastTouchDist
+              const oldScale = scale
+              scale = Math.min(maxScale, Math.max(minScale, scale * delta))
+              
+              // Pan while zooming
+              const dx = center.x - lastTouchCenter.x
+              const dy = center.y - lastTouchCenter.y
+              panX += dx
+              panY += dy
+              
+              updateTransform()
+            }
+            lastTouchDist = dist
+            lastTouchCenter = center
+          }
         }, { passive: true })
 
         document.addEventListener('touchend', (e) => {
-          if (!isPanning) return
-          // touchend has no coords; calculate using last known transform
-          const matrix = canvas.getAttribute('transform') || 'translate(0,0)'
-          const m = matrix.match(/translate\(([-0-9.]+),([-0-9.]+)\)/)
-          if (m) { panX = parseFloat(m[1]); panY = parseFloat(m[2]) }
-          isPanning = false
+          if (e.touches.length < 2) {
+            lastTouchDist = 0
+          }
+          if (e.touches.length === 0 && isPanning) {
+            // Finalize panning
+            const matrix = canvas.getAttribute('transform') || 'translate(0,0) scale(1)'
+            const m = matrix.match(/translate\(([-0-9.]+),([-0-9.]+)\)/)
+            if (m) { panX = parseFloat(m[1]); panY = parseFloat(m[2]) }
+            isPanning = false
+          }
         })
 
         function close() { modal.classList.add('hidden') }
@@ -417,8 +541,243 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
       })
     </script>
 <style>
-  .prob-table a { color: #60a5fa; text-decoration: none; transition: color 0.2s; font-weight: 500; }
-  .prob-table a:hover { color: #93c5fd; text-decoration: underline; }
+  /* Roadmap Container */
+  .roadmap-container {
+    position: relative;
+  }
+
+  .roadmap-controls {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-end;
+  }
+
+  .mini-map {
+    width: 150px;
+    height: 180px;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+
+  .mini-map-svg {
+    width: 100%;
+    height: 100%;
+    background: hsl(var(--muted));
+  }
+
+  .mini-viewport {
+    pointer-events: none;
+  }
+
+  .reset-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: opacity 0.2s;
+  }
+  .reset-btn:hover { opacity: 0.85; }
+
+  .zoom-info {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* Roadmap Box */
+  .roadmap-box {
+    border-radius: 12px;
+    background: linear-gradient(135deg, hsl(var(--muted)) 0%, hsl(var(--card)) 100%);
+    border: 1px solid hsl(var(--border));
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  }
+
+  .roadmap-svg {
+    width: 100%;
+    height: 600px;
+    display: block;
+    touch-action: none;
+    user-select: none;
+  }
+
+  /* Edge Lines */
+  .edge-line {
+    stroke: hsl(var(--muted-foreground) / 0.4);
+    stroke-width: 2.5;
+    fill: none;
+  }
+
+  /* Node Boxes */
+  .node-box rect {
+    fill: hsl(var(--card));
+    stroke: hsl(var(--primary));
+    stroke-width: 2;
+    transition: all 0.2s ease;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+  }
+  .node-box:hover rect {
+    fill: hsl(var(--primary) / 0.15);
+    stroke-width: 3;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+  }
+  .node-box {
+    cursor: pointer;
+  }
+  .node-box text {
+    fill: hsl(var(--foreground));
+    font-size: 14px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+
+  /* Modal */
+  .modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    padding: 1rem;
+  }
+  .modal.hidden { display: none; }
+
+  .modal-inner {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 16px;
+    max-width: 700px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 1.5rem 2rem;
+    position: relative;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .close-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: hsl(var(--muted));
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: hsl(var(--muted-foreground));
+    transition: all 0.2s;
+  }
+  .close-btn:hover {
+    background: hsl(var(--destructive));
+    color: hsl(var(--destructive-foreground));
+  }
+
+  .modal-inner h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: hsl(var(--foreground));
+  }
+
+  .modal-inner h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 1.25rem 0 0.5rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .count-text {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .bar-track {
+    width: 100%;
+    height: 8px;
+    background: hsl(var(--muted));
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e, #4ade80);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  .prereq-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .prereq-card {
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .prereq-card b {
+    font-size: 0.9rem;
+    color: hsl(var(--foreground));
+  }
+  .prereq-card small {
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .prob-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+  }
+  .prob-table th, .prob-table td {
+    text-align: left;
+    padding: 0.6rem 0.5rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .prob-table th {
+    font-size: 0.8rem;
+    color: hsl(var(--muted-foreground));
+    font-weight: 600;
+  }
+  .prob-table .star {
+    color: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  .prob-table a { color: hsl(var(--primary)); text-decoration: none; transition: color 0.2s; font-weight: 500; }
+  .prob-table a:hover { color: hsl(var(--primary) / 0.8); text-decoration: underline; }
   
   .diff { font-size: 0.85rem; font-weight: 700; padding: 0.3rem 0.8rem; border-radius: 9999px; display: inline-block; text-align: center; min-width: 80px; }
   .diff-easy { color: #22c55e; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.2); }
@@ -429,9 +788,9 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
   input[type='checkbox'] {
     appearance: none;
     width: 1.5rem; height: 1.5rem;
-    border: 2px solid #64748b;
+    border: 2px solid hsl(var(--muted-foreground));
     border-radius: 6px;
-    background: #1e293b;
+    background: hsl(var(--muted));
     cursor: pointer;
     position: relative;
     transition: all 0.2s;
@@ -448,5 +807,19 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
     border: solid white;
     border-width: 0 3px 3px 0;
     transform: rotate(45deg);
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .roadmap-controls {
+      top: 0.25rem;
+      right: 0.25rem;
+    }
+    .mini-map {
+      width: 100px;
+      height: 120px;
+    }
+    .reset-btn span { display: none; }
+    .reset-btn { padding: 0.5rem; }
   }
 </style>
