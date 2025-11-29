@@ -1,198 +1,339 @@
----
+﻿---
 import PageLayout from '@/layouts/CommonPage.astro'
-import { Icon } from 'astro-pure/user'
 
-interface Topic {
-  name: string
-  problems: number
-  color: string
-  icon?: string
-  link?: string
-}
-
-interface RoadmapSection {
-  title: string
-  topics: Topic[]
-}
-
-const roadmap: RoadmapSection[] = [
-  {
-    title: '基础篇',
-    topics: [
-      { name: 'Arrays & Hashing', problems: 9, color: '#4ade80', link: '/blog?tag=arrays' },
-      { name: 'Two Pointers', problems: 5, color: '#60a5fa', link: '/blog?tag=two-pointers' },
-      { name: 'Stack', problems: 7, color: '#f97316', link: '/blog?tag=stack' },
-      { name: 'Binary Search', problems: 7, color: '#a78bfa', link: '/blog?tag=binary-search' },
-      { name: 'Sliding Window', problems: 6, color: '#14b8a6', link: '/blog?tag=sliding-window' },
-      { name: 'Linked List', problems: 11, color: '#f472b6', link: '/blog?tag=linked-list' }
+const topics = {
+  'arrays-hashing': {
+    title: 'Arrays & Hashing',
+    prerequisites: [
+      { name: 'Dynamic Arrays', course: 'DSA for Beginners' },
+      { name: 'Hash Tables', course: 'DSA for Beginners' }
+    ],
+    problems: [
+      { name: 'Contains Duplicate', difficulty: 'Easy', link: 'https://leetcode.com/problems/contains-duplicate/' },
+      { name: 'Valid Anagram', difficulty: 'Easy', link: 'https://leetcode.com/problems/valid-anagram/' },
+      { name: 'Two Sum', difficulty: 'Easy', link: 'https://leetcode.com/problems/two-sum/' },
+      { name: 'Group Anagrams', difficulty: 'Medium', link: 'https://leetcode.com/problems/group-anagrams/' },
+      { name: 'Top K Frequent Elements', difficulty: 'Medium', link: 'https://leetcode.com/problems/top-k-frequent-elements/' },
+      { name: 'Product of Array Except Self', difficulty: 'Medium', link: 'https://leetcode.com/problems/product-of-array-except-self/' },
+      { name: 'Valid Sudoku', difficulty: 'Medium', link: 'https://leetcode.com/problems/valid-sudoku/' },
+      { name: 'Longest Consecutive Sequence', difficulty: 'Medium', link: 'https://leetcode.com/problems/longest-consecutive-sequence/' }
     ]
   },
-  {
-    title: '进阶篇',
-    topics: [
-      { name: 'Trees', problems: 15, color: '#22c55e', link: '/blog?tag=trees' },
-      { name: 'Tries', problems: 3, color: '#3b82f6', link: '/blog?tag=tries' },
-      { name: 'Heap / Priority Queue', problems: 7, color: '#eab308', link: '/blog?tag=heap' },
-      { name: 'Backtracking', problems: 9, color: '#ec4899', link: '/blog?tag=backtracking' },
-      { name: 'Graphs', problems: 13, color: '#8b5cf6', link: '/blog?tag=graphs' },
-      { name: '1-D DP', problems: 12, color: '#06b6d4', link: '/blog?tag=dp' }
+  'two-pointers': {
+    title: 'Two Pointers',
+    prerequisites: [{ name: 'Pointer Techniques', course: 'DSA for Beginners' }],
+    problems: [
+      { name: 'Valid Palindrome', difficulty: 'Easy', link: 'https://leetcode.com/problems/valid-palindrome/' },
+      { name: 'Two Sum II', difficulty: 'Medium', link: 'https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/' },
+      { name: '3Sum', difficulty: 'Medium', link: 'https://leetcode.com/problems/3sum/' },
+      { name: 'Container With Most Water', difficulty: 'Medium', link: 'https://leetcode.com/problems/container-with-most-water/' },
+      { name: 'Trapping Rain Water', difficulty: 'Hard', link: 'https://leetcode.com/problems/trapping-rain-water/' }
     ]
   },
-  {
-    title: '高级篇',
-    topics: [
-      { name: 'Intervals', problems: 6, color: '#84cc16', link: '/blog?tag=intervals' },
-      { name: 'Greedy', problems: 8, color: '#f59e0b', link: '/blog?tag=greedy' },
-      { name: 'Advanced Graphs', problems: 6, color: '#6366f1', link: '/blog?tag=advanced-graphs' },
-      { name: '2-D DP', problems: 11, color: '#10b981', link: '/blog?tag=2d-dp' },
-      { name: 'Bit Manipulation', problems: 7, color: '#ef4444', link: '/blog?tag=bit' },
-      { name: 'Math & Geometry', problems: 8, color: '#d946ef', link: '/blog?tag=math' }
+  'stack': {
+    title: 'Stack',
+    prerequisites: [{ name: 'Call Stack', course: 'DSA for Beginners' }],
+    problems: [
+      { name: 'Valid Parentheses', difficulty: 'Easy', link: 'https://leetcode.com/problems/valid-parentheses/' },
+      { name: 'Min Stack', difficulty: 'Medium', link: 'https://leetcode.com/problems/min-stack/' },
+      { name: 'Daily Temperatures', difficulty: 'Medium', link: 'https://leetcode.com/problems/daily-temperatures/' },
+      { name: 'Largest Rectangle in Histogram', difficulty: 'Hard', link: 'https://leetcode.com/problems/largest-rectangle-in-histogram/' }
+    ]
+  },
+  'binary-search': {
+    title: 'Binary Search',
+    prerequisites: [{ name: 'Sorted Arrays', course: 'DSA for Beginners' }],
+    problems: [
+      { name: 'Binary Search', difficulty: 'Easy', link: 'https://leetcode.com/problems/binary-search/' },
+      { name: 'Search 2D Matrix', difficulty: 'Medium', link: 'https://leetcode.com/problems/search-a-2d-matrix/' },
+      { name: 'Koko Eating Bananas', difficulty: 'Medium', link: 'https://leetcode.com/problems/koko-eating-bananas/' },
+      { name: 'Median of Two Sorted Arrays', difficulty: 'Hard', link: 'https://leetcode.com/problems/median-of-two-sorted-arrays/' }
+    ]
+  },
+  'sliding-window': {
+    title: 'Sliding Window',
+    prerequisites: [{ name: 'Window Basics', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Best Time to Buy and Sell Stock', difficulty: 'Easy', link: 'https://leetcode.com/problems/best-time-to-buy-and-sell-stock/' },
+      { name: 'Longest Substring Without Repeating', difficulty: 'Medium', link: 'https://leetcode.com/problems/longest-substring-without-repeating-characters/' },
+      { name: 'Minimum Window Substring', difficulty: 'Hard', link: 'https://leetcode.com/problems/minimum-window-substring/' }
+    ]
+  },
+  'linked-list': {
+    title: 'Linked List',
+    prerequisites: [{ name: 'Pointers', course: 'DSA for Beginners' }],
+    problems: [
+      { name: 'Reverse Linked List', difficulty: 'Easy', link: 'https://leetcode.com/problems/reverse-linked-list/' },
+      { name: 'Linked List Cycle', difficulty: 'Easy', link: 'https://leetcode.com/problems/linked-list-cycle/' },
+      { name: 'Reorder List', difficulty: 'Medium', link: 'https://leetcode.com/problems/reorder-list/' },
+      { name: 'LRU Cache', difficulty: 'Medium', link: 'https://leetcode.com/problems/lru-cache/' },
+      { name: 'Merge K Sorted Lists', difficulty: 'Hard', link: 'https://leetcode.com/problems/merge-k-sorted-lists/' }
+    ]
+  },
+  'trees': {
+    title: 'Trees',
+    prerequisites: [{ name: 'DFS / BFS', course: 'DSA for Beginners' }],
+    problems: [
+      { name: 'Invert Binary Tree', difficulty: 'Easy', link: 'https://leetcode.com/problems/invert-binary-tree/' },
+      { name: 'Validate BST', difficulty: 'Medium', link: 'https://leetcode.com/problems/validate-binary-search-tree/' },
+      { name: 'Binary Tree Maximum Path Sum', difficulty: 'Hard', link: 'https://leetcode.com/problems/binary-tree-maximum-path-sum/' }
+    ]
+  },
+  'tries': {
+    title: 'Tries',
+    prerequisites: [{ name: 'Prefix Trees', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Implement Trie', difficulty: 'Medium', link: 'https://leetcode.com/problems/implement-trie-prefix-tree/' },
+      { name: 'Word Search II', difficulty: 'Hard', link: 'https://leetcode.com/problems/word-search-ii/' }
+    ]
+  },
+  'heap': {
+    title: 'Heap / Priority Queue',
+    prerequisites: [{ name: 'Binary Heap', course: 'DSA for Beginners' }],
+    problems: [
+      { name: 'K Closest Points', difficulty: 'Medium', link: 'https://leetcode.com/problems/k-closest-points-to-origin/' },
+      { name: 'Find Median from Data Stream', difficulty: 'Hard', link: 'https://leetcode.com/problems/find-median-from-data-stream/' }
+    ]
+  },
+  'backtracking': {
+    title: 'Backtracking',
+    prerequisites: [{ name: 'Subsets & Permutations', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Subsets', difficulty: 'Medium', link: 'https://leetcode.com/problems/subsets/' },
+      { name: 'Combination Sum', difficulty: 'Medium', link: 'https://leetcode.com/problems/combination-sum/' },
+      { name: 'N-Queens', difficulty: 'Hard', link: 'https://leetcode.com/problems/n-queens/' }
+    ]
+  },
+  'graphs': {
+    title: 'Graphs',
+    prerequisites: [{ name: 'Adjacency List', course: 'DSA for Beginners' }],
+    problems: [
+      { name: 'Number of Islands', difficulty: 'Medium', link: 'https://leetcode.com/problems/number-of-islands/' },
+      { name: 'Course Schedule', difficulty: 'Medium', link: 'https://leetcode.com/problems/course-schedule/' },
+      { name: 'Word Ladder', difficulty: 'Hard', link: 'https://leetcode.com/problems/word-ladder/' }
+    ]
+  },
+  '1d-dp': {
+    title: '1-D DP',
+    prerequisites: [{ name: 'Memoization', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Climbing Stairs', difficulty: 'Easy', link: 'https://leetcode.com/problems/climbing-stairs/' },
+      { name: 'House Robber', difficulty: 'Medium', link: 'https://leetcode.com/problems/house-robber/' },
+      { name: 'Longest Increasing Subsequence', difficulty: 'Medium', link: 'https://leetcode.com/problems/longest-increasing-subsequence/' }
+    ]
+  },
+  'intervals': {
+    title: 'Intervals',
+    prerequisites: [{ name: 'Sorting', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Merge Intervals', difficulty: 'Medium', link: 'https://leetcode.com/problems/merge-intervals/' },
+      { name: 'Meeting Rooms II', difficulty: 'Medium', link: 'https://leetcode.com/problems/meeting-rooms-ii/' }
+    ]
+  },
+  'greedy': {
+    title: 'Greedy',
+    prerequisites: [{ name: 'Greedy Strategy', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Jump Game', difficulty: 'Medium', link: 'https://leetcode.com/problems/jump-game/' },
+      { name: 'Gas Station', difficulty: 'Medium', link: 'https://leetcode.com/problems/gas-station/' }
+    ]
+  },
+  'advanced-graphs': {
+    title: 'Advanced Graphs',
+    prerequisites: [{ name: 'Dijkstra', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Network Delay Time', difficulty: 'Medium', link: 'https://leetcode.com/problems/network-delay-time/' },
+      { name: 'Swim in Rising Water', difficulty: 'Hard', link: 'https://leetcode.com/problems/swim-in-rising-water/' }
+    ]
+  },
+  '2d-dp': {
+    title: '2-D DP',
+    prerequisites: [{ name: 'Knapsack', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Unique Paths', difficulty: 'Medium', link: 'https://leetcode.com/problems/unique-paths/' },
+      { name: 'Edit Distance', difficulty: 'Hard', link: 'https://leetcode.com/problems/edit-distance/' }
+    ]
+  },
+  'bit-manipulation': {
+    title: 'Bit Manipulation',
+    prerequisites: [{ name: 'Bitwise Ops', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Single Number', difficulty: 'Easy', link: 'https://leetcode.com/problems/single-number/' },
+      { name: 'Reverse Integer', difficulty: 'Medium', link: 'https://leetcode.com/problems/reverse-integer/' }
+    ]
+  },
+  'math-geometry': {
+    title: 'Math & Geometry',
+    prerequisites: [{ name: 'Matrix Ops', course: 'Advanced Algorithms' }],
+    problems: [
+      { name: 'Rotate Image', difficulty: 'Medium', link: 'https://leetcode.com/problems/rotate-image/' },
+      { name: 'Spiral Matrix', difficulty: 'Medium', link: 'https://leetcode.com/problems/spiral-matrix/' }
     ]
   }
+}
+
+const nodes = [
+  { id: 'arrays-hashing', x: 350, y: 30 },
+  { id: 'two-pointers', x: 200, y: 120 },
+  { id: 'stack', x: 500, y: 120 },
+  { id: 'binary-search', x: 80, y: 220 },
+  { id: 'sliding-window', x: 350, y: 220 },
+  { id: 'linked-list', x: 620, y: 220 },
+  { id: 'trees', x: 350, y: 320 },
+  { id: 'tries', x: 180, y: 420 },
+  { id: 'backtracking', x: 520, y: 420 },
+  { id: 'heap', x: 80, y: 520 },
+  { id: 'graphs', x: 350, y: 520 },
+  { id: '1d-dp', x: 620, y: 520 },
+  { id: 'intervals', x: 50, y: 620 },
+  { id: 'greedy', x: 200, y: 620 },
+  { id: 'advanced-graphs', x: 350, y: 620 },
+  { id: '2d-dp', x: 500, y: 620 },
+  { id: 'bit-manipulation', x: 650, y: 620 },
+  { id: 'math-geometry', x: 500, y: 720 }
 ]
 
-const headings = roadmap.map((section, index) => ({
-  depth: 2,
-  slug: `section-${index}`,
-  text: section.title
-}))
+const edges = [
+  ['arrays-hashing', 'two-pointers'],
+  ['arrays-hashing', 'stack'],
+  ['two-pointers', 'binary-search'],
+  ['two-pointers', 'sliding-window'],
+  ['stack', 'sliding-window'],
+  ['stack', 'linked-list'],
+  ['binary-search', 'trees'],
+  ['sliding-window', 'trees'],
+  ['linked-list', 'trees'],
+  ['trees', 'tries'],
+  ['trees', 'backtracking'],
+  ['tries', 'heap'],
+  ['backtracking', 'graphs'],
+  ['backtracking', '1d-dp'],
+  ['heap', 'intervals'],
+  ['heap', 'greedy'],
+  ['heap', 'advanced-graphs'],
+  ['graphs', 'advanced-graphs'],
+  ['graphs', '2d-dp'],
+  ['1d-dp', '2d-dp'],
+  ['1d-dp', 'bit-manipulation'],
+  ['2d-dp', 'math-geometry']
+]
+
+const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
 ---
 
 <PageLayout title='Algorithm Roadmap' {headings}>
-  <p class='text-muted-foreground mb-8'>
-    算法学习路线图，参考 <a href='https://neetcode.io/roadmap' target='_blank' class='text-primary hover:underline'>NeetCode Roadmap</a> 整理。
-    点击各个模块可以查看相关博客文章。
+  <p class='mb-6 text-muted-foreground'>
+    点击节点查看题目列表，参考
+    <a href='https://neetcode.io/roadmap' target='_blank' class='text-primary hover:underline'>NeetCode</a>。
   </p>
 
-  <div class='roadmap-container'>
-    {roadmap.map((section, sectionIndex) => (
-      <div class='roadmap-section' id={`section-${sectionIndex}`}>
-        <h2 class='section-title'>{section.title}</h2>
-        <div class='topics-grid'>
-          {section.topics.map((topic) => (
-            <a 
-              href={topic.link || '#'} 
-              class='topic-card'
-              style={`--card-color: ${topic.color}`}
-            >
-              <div class='topic-header'>
-                <span class='topic-indicator' style={`background-color: ${topic.color}`}></span>
-                <span class='topic-name'>{topic.name}</span>
-              </div>
-              <div class='topic-meta'>
-                <span class='problem-count'>{topic.problems} problems</span>
-                <span class='progress-bar'>
-                  <span class='progress-fill' style={`width: 0%; background-color: ${topic.color}`}></span>
-                </span>
-              </div>
-            </a>
-          ))}
-        </div>
-      </div>
-    ))}
+  <div class='roadmap-box'>
+    <svg class='roadmap-svg' viewBox='0 0 800 800'>
+      {edges.map(([from, to]) => {
+        const a = nodes.find(n => n.id === from)
+        const b = nodes.find(n => n.id === to)
+        if (!a || !b) return null
+        const x1 = a.x + 75, y1 = a.y + 25
+        const x2 = b.x + 75, y2 = b.y
+        const cy = (y1 + y2) / 2
+        return <path d={`M${x1} ${y1} C${x1} ${cy}, ${x2} ${cy}, ${x2} ${y2}`} class='edge-line' />
+      })}
+      {nodes.map(n => (
+        <g class='node-box' data-id={n.id} transform={`translate(${n.x},${n.y})`}>
+          <rect width='150' height='50' rx='10' />
+          <text x='75' y='30'>{topics[n.id].title}</text>
+        </g>
+      ))}
+    </svg>
   </div>
 
-  <div class='mt-12 p-6 rounded-lg border bg-card'>
-    <h3 class='text-lg font-semibold mb-4'>📚 学习建议</h3>
-    <ul class='list-disc list-inside space-y-2 text-muted-foreground'>
-      <li>按照路线图顺序学习，从基础篇开始</li>
-      <li>每个主题至少完成 5-10 道题目</li>
-      <li>重点理解解题思路，而不是死记硬背</li>
-      <li>定期复习，巩固知识点</li>
-    </ul>
+  <div id='modal' class='modal hidden'>
+    <div class='modal-inner'>
+      <button id='close-btn' class='close-btn'></button>
+      <h2 id='modal-title'></h2>
+      <p id='modal-count' class='count-text'></p>
+      <div class='bar-track'><div id='bar-fill' class='bar-fill'></div></div>
+      <h3>Prerequisites</h3>
+      <div id='prereq-box' class='prereq-box'></div>
+      <table class='prob-table'>
+        <thead><tr><th></th><th></th><th>Problem</th><th>Difficulty</th></tr></thead>
+        <tbody id='prob-body'></tbody>
+      </table>
+    </div>
   </div>
 </PageLayout>
 
-<style>
-  .roadmap-container {
-    display: flex;
-    flex-direction: column;
-    gap: 2.5rem;
-  }
+<script define:vars={{ topics }}>
+  document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('modal')
+    const closeBtn = document.getElementById('close-btn')
+    const titleEl = document.getElementById('modal-title')
+    const countEl = document.getElementById('modal-count')
+    const barFill = document.getElementById('bar-fill')
+    const prereqBox = document.getElementById('prereq-box')
+    const probBody = document.getElementById('prob-body')
 
-  .roadmap-section {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .section-title {
-    font-size: 1.5rem;
-    font-weight: 600;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid var(--color-border);
-  }
-
-  .topics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1rem;
-  }
-
-  .topic-card {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    padding: 1rem 1.25rem;
-    border-radius: 0.75rem;
-    border: 1px solid var(--color-border);
-    background: var(--color-card);
-    transition: all 0.2s ease;
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .topic-card:hover {
-    border-color: var(--card-color);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
-  }
-
-  .topic-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .topic-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .topic-name {
-    font-weight: 500;
-    font-size: 1rem;
-  }
-
-  .topic-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .problem-count {
-    font-size: 0.875rem;
-    color: var(--color-muted-foreground);
-  }
-
-  .progress-bar {
-    height: 4px;
-    background: var(--color-muted);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .progress-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.3s ease;
-  }
-
-  @media (max-width: 640px) {
-    .topics-grid {
-      grid-template-columns: 1fr;
+    function open(id) {
+      const d = topics[id]
+      if (!d) return
+      titleEl.textContent = d.title
+      countEl.textContent = `0 / ${d.problems.length}`
+      barFill.style.width = '0%'
+      prereqBox.innerHTML = d.prerequisites.map(p => 
+        `<div class='prereq-card'><b>${p.name}</b><small>${p.course}</small></div>`
+      ).join('')
+      probBody.innerHTML = d.problems.map(p => `
+        <tr>
+          <td><input type='checkbox'/></td>
+          <td class='star'></td>
+          <td><a href='${p.link}' target='_blank'>${p.name} </a></td>
+          <td class='diff diff-${p.difficulty.toLowerCase()}'>${p.difficulty}</td>
+        </tr>
+      `).join('')
+      modal.classList.remove('hidden')
     }
-  }
+
+    document.querySelectorAll('.node-box').forEach(el => {
+      el.addEventListener('click', () => open(el.dataset.id))
+    })
+
+    function close() { modal.classList.add('hidden') }
+    closeBtn.addEventListener('click', close)
+    modal.addEventListener('click', e => { if (e.target === modal) close() })
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close() })
+  })
+</script>
+
+<style>
+  .roadmap-box { overflow-x: auto; padding: 1rem; border: 1px solid #333; border-radius: 1rem; background: #111827; }
+  .roadmap-svg { min-width: 800px; display: block; }
+  .edge-line { fill: none; stroke: #4b5563; stroke-width: 2; opacity: 0.5; }
+  .node-box { cursor: pointer; }
+  .node-box rect { fill: #4338ca; stroke: #6366f1; stroke-width: 2; }
+  .node-box text { fill: #fff; font-size: 12px; font-weight: 600; text-anchor: middle; }
+  .node-box:hover rect { fill: #4f46e5; }
+
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal.hidden { display: none; }
+  .modal-inner { background: #0f172a; color: #e2e8f0; border-radius: 1rem; width: min(900px, 95%); max-height: 90vh; overflow-y: auto; padding: 2rem; position: relative; }
+  .close-btn { position: absolute; top: 1rem; right: 1rem; width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid #475569; background: transparent; color: #fff; font-size: 1.2rem; cursor: pointer; }
+  .close-btn:hover { background: #334155; }
+  .modal-inner h2 { text-align: center; font-size: 1.4rem; margin-bottom: 0.5rem; }
+  .count-text { text-align: center; color: #94a3b8; margin-bottom: 0.5rem; }
+  .bar-track { height: 8px; background: #1e293b; border-radius: 4px; margin-bottom: 1rem; }
+  .bar-fill { height: 100%; width: 0; background: #22c55e; border-radius: 4px; transition: width 0.3s; }
+  .prereq-box { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+  .prereq-card { background: #1e293b; padding: 0.5rem 0.75rem; border-radius: 0.5rem; }
+  .prereq-card b { display: block; color: #60a5fa; }
+  .prereq-card small { color: #64748b; }
+  .prob-table { width: 100%; border-collapse: collapse; }
+  .prob-table th, .prob-table td { padding: 0.6rem 0.4rem; border-bottom: 1px solid #1e293b; text-align: left; }
+  .prob-table th { color: #94a3b8; font-weight: 500; }
+  .star { color: #fbbf24; cursor: pointer; }
+  .prob-table a { color: #60a5fa; text-decoration: none; }
+  .prob-table a:hover { text-decoration: underline; }
+  .diff { font-size: 0.75rem; font-weight: 600; }
+  .diff-easy { color: #22c55e; }
+  .diff-medium { color: #eab308; }
+  .diff-hard { color: #ef4444; }
 </style>
