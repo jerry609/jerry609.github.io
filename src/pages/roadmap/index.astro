@@ -258,6 +258,10 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
         <span>Reset</span>
       </button>
       <div class='zoom-info' id='zoom-info'>100%</div>
+      <div class='zoom-btns'>
+        <button id='zoom-in' class='zoom-btn' title='Zoom In'>+</button>
+        <button id='zoom-out' class='zoom-btn' title='Zoom Out'>-</button>
+      </div>
     </div>
 
     <div class='roadmap-box'>
@@ -276,6 +280,7 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
         {nodes.map(n => (
           <g class='node-box' data-id={n.id} transform={`translate(${n.x},${n.y})`}>
             <rect width='180' height='64' rx='12' />
+            <rect class='node-progress' x='0' y='60' width='0' height='4' rx='2' />
             <text x='90' y='38'>{topics[n.id].title}</text>
           </g>
         ))}
@@ -295,7 +300,31 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
       <h3>Prerequisites</h3>
       <div id='prereq-box' class='prereq-box'></div>
       <h3>Problems</h3>
+      <div class='prob-header'>
+        <span>Status</span>
+        <span>Problem</span>
+        <span>Difficulty</span>
+      </div>
       <div class='prob-list' id='prob-body'></div>
+    </div>
+  </div>
+
+  <!-- List View Section -->
+  <div class='mt-12'>
+    <h2 class='text-2xl font-bold mb-6'>All Topics</h2>
+    <div class='grid gap-6 sm:grid-cols-2 lg:grid-cols-3'>
+      {Object.entries(topics).map(([id, topic]) => (
+        <div class='topic-card border rounded-xl p-4 bg-card hover:shadow-md transition-shadow' data-id={id}>
+          <h3 class='text-lg font-semibold mb-2'>{topic.title}</h3>
+          <div class='text-sm text-muted-foreground mb-3'>
+            {topic.problems.length} Problems
+          </div>
+          <div class='bar-track h-2 mb-3'><div class='bar-fill list-progress-bar' data-id={id} style='width: 0%'></div></div>
+          <button class='text-primary text-sm font-medium hover:underline open-topic-btn' data-id={id}>
+            View Problems →
+          </button>
+        </div>
+      ))}
     </div>
   </div>
 </PageLayout>
@@ -316,6 +345,28 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
 
         function save() {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
+          updateAllProgress()
+        }
+
+        function updateAllProgress() {
+          Object.keys(topics).forEach(id => {
+            const total = topics[id].problems.length
+            const completed = topics[id].problems.filter(p => progress[p.link]).length
+            const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
+            
+            // Update SVG Node Progress
+            const node = document.querySelector(`.node-box[data-id="${id}"] .node-progress`)
+            if (node) {
+              node.setAttribute('width', `${(percent / 100) * 180}`)
+              node.style.fill = percent === 100 ? '#22c55e' : '#60a5fa'
+            }
+
+            // Update List View Progress
+            const listBar = document.querySelector(`.list-progress-bar[data-id="${id}"]`)
+            if (listBar) {
+              listBar.style.width = `${percent}%`
+            }
+          })
         }
 
         function updateProgress(topicId) {
@@ -325,7 +376,13 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
       
           countEl.textContent = `${completed} / ${total} (${percent}%)`
           barFill.style.width = `${percent}%`
+          
+          // Also update global views
+          updateAllProgress()
         }
+
+        // Initialize
+        updateAllProgress()
 
         function open(id) {
           const d = topics[id]
@@ -374,12 +431,20 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
           })
         })
 
+        document.querySelectorAll('.open-topic-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            open(btn.dataset.id)
+          })
+        })
+
         // Panning / Dragging the canvas
         const svg = document.querySelector('.roadmap-svg')
         const canvas = document.getElementById('canvas')
         const miniViewport = document.getElementById('mini-viewport')
         const resetBtn = document.getElementById('reset-btn')
         const zoomInfo = document.getElementById('zoom-info')
+        const zoomInBtn = document.getElementById('zoom-in')
+        const zoomOutBtn = document.getElementById('zoom-out')
         
         let isPanning = false
         let startX = 0, startY = 0
@@ -392,6 +457,25 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
           zoomInfo.textContent = `${Math.round(scale * 100)}%`
           updateMiniMap()
         }
+
+        function zoom(delta) {
+          const oldScale = scale
+          scale = Math.min(maxScale, Math.max(minScale, scale * delta))
+          
+          // Zoom towards center of viewport
+          const rect = svg.getBoundingClientRect()
+          const centerX = rect.width / 2
+          const centerY = rect.height / 2
+          
+          // Adjust pan to keep center fixed
+          panX = centerX - (centerX - panX) * (scale / oldScale)
+          panY = centerY - (centerY - panY) * (scale / oldScale)
+          
+          updateTransform()
+        }
+
+        zoomInBtn.addEventListener('click', () => zoom(1.2))
+        zoomOutBtn.addEventListener('click', () => zoom(0.8))
 
         function updateMiniMap() {
           if (!miniViewport) return
@@ -598,6 +682,30 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
     border: 1px solid hsl(var(--border));
   }
 
+  .zoom-btns {
+    display: flex;
+    gap: 0.25rem;
+  }
+  .zoom-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    color: hsl(var(--foreground));
+    transition: all 0.2s;
+  }
+  .zoom-btn:hover {
+    background: hsl(var(--muted));
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+  }
+
   /* Roadmap Box */
   .roadmap-box {
     border-radius: 12px;
@@ -753,6 +861,19 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
   }
 
   /* Problem List */
+  .prob-header {
+    display: flex;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 1px solid hsl(var(--border));
+    margin-bottom: 0.5rem;
+  }
+  .prob-header span:nth-child(1) { width: 2rem; }
+  .prob-header span:nth-child(2) { flex: 1; }
+  .prob-header span:nth-child(3) { width: 80px; text-align: center; }
+
   .prob-list {
     display: flex;
     flex-direction: column;
