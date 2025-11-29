@@ -1,0 +1,198 @@
+---
+import PageLayout from '@/layouts/CommonPage.astro'
+import { Icon } from 'astro-pure/user'
+
+interface Topic {
+  name: string
+  problems: number
+  color: string
+  icon?: string
+  link?: string
+}
+
+interface RoadmapSection {
+  title: string
+  topics: Topic[]
+}
+
+const roadmap: RoadmapSection[] = [
+  {
+    title: '基础篇',
+    topics: [
+      { name: 'Arrays & Hashing', problems: 9, color: '#4ade80', link: '/blog?tag=arrays' },
+      { name: 'Two Pointers', problems: 5, color: '#60a5fa', link: '/blog?tag=two-pointers' },
+      { name: 'Stack', problems: 7, color: '#f97316', link: '/blog?tag=stack' },
+      { name: 'Binary Search', problems: 7, color: '#a78bfa', link: '/blog?tag=binary-search' },
+      { name: 'Sliding Window', problems: 6, color: '#14b8a6', link: '/blog?tag=sliding-window' },
+      { name: 'Linked List', problems: 11, color: '#f472b6', link: '/blog?tag=linked-list' }
+    ]
+  },
+  {
+    title: '进阶篇',
+    topics: [
+      { name: 'Trees', problems: 15, color: '#22c55e', link: '/blog?tag=trees' },
+      { name: 'Tries', problems: 3, color: '#3b82f6', link: '/blog?tag=tries' },
+      { name: 'Heap / Priority Queue', problems: 7, color: '#eab308', link: '/blog?tag=heap' },
+      { name: 'Backtracking', problems: 9, color: '#ec4899', link: '/blog?tag=backtracking' },
+      { name: 'Graphs', problems: 13, color: '#8b5cf6', link: '/blog?tag=graphs' },
+      { name: '1-D DP', problems: 12, color: '#06b6d4', link: '/blog?tag=dp' }
+    ]
+  },
+  {
+    title: '高级篇',
+    topics: [
+      { name: 'Intervals', problems: 6, color: '#84cc16', link: '/blog?tag=intervals' },
+      { name: 'Greedy', problems: 8, color: '#f59e0b', link: '/blog?tag=greedy' },
+      { name: 'Advanced Graphs', problems: 6, color: '#6366f1', link: '/blog?tag=advanced-graphs' },
+      { name: '2-D DP', problems: 11, color: '#10b981', link: '/blog?tag=2d-dp' },
+      { name: 'Bit Manipulation', problems: 7, color: '#ef4444', link: '/blog?tag=bit' },
+      { name: 'Math & Geometry', problems: 8, color: '#d946ef', link: '/blog?tag=math' }
+    ]
+  }
+]
+
+const headings = roadmap.map((section, index) => ({
+  depth: 2,
+  slug: `section-${index}`,
+  text: section.title
+}))
+---
+
+<PageLayout title='Algorithm Roadmap' {headings}>
+  <p class='text-muted-foreground mb-8'>
+    算法学习路线图，参考 <a href='https://neetcode.io/roadmap' target='_blank' class='text-primary hover:underline'>NeetCode Roadmap</a> 整理。
+    点击各个模块可以查看相关博客文章。
+  </p>
+
+  <div class='roadmap-container'>
+    {roadmap.map((section, sectionIndex) => (
+      <div class='roadmap-section' id={`section-${sectionIndex}`}>
+        <h2 class='section-title'>{section.title}</h2>
+        <div class='topics-grid'>
+          {section.topics.map((topic) => (
+            <a 
+              href={topic.link || '#'} 
+              class='topic-card'
+              style={`--card-color: ${topic.color}`}
+            >
+              <div class='topic-header'>
+                <span class='topic-indicator' style={`background-color: ${topic.color}`}></span>
+                <span class='topic-name'>{topic.name}</span>
+              </div>
+              <div class='topic-meta'>
+                <span class='problem-count'>{topic.problems} problems</span>
+                <span class='progress-bar'>
+                  <span class='progress-fill' style={`width: 0%; background-color: ${topic.color}`}></span>
+                </span>
+              </div>
+            </a>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+
+  <div class='mt-12 p-6 rounded-lg border bg-card'>
+    <h3 class='text-lg font-semibold mb-4'>📚 学习建议</h3>
+    <ul class='list-disc list-inside space-y-2 text-muted-foreground'>
+      <li>按照路线图顺序学习，从基础篇开始</li>
+      <li>每个主题至少完成 5-10 道题目</li>
+      <li>重点理解解题思路，而不是死记硬背</li>
+      <li>定期复习，巩固知识点</li>
+    </ul>
+  </div>
+</PageLayout>
+
+<style>
+  .roadmap-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+  }
+
+  .roadmap-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .section-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--color-border);
+  }
+
+  .topics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+  }
+
+  .topic-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-card);
+    transition: all 0.2s ease;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .topic-card:hover {
+    border-color: var(--card-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .topic-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .topic-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .topic-name {
+    font-weight: 500;
+    font-size: 1rem;
+  }
+
+  .topic-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .problem-count {
+    font-size: 0.875rem;
+    color: var(--color-muted-foreground);
+  }
+
+  .progress-bar {
+    height: 4px;
+    background: var(--color-muted);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  @media (max-width: 640px) {
+    .topics-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
