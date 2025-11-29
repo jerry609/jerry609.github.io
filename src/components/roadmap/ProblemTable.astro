@@ -1,0 +1,130 @@
+---
+interface Props {
+  problems: { name: string; difficulty: string; link: string }[]
+}
+
+const { problems } = Astro.props
+---
+
+<div class='prob-header'>
+  <span>Status</span>
+  <span>Problem</span>
+  <span>Difficulty</span>
+</div>
+<div class='prob-list'>
+  {problems.map((p) => (
+    <div class='prob-item'>
+      <input type='checkbox' class='prob-check' data-link={p.link} />
+      <a href={p.link} target='_blank' class='prob-name'>{p.name}</a>
+      <span class={`diff diff-${p.difficulty.toLowerCase()}`}>{p.difficulty}</span>
+    </div>
+  ))}
+</div>
+
+<style>
+  /* Problem List */
+  .prob-header {
+    display: flex;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 1px solid hsl(var(--border));
+    margin-bottom: 0.5rem;
+  }
+  .prob-header span:nth-child(1) { width: 2rem; }
+  .prob-header span:nth-child(2) { flex: 1; }
+  .prob-header span:nth-child(3) { width: 80px; text-align: center; }
+
+  .prob-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .prob-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    border-radius: 10px;
+    transition: all 0.2s;
+  }
+  .prob-item:hover {
+    background: hsl(var(--muted) / 0.7);
+    border-color: hsl(var(--primary) / 0.3);
+  }
+
+  .prob-name {
+    flex: 1;
+    color: hsl(var(--primary));
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: color 0.2s;
+  }
+  .prob-name:hover {
+    color: hsl(var(--primary) / 0.8);
+    text-decoration: underline;
+  }
+
+  .diff {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 9999px;
+    display: inline-block;
+    text-align: center;
+    min-width: 60px;
+    flex-shrink: 0;
+  }
+  .diff-easy { color: #22c55e; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.2); }
+  .diff-medium { color: #eab308; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.2); }
+  .diff-hard { color: #ef4444; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.2); }
+  
+  /* Custom Checkbox */
+  input[type='checkbox'] {
+    appearance: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid hsl(var(--muted-foreground));
+    border-radius: 5px;
+    background: hsl(var(--card));
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  input[type='checkbox']:checked {
+    background: #22c55e;
+    border-color: #22c55e;
+  }
+  input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 1px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .prob-item {
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .prob-name {
+      order: 1;
+      width: 100%;
+    }
+    .diff {
+      order: 2;
+    }
+  }
+</style>
