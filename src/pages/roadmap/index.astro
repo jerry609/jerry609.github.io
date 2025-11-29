@@ -1,7 +1,13 @@
 ﻿---
 import PageLayout from '@/layouts/CommonPage.astro'
 
-const topics = {
+type Topic = {
+  title: string
+  prerequisites: { name: string; course: string }[]
+  problems: { name: string; difficulty: string; link: string }[]
+}
+
+const topics: Record<string, Topic> = {
   'arrays-hashing': {
     title: 'Arrays & Hashing',
     prerequisites: [
