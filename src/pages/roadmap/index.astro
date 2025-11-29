@@ -294,10 +294,8 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
       <div class='bar-track'><div id='bar-fill' class='bar-fill'></div></div>
       <h3>Prerequisites</h3>
       <div id='prereq-box' class='prereq-box'></div>
-      <table class='prob-table'>
-        <thead><tr><th></th><th></th><th>Problem</th><th>Difficulty</th></tr></thead>
-        <tbody id='prob-body'></tbody>
-      </table>
+      <h3>Problems</h3>
+      <div class='prob-list' id='prob-body'></div>
     </div>
   </div>
 </PageLayout>
@@ -343,14 +341,11 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
           probBody.innerHTML = d.problems.map(p => {
             const isChecked = progress[p.link] ? 'checked' : ''
             return `
-            <tr>
-              <td><input type='checkbox' class='prob-check' data-link='${p.link}' ${isChecked}/></td>
-              <td class='star'>
-                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              </td>
-              <td><a href='${p.link}' target='_blank'>${p.name}</a></td>
-              <td class='diff diff-${p.difficulty.toLowerCase()}'>${p.difficulty}</td>
-            </tr>
+            <div class='prob-item'>
+              <input type='checkbox' class='prob-check' data-link='${p.link}' ${isChecked}/>
+              <a href='${p.link}' target='_blank' class='prob-name'>${p.name}</a>
+              <span class='diff diff-${p.difficulty.toLowerCase()}'>${p.difficulty}</span>
+            </div>
           `}).join('')
       
           updateProgress(id)
@@ -757,29 +752,51 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
     color: hsl(var(--muted-foreground));
   }
 
-  .prob-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 0.75rem;
-  }
-  .prob-table th, .prob-table td {
-    text-align: left;
-    padding: 0.6rem 0.5rem;
-    border-bottom: 1px solid hsl(var(--border));
-  }
-  .prob-table th {
-    font-size: 0.8rem;
-    color: hsl(var(--muted-foreground));
-    font-weight: 600;
-  }
-  .prob-table .star {
-    color: hsl(var(--muted-foreground) / 0.5);
+  /* Problem List */
+  .prob-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
-  .prob-table a { color: hsl(var(--primary)); text-decoration: none; transition: color 0.2s; font-weight: 500; }
-  .prob-table a:hover { color: hsl(var(--primary) / 0.8); text-decoration: underline; }
-  
-  .diff { font-size: 0.85rem; font-weight: 700; padding: 0.3rem 0.8rem; border-radius: 9999px; display: inline-block; text-align: center; min-width: 80px; }
+  .prob-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    border-radius: 10px;
+    transition: all 0.2s;
+  }
+  .prob-item:hover {
+    background: hsl(var(--muted) / 0.7);
+    border-color: hsl(var(--primary) / 0.3);
+  }
+
+  .prob-name {
+    flex: 1;
+    color: hsl(var(--primary));
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: color 0.2s;
+  }
+  .prob-name:hover {
+    color: hsl(var(--primary) / 0.8);
+    text-decoration: underline;
+  }
+
+  .diff {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 9999px;
+    display: inline-block;
+    text-align: center;
+    min-width: 60px;
+    flex-shrink: 0;
+  }
   .diff-easy { color: #22c55e; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.2); }
   .diff-medium { color: #eab308; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.2); }
   .diff-hard { color: #ef4444; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.2); }
@@ -787,13 +804,15 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
   /* Custom Checkbox */
   input[type='checkbox'] {
     appearance: none;
-    width: 1.5rem; height: 1.5rem;
+    width: 1.25rem;
+    height: 1.25rem;
     border: 2px solid hsl(var(--muted-foreground));
-    border-radius: 6px;
-    background: hsl(var(--muted));
+    border-radius: 5px;
+    background: hsl(var(--card));
     cursor: pointer;
     position: relative;
     transition: all 0.2s;
+    flex-shrink: 0;
   }
   input[type='checkbox']:checked {
     background: #22c55e;
@@ -802,10 +821,12 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
   input[type='checkbox']:checked::after {
     content: '';
     position: absolute;
-    left: 6px; top: 2px;
-    width: 6px; height: 12px;
+    left: 5px;
+    top: 1px;
+    width: 5px;
+    height: 10px;
     border: solid white;
-    border-width: 0 3px 3px 0;
+    border-width: 0 2px 2px 0;
     transform: rotate(45deg);
   }
 
@@ -821,5 +842,17 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
     }
     .reset-btn span { display: none; }
     .reset-btn { padding: 0.5rem; }
+
+    .prob-item {
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .prob-name {
+      order: 1;
+      width: 100%;
+    }
+    .diff {
+      order: 2;
+    }
   }
 </style>
