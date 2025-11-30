@@ -1,6 +1,5 @@
 ﻿---
 import PageLayout from '@/layouts/CommonPage.astro'
-import ProblemTable from '@/components/roadmap/ProblemTable.astro'
 import RoadmapDrawer from '@/components/roadmap/RoadmapDrawer.astro'
 
 type Topic = {
@@ -313,7 +312,7 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
   </div>
 </PageLayout>
 
-<script define:vars={{ topics }}>
+<script define:vars={{ topics }} is:inline>
   document.addEventListener('DOMContentLoaded', () => {
     // Open Drawer Helper
     function open(id) {
@@ -357,7 +356,6 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
     }
 
     function zoom(delta) {
-      const oldScale = scale
       scale = Math.min(maxScale, Math.max(minScale, scale * delta))
       
       // Zoom towards center of viewport

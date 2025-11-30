@@ -101,7 +101,7 @@ const { topics } = Astro.props
   }
 </div>
 
-<script define:vars={{ topics }}>
+<script define:vars={{ topics }} is:inline>
   const drawer = document.getElementById('roadmap-drawer')
   const backdrop = document.getElementById('drawer-backdrop')
   const panel = document.getElementById('drawer-panel')
