@@ -164,7 +164,7 @@ export const integ: IntegrationUserConfig = {
   },
   // Comment system
   waline: {
-    enable: false,
+    enable: true,
     // Server service link
     server: 'https://astro-theme-pure-waline.arthals.ink/',
     // Refer https://waline.js.org/en/guide/features/emoji.html
@@ -172,8 +172,8 @@ export const integ: IntegrationUserConfig = {
     // Refer https://waline.js.org/en/reference/client/props.html
     additionalConfigs: {
       // search: false,
-      pageview: false,
-      comment: false,
+      pageview: true,
+      comment: true,
       locale: {
         reaction0: 'Like',
         placeholder: 'Welcome to comment. (Email to receive replies. Login is unnecessary)'
