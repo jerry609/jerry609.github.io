@@ -36,6 +36,13 @@ function getDifficultyColor(score: string | undefined) {
     {
       problems.map((problem) => (
         <div class='group flex items-center px-4 py-3 hover:bg-muted/50 transition-colors'>
+          <div class='w-12 flex justify-center'>
+            <input
+              type='checkbox'
+              class='prob-check h-5 w-5 rounded border-2 border-muted-foreground bg-card text-primary focus:ring-primary/20 focus:ring-offset-0 transition-all cursor-pointer hover:border-primary hover:bg-primary/5 checked:border-primary checked:bg-primary'
+              data-id={problem.id}
+            />
+          </div>
           <div class='w-16 text-center text-sm font-mono text-muted-foreground'>
             {problem.id}
           </div>
@@ -65,5 +72,24 @@ function getDifficultyColor(score: string | undefined) {
     }
   </div>
 </div>
+
+<style>
+  /* Custom Checkbox Checkmark */
+  input[type='checkbox'] {
+    appearance: none;
+    position: relative;
+  }
+  input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 45%;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+</style>
 
 

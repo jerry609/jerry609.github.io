@@ -123,6 +123,19 @@ const { topics } = Astro.props
   const STORAGE_KEY = 'algo-roadmap-progress'
   let progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
 
+  function getTopicProblems(topic) {
+    if (topic.problems && topic.problems.length > 0) return topic.problems
+    
+    const problems = []
+    function traverse(section) {
+      if (section.problems) problems.push(...section.problems)
+      if (section.children) section.children.forEach(traverse)
+    }
+    
+    if (topic.rootSection) traverse(topic.rootSection)
+    return problems
+  }
+
   function save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
     updateAllProgress()
@@ -130,8 +143,9 @@ const { topics } = Astro.props
 
   function updateAllProgress() {
     Object.keys(topics).forEach((id) => {
-      const total = topics[id].problems.length
-      const completed = topics[id].problems.filter((p) => progress[p.link]).length
+      const problems = getTopicProblems(topics[id])
+      const total = problems.length
+      const completed = problems.filter((p) => progress[p.id || p.link]).length
       const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
 
       // Update SVG Node Progress
@@ -150,8 +164,9 @@ const { topics } = Astro.props
   }
 
   function updateDrawerProgress(topicId) {
-    const total = topics[topicId].problems.length
-    const completed = topics[topicId].problems.filter((p) => progress[p.link]).length
+    const problems = getTopicProblems(topics[topicId])
+    const total = problems.length
+    const completed = problems.filter((p) => progress[p.id || p.link]).length
     const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
 
     countEl.textContent = `${completed} / ${total} (${percent}%)`
@@ -186,7 +201,8 @@ const { topics } = Astro.props
 
       // Restore checked state
       problemsEl.querySelectorAll('.prob-check').forEach((cb) => {
-        if (progress[cb.dataset.link]) cb.checked = true
+        const id = cb.dataset.id || cb.dataset.link
+        if (progress[id]) cb.checked = true
       })
     }
 
@@ -222,7 +238,7 @@ const { topics } = Astro.props
   problemsEl.addEventListener('change', (e) => {
     if (e.target.classList.contains('prob-check')) {
       const checkbox = e.target
-      const link = checkbox.dataset.link
+      const id = checkbox.dataset.id || checkbox.dataset.link
 
       // Save progress
       const currentProgress = { ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }
@@ -233,11 +249,11 @@ const { topics } = Astro.props
       const currentCount = activity[today] || 0
 
       if (checkbox.checked) {
-        currentProgress[link] = true
+        currentProgress[id] = true
         // Increment activity
         activity[today] = currentCount + 1
       } else {
-        delete currentProgress[link]
+        delete currentProgress[id]
         // Decrement activity (optional, but keeps it accurate to "current status")
         // If you want "historical contribution" (only goes up), remove this else block's decrement
         if (currentCount > 0) {
