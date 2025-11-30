@@ -1,74 +1,88 @@
 ---
+import DifficultyBadge from './DifficultyBadge.astro'
+
 interface Props {
   problems: { name: string; difficulty: string; link: string }[]
 }
 
 const { problems } = Astro.props
-
-const difficultyColor: Record<string, string> = {
-  Easy: 'text-green-600 bg-green-500/10 border-green-500/20 dark:text-green-400 dark:bg-green-500/10 dark:border-green-400/20',
-  Medium:
-    'text-yellow-600 bg-yellow-500/10 border-yellow-500/20 dark:text-yellow-400 dark:bg-yellow-500/10 dark:border-yellow-400/20',
-  Hard: 'text-red-600 bg-red-500/10 border-red-500/20 dark:text-red-400 dark:bg-red-500/10 dark:border-red-400/20'
-}
 ---
 
-<div class='w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm'>
-  <table class='w-full text-sm table-fixed'>
-    <thead class='text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border'>
-      <tr>
-        <th scope='col' class='w-16 px-4 py-3 text-center font-medium'>Status</th>
-        <th scope='col' class='px-4 py-3 text-left font-medium'>Problem</th>
-        <th scope='col' class='w-28 px-4 py-3 text-center font-medium'>Difficulty</th>
-      </tr>
-    </thead>
-    <tbody class='divide-y divide-border'>
-      {
-        problems.map((p) => (
-          <tr class='group hover:bg-muted/40 transition-colors'>
-            <td class='w-16 px-4 py-4 text-center align-middle'>
-              <div class='flex justify-center'>
-                <input
-                  type='checkbox'
-                  class='prob-check h-5 w-5 rounded border-muted-foreground/50 bg-transparent text-primary focus:ring-primary/50 focus:ring-offset-0 transition-all cursor-pointer'
-                  data-link={p.link}
-                />
-              </div>
-            </td>
-            <td class='px-4 py-4 text-left align-middle'>
-              <a
-                href={p.link}
-                target='_blank'
-                class='text-foreground font-medium hover:text-primary transition-colors flex items-center gap-2 group-hover:translate-x-1 transition-transform duration-200'
+<div class='flex flex-col w-full rounded-xl border border-border bg-card overflow-hidden shadow-sm'>
+  <!-- Header -->
+  <div
+    class='flex items-center border-b border-border bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground'
+  >
+    <div class='w-12 text-center'>Status</div>
+    <div class='flex-1 px-4'>Problem</div>
+    <div class='w-24 text-center'>Difficulty</div>
+  </div>
+
+  <!-- Rows -->
+  <div class='divide-y divide-border'>
+    {
+      problems.map((p) => (
+        <div class='group flex items-center px-4 py-3 hover:bg-muted/40 transition-colors'>
+          <!-- Checkbox -->
+          <div class='w-12 flex justify-center'>
+            <input
+              type='checkbox'
+              class='prob-check h-5 w-5 rounded border-muted-foreground/40 bg-transparent text-primary focus:ring-primary/20 focus:ring-offset-0 transition-all cursor-pointer hover:border-primary hover:bg-primary/5 checked:border-primary checked:bg-primary'
+              data-link={p.link}
+            />
+          </div>
+
+          <!-- Problem Name -->
+          <div class='flex-1 px-4 min-w-0'>
+            <a
+              href={p.link}
+              target='_blank'
+              class='flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors group-hover:translate-x-0.5 duration-200'
+            >
+              <span class='truncate'>{p.name}</span>
+              <svg
+                xmlns='http://www.w3.org/2000/svg'
+                width='12'
+                height='12'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+                stroke-linecap='round'
+                stroke-linejoin='round'
+                class='opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-muted-foreground'
               >
-                {p.name}
-                <svg
-                  xmlns='http://www.w3.org/2000/svg'
-                  width='12'
-                  height='12'
-                  viewBox='0 0 24 24'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-width='2'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                  class='opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground'
-                >
-                  <path d='M7 17l9.2-9.2M17 17V7H7' />
-                </svg>
-              </a>
-            </td>
-            <td class='w-28 px-4 py-4 text-center align-middle'>
-              <span
-                class={`inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${difficultyColor[p.difficulty]}`}
-              >
-                {p.difficulty}
-              </span>
-            </td>
-          </tr>
-        ))
-      }
-    </tbody>
-  </table>
+                <path d='M7 17l9.2-9.2M17 17V7H7' />
+              </svg>
+            </a>
+          </div>
+
+          <!-- Difficulty Badge -->
+          <div class='w-24 flex justify-center'>
+            <DifficultyBadge difficulty={p.difficulty} />
+          </div>
+        </div>
+      ))
+    }
+  </div>
 </div>
+
+<style>
+  /* Custom Checkbox Checkmark */
+  input[type='checkbox'] {
+    appearance: none;
+    position: relative;
+  }
+  input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 45%;
+    width: 5px;
+    height: 9px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+</style>
 
