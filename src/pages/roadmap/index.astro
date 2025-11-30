@@ -1,6 +1,7 @@
 ﻿---
 import PageLayout from '@/layouts/CommonPage.astro'
 import RoadmapDrawer from '@/components/roadmap/RoadmapDrawer.astro'
+import ActivityGraph from '@/components/roadmap/ActivityGraph.astro'
 
 type Topic = {
   title: string
@@ -169,6 +170,14 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
 </div>
 
   <RoadmapDrawer topics={topics} />
+
+  <!-- Activity Graph -->
+  <div class='mt-12 mb-8'>
+    <h2 class='text-2xl font-bold mb-4'>Activity</h2>
+    <div class='border rounded-xl p-4 bg-card'>
+      <ActivityGraph />
+    </div>
+  </div>
 
   <!-- List View Section -->
   <div class='mt-12'>

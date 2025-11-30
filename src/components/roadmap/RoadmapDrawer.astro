@@ -216,14 +216,41 @@ const { topics } = Astro.props
   // Problem Checkbox Delegation
   problemsEl.addEventListener('change', (e) => {
     if (e.target.classList.contains('prob-check')) {
-      const link = e.target.dataset.link
-      if (e.target.checked) {
-        progress[link] = true
+      const checkbox = e.target
+      const link = checkbox.dataset.link
+
+      // Save progress
+      const currentProgress = { ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }
+      
+      // Activity Tracking Logic
+      const activity = { ...JSON.parse(localStorage.getItem('roadmap_activity') || '{}') }
+      const today = new Date().toISOString().split('T')[0]
+      const currentCount = activity[today] || 0
+
+      if (checkbox.checked) {
+        currentProgress[link] = true
+        // Increment activity
+        activity[today] = currentCount + 1
       } else {
-        delete progress[link]
+        delete currentProgress[link]
+        // Decrement activity (optional, but keeps it accurate to "current status")
+        // If you want "historical contribution" (only goes up), remove this else block's decrement
+        if (currentCount > 0) {
+           activity[today] = currentCount - 1
+        }
       }
-      save()
-      if (activeTopicId) updateDrawerProgress(activeTopicId)
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(currentProgress))
+      localStorage.setItem('roadmap_activity', JSON.stringify(activity))
+      
+      // Dispatch event for ActivityGraph to update
+      window.dispatchEvent(new CustomEvent('roadmap-updated'))
+
+      // Update global progress variable to reflect changes
+      progress = currentProgress;
+
+      updateAllProgress() // This updates node and list progress
+      if (activeTopicId) updateDrawerProgress(activeTopicId) // This updates the drawer's progress
     }
   })
 

@@ -1,0 +1,98 @@
+---
+---
+
+<div class='w-full overflow-x-auto pb-4'>
+  <div class='min-w-[800px]'>
+    <div class='flex gap-1' id='activity-grid'>
+      {/* Grid will be populated by JS */}
+    </div>
+    <div class='mt-2 flex items-center justify-end gap-2 text-xs text-muted-foreground'>
+      <span>Less</span>
+      <div class='flex gap-1'>
+        <div class='h-3 w-3 rounded-sm bg-muted'></div>
+        <div class='h-3 w-3 rounded-sm bg-green-200 dark:bg-green-900'></div>
+        <div class='h-3 w-3 rounded-sm bg-green-400 dark:bg-green-700'></div>
+        <div class='h-3 w-3 rounded-sm bg-green-600 dark:bg-green-500'></div>
+        <div class='h-3 w-3 rounded-sm bg-green-800 dark:bg-green-300'></div>
+      </div>
+      <span>More</span>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  function renderActivityGraph() {
+    const grid = document.getElementById('activity-grid')
+    if (!grid) return
+
+    // Get activity data from localStorage
+    const activityData = JSON.parse(localStorage.getItem('roadmap_activity') || '{}')
+
+    // Generate last 365 days
+    const today = new Date()
+    const oneYearAgo = new Date()
+    oneYearAgo.setFullYear(today.getFullYear() - 1)
+
+    // Adjust start date to align with Sunday
+    const dayOfWeek = oneYearAgo.getDay()
+    oneYearAgo.setDate(oneYearAgo.getDate() - dayOfWeek)
+
+    const weeks = []
+    let currentWeek = []
+    let currentDate = new Date(oneYearAgo)
+
+    while (currentDate <= today) {
+      const dateStr = currentDate.toISOString().split('T')[0]
+      const count = activityData[dateStr] || 0
+      
+      // Determine color intensity
+      let colorClass = 'bg-muted'
+      if (count > 0) colorClass = 'bg-green-200 dark:bg-green-900'
+      if (count > 2) colorClass = 'bg-green-400 dark:bg-green-700'
+      if (count > 4) colorClass = 'bg-green-600 dark:bg-green-500'
+      if (count > 6) colorClass = 'bg-green-800 dark:bg-green-300'
+
+      currentWeek.push({
+        date: dateStr,
+        count,
+        colorClass
+      })
+
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek)
+        currentWeek = []
+      }
+
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+    // Push remaining days
+    if (currentWeek.length > 0) {
+      weeks.push(currentWeek)
+    }
+
+    // Render HTML
+    grid.innerHTML = weeks.map(week => `
+      <div class="flex flex-col gap-1">
+        ${week.map(day => `
+          <div 
+            class="h-3 w-3 rounded-sm ${day.colorClass} hover:ring-1 hover:ring-ring transition-all cursor-pointer relative group"
+            data-date="${day.date}"
+            data-count="${day.count}"
+          >
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 w-max rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md border border-border">
+              ${day.count} problems on ${day.date}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `).join('')
+  }
+
+  // Initial render
+  renderActivityGraph()
+
+  // Listen for updates
+  window.addEventListener('roadmap-updated', () => {
+    renderActivityGraph()
+  })
+</script>
