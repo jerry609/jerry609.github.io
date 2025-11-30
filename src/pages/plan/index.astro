@@ -1,0 +1,77 @@
+---
+import PageLayout from '@/layouts/CommonPage.astro'
+
+interface TodoItem {
+  title: string
+  type: 'blog' | 'concept' | 'other'
+  status: 'todo' | 'done' | 'in-progress'
+  link?: string
+}
+
+interface DailyPlan {
+  date: string
+  items: TodoItem[]
+}
+
+const plans: DailyPlan[] = [
+  {
+    date: '2025-12-01',
+    items: [
+      { title: '深入理解 Astro Content Collections', type: 'concept', status: 'todo' },
+      { title: '撰写「我的2025」年度总结', type: 'blog', status: 'in-progress', link: '/blog/my-2025' }
+    ]
+  },
+  {
+    date: '2025-11-30',
+    items: [
+      { title: '搭建 Claude Code 生态项目博客', type: 'blog', status: 'done', link: '/blog/claude-code-ecosystem' },
+      { title: '创建 Murmurs 页面', type: 'other', status: 'done', link: '/murmurs' }
+    ]
+  }
+]
+---
+
+<PageLayout title="Plan">
+  <div class="max-w-3xl mx-auto mt-8">
+    <div class="space-y-12">
+      {plans.map((plan) => (
+        <div class="relative pl-8 before:absolute before:left-[7px] before:top-2 before:h-full before:w-[2px] before:bg-border last:before:hidden">
+          <div class="absolute left-0 top-2 h-4 w-4 rounded-full bg-primary border-4 border-background"></div>
+          <h3 class="text-xl font-bold mb-6">{plan.date}</h3>
+          <div class="space-y-4">
+            {plan.items.map((item) => (
+              <div class="flex items-center gap-4 p-4 rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent/50">
+                <div class={`w-3 h-3 rounded-full shrink-0 ${
+                  item.status === 'done' ? 'bg-green-500' :
+                  item.status === 'in-progress' ? 'bg-yellow-500' :
+                  'bg-gray-300 dark:bg-gray-600'
+                }`} title={item.status} />
+                
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-3 mb-1">
+                    <span class={`font-medium truncate ${item.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
+                      {item.title}
+                    </span>
+                    <span class={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold ${
+                      item.type === 'blog' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                      item.type === 'concept' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' :
+                      'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                    }`}>
+                      {item.type}
+                    </span>
+                  </div>
+                </div>
+
+                {item.link && (
+                  <a href={item.link} class="shrink-0 p-2 rounded-full hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Go to link">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</PageLayout>
