@@ -1,7 +1,6 @@
 ---
 import { Image } from 'astro:assets'
 
-import { Quote } from 'astro-pure/advanced'
 import { PostPreview } from 'astro-pure/components/pages'
 import { getBlogCollection, sortMDByDate } from 'astro-pure/server'
 import { Button, Card, Icon, Label } from 'astro-pure/user'
@@ -188,6 +187,6 @@ if (!images[imagePath])
         <SkillLayout title='Backend' skills={backend} />
       </Section>
     </div>
-    <Quote class='mt-12' />
+    <div class='mt-12 text-center italic text-muted-foreground'>如其所是</div>
   </main>
 </PageLayout>
