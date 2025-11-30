@@ -610,7 +610,209 @@ const topics: Record<string, Topic> = {
   'bit-manipulation': {
     title: '位运算',
     prerequisites: [],
-    problems: []
+    rootSection: {
+      title: '位运算',
+      children: [
+        {
+          title: '一、基础题',
+          children: [
+            {
+              title: '§1.1 基础',
+              problems: [
+                { id: '3370', title: '仅含置位位的最小整数', score: '1199' },
+                { id: '3226', title: '使两个整数相等的位更改次数', score: '1247' },
+                { id: '1356', title: '根据数字二进制下 1 的数目排序', score: '1258' },
+                { id: '461', title: '汉明距离', score: '1282' },
+                { id: '2220', title: '转换数字的最少位翻转次数', score: '1282', desc: '同 461 题' },
+                { id: '1342', title: '将数字变成 0 的操作次数', desc: '做到 O(1)' },
+                { id: '476', title: '数字的补数', desc: '做到 O(1)' },
+                { id: '1009', title: '十进制整数的反码', desc: '同 476 题' },
+                { id: '868', title: '二进制间距', score: '1307' },
+                { id: '2917', title: '找出数组中的 K-or 值', score: '1389' },
+                { id: '693', title: '交替位二进制数' },
+                { id: '2657', title: '找到两个数组的前缀公共数组' },
+                { id: '面试题 05.01', title: '插入' },
+                { id: '231', title: '2 的幂' },
+                { id: '342', title: '4 的幂' },
+                { id: '191', title: '位 1 的个数' },
+                { id: '338', title: '比特位计数', desc: '也可以 DP' },
+                { id: '2595', title: '奇偶位数', desc: '做到 O(1)' },
+                { id: '2154', title: '将找到的值乘以 2', desc: '要求：O(n) 时间，O(1) 空间' },
+                { id: '3211', title: '生成不含相邻零的二进制字符串' }
+              ]
+            },
+            {
+              title: '§1.2 用位运算代替数组操作',
+              problems: [
+                { id: '3690', title: '拆分合并数组' }
+              ]
+            }
+          ]
+        },
+        {
+          title: '二、异或（XOR）的性质',
+          desc: '本质是模 2 剩余系的加法。',
+          problems: [
+            { id: '1486', title: '数组异或操作', score: '1181' },
+            { id: '1720', title: '解码异或后的数组', score: '1284' },
+            { id: '2433', title: '找出前缀异或的原始数组', score: '1367' },
+            { id: '1310', title: '子数组异或查询', score: '1460' },
+            { id: '2683', title: '相邻值的按位异或', score: '1518' },
+            { id: '1829', title: '每个查询的最大异或值', score: '1523' },
+            { id: '2997', title: '使数组异或和等于 K 的最少操作次数', score: '1525' },
+            { id: '1442', title: '形成两个异或相等数组的三元组数目', score: '1525' },
+            { id: '2429', title: '最小异或', score: '1532' },
+            { id: '2527', title: '查询数组异或美丽值', score: '1550' },
+            { id: '2317', title: '操作后的最大异或和', score: '1679' },
+            { id: '2588', title: '统计美丽子数组数目', score: '1697' },
+            { id: '2564', title: '子字符串异或查询', score: '1959' },
+            { id: '1734', title: '解码异或后的排列', score: '2024' },
+            { id: '2857', title: '统计距离为 k 的点对', score: '2082' },
+            { id: '1803', title: '统计异或值在范围内的数对有多少', score: '2479' },
+            { id: '3215', title: '用偶数异或设置位计数三元组 II', vip: true }
+          ]
+        },
+        {
+          title: '三、与或（AND/OR）的性质',
+          desc: 'AND 的数越多，结果越小。\nOR 的数越多，结果越大。',
+          children: [
+            {
+              title: '§3.1 基础',
+              problems: [
+                { id: '2980', title: '检查按位或是否存在尾随零', score: '1234' },
+                { id: '1318', title: '或运算的最小翻转次数', score: '1383' },
+                { id: '2419', title: '按位与最大的最长子数组', score: '1496' },
+                { id: '2871', title: '将数组分割成最多数目的子数组', score: '1750' },
+                { id: '2401', title: '最长优雅子数组', score: '1750' },
+                { id: '2680', title: '最大或值', score: '1912', desc: '可以做到 O(1) 额外空间' },
+                { id: '3133', title: '数组最后一个元素的最小值', score: '1935' },
+                { id: '3108', title: '带权图里旅途的最小代价', score: '2109' },
+                { id: '3117', title: '划分数组得到最小的值之和', score: '2735' },
+                { id: '3125', title: '使得按位与结果为 0 的最大数字', vip: true }
+              ]
+            },
+            {
+              title: '§3.2 AND/OR LogTrick',
+              desc: 'LogTrick 入门教程，包含原地写法，以及额外维护一个列表的写法。\n\n模板：\n```python\n# 对于每个右端点 i，计算所有子数组的或值，打印这些或值的分布范围（子数组左端点范围）\n# 时间复杂度 O(nlogU)，其中 U = max(nums)\ndef logTrick(nums: List[int]) -> None:\n    or_left = []  # (子数组或值，最小左端点)\n    for i, x in enumerate(nums):\n        # 计算以 i 为右端点的子数组或值\n        for p in or_left:\n            p[0] |= x  # **根据题目修改**\n        # x 单独一个数作为子数组\n        or_left.append([x, i])\n\n        # 原地去重（相同或值只保留最左边的）\n        idx = 1\n        for j in range(1, len(or_left)):\n            if or_left[j][0] != or_left[j - 1][0]:\n                or_left[idx] = or_left[j]\n                idx += 1\n        del or_left[idx:]\n\n        print(i, x)\n        for k, (or_val, left) in enumerate(or_left):\n            right = or_left[k + 1][1] - 1 if k < len(or_left) - 1 else i\n            # 对于左端点在 [left, right]，右端点为 i 的子数组，OR 值都是 or_val\n            print(left, right, or_val)\n```',
+              problems: [
+                { id: '3171', title: '找到按位或最接近 K 的子数组', desc: '例题' },
+                { id: '1521', title: '找到最接近目标值的函数值', desc: '同 3171 题，OR 改成 AND' },
+                { id: '3097', title: '或值至少为 K 的最短子数组 II', score: '1891' },
+                { id: '2411', title: '按位或最大的最小子数组长度', score: '1938' },
+                { id: '3209', title: '子数组按位与值为 K 的数目', score: '2050' },
+                { id: '898', title: '子数组按位或操作' }
+              ]
+            },
+            {
+              title: '§3.3 GCD LogTrick',
+              problems: [
+                { id: '2447', title: '最大公因数等于 K 的子数组数目', desc: '非暴力做法' },
+                { id: '2654', title: '使数组所有元素变成 1 的最少操作次数', desc: '非暴力做法' },
+                { id: '3605', title: '数组的最小稳定性因子', score: '2410' },
+                { id: '3574', title: '最大子数组 GCD 分数', desc: '非暴力做法' },
+                { id: '2941', title: '子数组的最大 GCD-Sum', vip: true }
+              ]
+            }
+          ]
+        },
+        {
+          title: '四、拆位 / 贡献法',
+          children: [
+            {
+              title: '§4.1 基础',
+              problems: [
+                { id: '477', title: '汉明距离总和' },
+                { id: '1863', title: '找出所有子集的异或总和再求和', desc: '可以做到 O(n) 时间' },
+                { id: '2425', title: '所有数对的异或和', score: '1622', desc: '可以做到 O(n+m) 时间' },
+                { id: '2275', title: '按位与结果大于零的最长组合', score: '1642' },
+                { id: '1835', title: '所有数对按位与结果的异或和', score: '1825', desc: '也有恒等式做法' },
+                { id: '3688', title: '偶数的按位或运算', desc: '看我题解中的思考题（解答见评论）' },
+                { id: '2505', title: '所有子序列和的按位或', vip: true }
+              ]
+            },
+            {
+              title: '§4.2 十进制拆位',
+              problems: [
+                { id: '3153', title: '所有数对中数位不同之和', score: '1645' }
+              ]
+            }
+          ]
+        },
+        {
+          title: '五、试填法',
+          problems: [
+            { id: '421', title: '数组中两个数的最大异或值' },
+            { id: '2935', title: '找出强数对的最大异或值 II', score: '2349' },
+            { id: '3007', title: '价值和小于等于 K 的最大数字' },
+            { id: '3145', title: '大数组元素的乘积', score: '2859' },
+            { id: '3022', title: '给定操作次数内使剩余元素的或值最小', score: '2918' },
+            { id: '3287', title: '求出数组中最大序列值', desc: '做到 O(nUlogU)，其中 U=2^7' },
+            { id: '3344', title: '最大尺寸数组', vip: true }
+          ]
+        },
+        {
+          title: '六、恒等式',
+          problems: [
+            { id: '1835', title: '所有数对按位与结果的异或和', score: '1825' },
+            { id: '2354', title: '优质数对的数目', score: '2076' }
+          ]
+        },
+        {
+          title: '七、线性基',
+          desc: '模板（最大异或和）：\n```python\nclass XorBasis:\n    # n 为值域最大值 U 的二进制长度，例如 U=1e9 时 n=30\n    def __init__(self, n: int):\n        self.b = [0] * n\n\n    def insert(self, x: int) -> None:\n        b = self.b\n        # 从高到低遍历，保证计算 max_xor 的时候，参与 XOR 的基的最高位（或者说二进制长度）是互不相同的\n        for i in range(len(b) - 1, -1, -1):\n            if x >> i:  # 由于大于 i 的位都被我们异或成了 0，所以 x >> i 的结果只能是 0 或 1\n                if b[i] == 0:  # x 和之前的基是线性无关的\n                    b[i] = x  # 新增一个基，最高位为 i\n                    return\n                x ^= b[i]  # 保证每个基的二进制长度互不相同\n        # 正常循环结束，此时 x=0，说明一开始的 x 可以被已有基表出，不是一个线性无关基\n\n    def max_xor(self) -> int:\n        b = self.b\n        res = 0\n        # 从高到低贪心：越高的位，越必须是 1\n        # 由于每个位的基至多一个，所以每个位只需考虑异或一个基，若能变大，则异或之\n        for i in range(len(b) - 1, -1, -1):\n            if res ^ b[i] > res:  # 手写 max 更快\n                res ^= b[i]\n        return res\n```',
+          problems: [
+            { id: '3681', title: '子序列最大 XOR 值', desc: '模板题' },
+            { id: '3630', title: '划分数组得到最大异或运算和与运算之和', score: '2744' }
+          ]
+        },
+        {
+          title: '八、思维题',
+          desc: '贪心、脑筋急转弯等。',
+          problems: [
+            { id: '2546', title: '执行逐位运算使字符串相等', score: '1605' },
+            { id: '1558', title: '得到目标数组的最少函数调用次数', score: '1637' },
+            { id: '2571', title: '将整数减少到零需要的最少操作数', score: '1649', desc: '巧妙结论' },
+            { id: '3315', title: '构造最小位运算数组 II', score: '1715' },
+            { id: '2568', title: '最小无法得到的或值', score: '1754' },
+            { id: '3644', title: '排序排列', score: '1775' },
+            { id: '2509', title: '查询树中环的长度', score: '1948' },
+            { id: '2939', title: '最大异或乘积', score: '2128' },
+            { id: '2749', title: '得到整数零需要执行的最少操作数', score: '2132' },
+            { id: '2835', title: '使子序列的和等于目标的最少操作次数', score: '2207' },
+            { id: '2897', title: '对数组执行操作使平方和最大', score: '2301' },
+            { id: '810', title: '黑板异或游戏', score: '2341' },
+            { id: '3064', title: '使用按位查询猜测数字 I', vip: true },
+            { id: '3094', title: '使用按位查询猜测数字 II', vip: true }
+          ]
+        },
+        {
+          title: '九、其他',
+          problems: [
+            { id: '136', title: '只出现一次的数字' },
+            { id: '260', title: '只出现一次的数字 III' },
+            { id: '2965', title: '找出缺失和重复的数字' },
+            { id: '137', title: '只出现一次的数字 II' },
+            { id: '645', title: '错误的集合' },
+            { id: '190', title: '颠倒二进制位' },
+            { id: '371', title: '两整数之和' },
+            { id: '201', title: '数字范围按位与' },
+            { id: '2438', title: '二的幂数组中查询范围内的乘积', score: '1610' },
+            { id: '1680', title: '连接连续二进制数字', score: '1630' },
+            { id: '1261', title: '在受污染的二叉树中查找元素', desc: '做到 O(1) 额外空间' },
+            { id: '89', title: '格雷编码' },
+            { id: '1238', title: '循环码排列', score: '1775' },
+            { id: '982', title: '按位与为零的三元组', score: '2085' },
+            { id: '3307', title: '找出第 K 个字符 II', score: '2232' },
+            { id: '1611', title: '使整数变为 0 的最少操作次数', score: '2345' },
+            { id: '3514', title: '不同 XOR 三元组的数目 II', desc: '快速沃尔什变换（FWT）' },
+            { id: 'LCP 81', title: '与非的谜题' },
+            { id: '751', title: 'IP 到 CIDR', vip: true },
+            { id: '3595', title: '一次或两次', vip: true, desc: '结合 137 和 260 的思路' },
+            { id: '3141', title: '最大汉明距离', vip: true }
+          ]
+        }
+      ]
+    }
   },
   'graph-algorithms': {
     title: '图论算法',
