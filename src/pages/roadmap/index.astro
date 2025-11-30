@@ -817,7 +817,947 @@ const topics: Record<string, Topic> = {
   'graph-algorithms': {
     title: '图论算法',
     prerequisites: [],
-    problems: []
+    problems: [],
+    rootSection: {
+      "title": "图论算法",
+      "children": [
+            {
+                  "title": "一、图论遍历",
+                  "children": [
+                        {
+                              "title": "§1.1 深度优先搜索（DFS）",
+                              "problems": [
+                                    {
+                                          "id": "547",
+                                          "title": "省份数量"
+                                    },
+                                    {
+                                          "id": "1971",
+                                          "title": "寻找图中是否存在路径"
+                                    },
+                                    {
+                                          "id": "797",
+                                          "title": "所有可能的路径",
+                                          "score": "1383"
+                                    },
+                                    {
+                                          "id": "1306",
+                                          "title": "跳跃游戏 III",
+                                          "score": "1397"
+                                    },
+                                    {
+                                          "id": "841",
+                                          "title": "钥匙和房间",
+                                          "score": "1412"
+                                    },
+                                    {
+                                          "id": "2316",
+                                          "title": "统计无向图中无法互相到达点对数",
+                                          "score": "1604"
+                                    },
+                                    {
+                                          "id": "1319",
+                                          "title": "连通网络的操作次数",
+                                          "score": "1633"
+                                    },
+                                    {
+                                          "id": "2492",
+                                          "title": "两个城市间路径的最小分数",
+                                          "score": "1680"
+                                    },
+                                    {
+                                          "id": "3310",
+                                          "title": "移除可疑的方法",
+                                          "score": "1711"
+                                    },
+                                    {
+                                          "id": "2685",
+                                          "title": "统计完全连通分量的数量",
+                                          "score": "1769"
+                                    },
+                                    {
+                                          "id": "2192",
+                                          "title": "有向无环图中一个节点的所有祖先",
+                                          "score": "1788"
+                                    },
+                                    {
+                                          "id": "3387",
+                                          "title": "两天自由外汇交易后的最大货币数",
+                                          "score": "1788"
+                                    },
+                                    {
+                                          "id": "924",
+                                          "title": "尽量减少恶意软件的传播",
+                                          "score": "1869"
+                                    },
+                                    {
+                                          "id": "2101",
+                                          "title": "引爆最多的炸弹",
+                                          "score": "1880"
+                                    },
+                                    {
+                                          "id": "721",
+                                          "title": "账户合并"
+                                    },
+                                    {
+                                          "id": "207",
+                                          "title": "课程表 三色标记法判环"
+                                    },
+                                    {
+                                          "id": "802",
+                                          "title": "找到最终的安全状态",
+                                          "score": "1962"
+                                    },
+                                    {
+                                          "id": "3695",
+                                          "title": "交换元素后的最大交替和",
+                                          "score": "1984"
+                                    },
+                                    {
+                                          "id": "928",
+                                          "title": "尽量减少恶意软件的传播 II",
+                                          "score": "1985"
+                                    },
+                                    {
+                                          "id": "2092",
+                                          "title": "找出知晓秘密的所有专家",
+                                          "score": "2004"
+                                    },
+                                    {
+                                          "id": "3108",
+                                          "title": "带权图里旅途的最小代价",
+                                          "score": "2109"
+                                    },
+                                    {
+                                          "id": "LCP 07",
+                                          "title": "传递信息"
+                                    },
+                                    {
+                                          "id": "261",
+                                          "title": "以图判树",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "323",
+                                          "title": "无向图中连通分量的数目",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "1298",
+                                          "title": "你能从盒子里获得的最大糖果数",
+                                          "score": "1825"
+                                    }
+                              ],
+                              "desc": "找连通块、判断是否有环（如 207 题）等。部分题目做法不止一种。\n模板（计算每个连通块的大小）：\nPython3\nJava\nC++\nGo\ndef solve(n: int, edges: List[List[int]]) -> List[int]:\n# 节点编号从 0 到 n-1\ng = [[] for _ in range(n)]\nfor x, y in edges:\ng[x].append(y)\ng[y].append(x)  # 无向图\nvis = [False] * n\ndef dfs(x: int) -> int:\nvis[x] = True  # 避免重复访问节点\nsize = 1\nfor y in g[x]:\nif not vis[y]:\nsize += dfs(y)\nreturn size\n# 计算每个连通块的大小\nans = []\nfor i, b in enumerate(vis):\nif not b:  # i 没有访问过\nsize = dfs(i)\nans.append(size)\nreturn ans\n思维扩展："
+                        },
+                        {
+                              "title": "§1.2 广度优先搜索（BFS）",
+                              "problems": [
+                                    {
+                                          "id": "3243",
+                                          "title": "新增道路查询后的最短距离 I",
+                                          "score": "1568"
+                                    },
+                                    {
+                                          "id": "1311",
+                                          "title": "获取你好友已观看的视频",
+                                          "score": "1653"
+                                    },
+                                    {
+                                          "id": "3015",
+                                          "title": "按距离统计房屋对数目 I",
+                                          "score": "1658"
+                                    },
+                                    {
+                                          "id": "1129",
+                                          "title": "颜色交替的最短路径",
+                                          "score": "1780"
+                                    },
+                                    {
+                                          "id": "2039",
+                                          "title": "网络空闲的时刻",
+                                          "score": "1865"
+                                    },
+                                    {
+                                          "id": "2608",
+                                          "title": "图中的最短环",
+                                          "score": "1904"
+                                    },
+                                    {
+                                          "id": "815",
+                                          "title": "公交路线",
+                                          "score": "1964"
+                                    }
+                              ],
+                              "desc": "求最短路等。要求边权都是 1（或者说都是同一个正数）。\n模板（单源最短路）：\nPython3\nJava\nC++\nGo\n# 计算从 start 到各个节点的最短路长度\n# 如果节点不可达，则最短路长度为 -1\n# 节点编号从 0 到 n-1，边权均为 1\ndef bfs(n: int, edges: List[List[int]], start: int) -> List[int]:\ng = [[] for _ in range(n)]\nfor x, y in edges:\ng[x].append(y)\ng[y].append(x)  # 无向图\ndis = [-1] * n  # -1 表示尚未访问到\ndis[start] = 0\nq = deque([start])\nwhile q:\nx = q.popleft()\nfor y in g[x]:\nif dis[y] < 0:\ndis[y] = dis[x] + 1\nq.append(y)\nreturn dis"
+                        },
+                        {
+                              "title": "§1.3 图论建模 + BFS 最短路",
+                              "problems": [
+                                    {
+                                          "id": "433",
+                                          "title": "最小基因变化"
+                                    },
+                                    {
+                                          "id": "1284",
+                                          "title": "转化为全零矩阵的最少反转次数",
+                                          "score": "1811"
+                                    },
+                                    {
+                                          "id": "773",
+                                          "title": "滑动谜题",
+                                          "score": "1815"
+                                    },
+                                    {
+                                          "id": "752",
+                                          "title": "打开转盘锁",
+                                          "score": "1878"
+                                    },
+                                    {
+                                          "id": "3690",
+                                          "title": "拆分合并数组",
+                                          "score": "1982"
+                                    },
+                                    {
+                                          "id": "301",
+                                          "title": "删除无效的括号"
+                                    },
+                                    {
+                                          "id": "514",
+                                          "title": "自由之路"
+                                    },
+                                    {
+                                          "id": "847",
+                                          "title": "访问所有节点的最短路径",
+                                          "score": "2201"
+                                    },
+                                    {
+                                          "id": "854",
+                                          "title": "相似度为 K 的字符串",
+                                          "score": "2377"
+                                    },
+                                    {
+                                          "id": "127",
+                                          "title": "单词接龙 双向广搜"
+                                    },
+                                    {
+                                          "id": "488",
+                                          "title": "祖玛游戏"
+                                    },
+                                    {
+                                          "id": "1197",
+                                          "title": "进击的骑士",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "3141",
+                                          "title": "最大汉明距离",
+                                          "vip": true
+                                    }
+                              ],
+                              "desc": "把状态抽象成图上的点，用 BFS 遍历这张图，计算从初始状态到目标状态的最短路长度。\n可以锻炼状态设计能力。"
+                        }
+                  ]
+            },
+            {
+                  "title": "专题：跳跃游戏",
+                  "children": [
+                        {
+                              "title": "专题：跳跃游戏",
+                              "problems": [
+                                    {
+                                          "id": "2998",
+                                          "title": "使 X 和 Y 相等的最少操作次数",
+                                          "score": "1795"
+                                    },
+                                    {
+                                          "id": "1345",
+                                          "title": "跳跃游戏 IV",
+                                          "score": "1810"
+                                    },
+                                    {
+                                          "id": "2059",
+                                          "title": "转化数字的最小运算数",
+                                          "score": "1850"
+                                    },
+                                    {
+                                          "id": "1654",
+                                          "title": "到家的最少跳跃次数",
+                                          "score": "2124"
+                                    },
+                                    {
+                                          "id": "3629",
+                                          "title": "通过质数传送到达终点的最少跳跃次数",
+                                          "score": "2139"
+                                    },
+                                    {
+                                          "id": "LCP 09",
+                                          "title": "最小跳跃次数"
+                                    }
+                              ],
+                              "desc": "注：关于网格图的 DFS 和 BFS，请看 网格图题单。"
+                        }
+                  ]
+            },
+            {
+                  "title": "二、拓扑排序",
+                  "children": [
+                        {
+                              "title": "§2.1 拓扑排序",
+                              "problems": [
+                                    {
+                                          "id": "210",
+                                          "title": "课程表 II"
+                                    },
+                                    {
+                                          "id": "2115",
+                                          "title": "从给定原材料中找到所有可以做出的菜",
+                                          "score": "1679"
+                                    },
+                                    {
+                                          "id": "2392",
+                                          "title": "给定条件下构造矩阵",
+                                          "score": "1961"
+                                    },
+                                    {
+                                          "id": "802",
+                                          "title": "找到最终的安全状态",
+                                          "score": "1962"
+                                    },
+                                    {
+                                          "id": "1591",
+                                          "title": "奇怪的打印机 II",
+                                          "score": "2291"
+                                    },
+                                    {
+                                          "id": "1203",
+                                          "title": "项目管理",
+                                          "score": "2419"
+                                    },
+                                    {
+                                          "id": "2603",
+                                          "title": "收集树中金币",
+                                          "score": "2712"
+                                    },
+                                    {
+                                          "id": "LCR 114",
+                                          "title": "火星词典"
+                                    },
+                                    {
+                                          "id": "444",
+                                          "title": "序列重建拓扑序是否唯一",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "3481",
+                                          "title": "应用替换也可以记忆化搜索",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "269",
+                                          "title": "火星词典",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "1059",
+                                          "title": "从始点到终点的所有路径",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "310",
+                                          "title": "最小高度树"
+                                    },
+                                    {
+                                          "id": "1361",
+                                          "title": "验证二叉树"
+                                    }
+                              ],
+                              "desc": "模板：\nPython3\nJava\nC++\nGo\n# 返回有向无环图（DAG）的其中一个拓扑序\n# 如果图中有环，返回空列表\n# 节点编号从 0 到 n-1\ndef topologicalSort(n: int, edges: List[List[int]]) -> List[int]:\ng = [[] for _ in range(n)]\nin_deg = [0] * n\nfor x, y in edges:\ng[x].append(y)\nin_deg[y] += 1  # 统计 y 的先修课数量\ntopo_order = []\nq = deque(i for i, d in enumerate(in_deg) if d == 0)  # 没有先修课，可以直接上\nwhile q:\nx = q.popleft()\ntopo_order.append(x)\nfor y in g[x]:\nin_deg[y] -= 1  # 修完 x 后，y 的先修课数量减一\nif in_deg[y] == 0:  # y 的先修课全部上完\nq.append(y)  # 加入学习队列\nif len(topo_order) < n:  # 图中有环\nreturn []\nreturn topo_order\n学习拓扑排序前，请先完成  1557. 可以到达所有点的最少点数目，有助于理解拓扑排序。\n思维扩展："
+                        },
+                        {
+                              "title": "§2.2 在拓扑序上 DP",
+                              "problems": [
+                                    {
+                                          "id": "851",
+                                          "title": "喧闹和富有",
+                                          "score": "1783"
+                                    },
+                                    {
+                                          "id": "2050",
+                                          "title": "并行课程 III",
+                                          "score": "2084"
+                                    },
+                                    {
+                                          "id": "3620",
+                                          "title": "恢复网络路径"
+                                    },
+                                    {
+                                          "id": "1857",
+                                          "title": "有向图中最大颜色值",
+                                          "score": "2313"
+                                    },
+                                    {
+                                          "id": "1136",
+                                          "title": "并行课程",
+                                          "vip": true
+                                    }
+                              ],
+                              "desc": "一般是刷表法。"
+                        },
+                        {
+                              "title": "§2.3 基环树",
+                              "problems": [
+                                    {
+                                          "id": "2359",
+                                          "title": "找到离给定两个节点最近的节点",
+                                          "score": "1715"
+                                    },
+                                    {
+                                          "id": "2360",
+                                          "title": "图中的最长环",
+                                          "score": "1897"
+                                    },
+                                    {
+                                          "id": "684",
+                                          "title": "冗余连接 做法不止一种"
+                                    },
+                                    {
+                                          "id": "685",
+                                          "title": "冗余连接 II"
+                                    },
+                                    {
+                                          "id": "2876",
+                                          "title": "有向图访问计数",
+                                          "score": "2210"
+                                    },
+                                    {
+                                          "id": "2127",
+                                          "title": "参加会议的最多员工数",
+                                          "score": "2449"
+                                    },
+                                    {
+                                          "id": "LCP 21",
+                                          "title": "追逐游戏"
+                                    },
+                                    {
+                                          "id": "2204",
+                                          "title": "无向图中到环的距离",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "287",
+                                          "title": "寻找重复数"
+                                    }
+                              ],
+                              "desc": "基环树介绍\n2836. 在传球游戏中最大化函数值 2769 做法不止一种\n思维扩展："
+                        }
+                  ]
+            },
+            {
+                  "title": "三、最短路",
+                  "children": [
+                        {
+                              "title": "§3.1 单源最短路：Dijkstra 算法",
+                              "problems": [
+                                    {
+                                          "id": "743",
+                                          "title": "网络延迟时间"
+                                    },
+                                    {
+                                          "id": "3341",
+                                          "title": "到达最后一个房间的最少时间 I 1721 网格图"
+                                    },
+                                    {
+                                          "id": "3112",
+                                          "title": "访问消失节点的最少时间 1757 理解原理"
+                                    },
+                                    {
+                                          "id": "2642",
+                                          "title": "设计可以求最短路径的图类",
+                                          "score": "1811"
+                                    },
+                                    {
+                                          "id": "3604",
+                                          "title": "有向图中到达终点的最少时间",
+                                          "score": "1845"
+                                    },
+                                    {
+                                          "id": "1514",
+                                          "title": "概率最大的路径",
+                                          "score": "1846"
+                                    },
+                                    {
+                                          "id": "3650",
+                                          "title": "边反转的最小路径总成本",
+                                          "score": "1854"
+                                    },
+                                    {
+                                          "id": "3342",
+                                          "title": "到达最后一个房间的最少时间 II 1862 网格图"
+                                    },
+                                    {
+                                          "id": "1631",
+                                          "title": "最小体力消耗路径 1948 网格图 做法不止一种"
+                                    },
+                                    {
+                                          "id": "1786",
+                                          "title": "从第一个节点出发到最后一个节点的受限路径数",
+                                          "score": "2079"
+                                    },
+                                    {
+                                          "id": "3123",
+                                          "title": "最短路径中的边",
+                                          "score": "2093"
+                                    },
+                                    {
+                                          "id": "1976",
+                                          "title": "到达目的地的方案数",
+                                          "score": "2095"
+                                    },
+                                    {
+                                          "id": "778",
+                                          "title": "水位上升的泳池中游泳 2097 网格图 做法不止一种"
+                                    },
+                                    {
+                                          "id": "2662",
+                                          "title": "前往目标的最小代价",
+                                          "score": "2154"
+                                    },
+                                    {
+                                          "id": "3377",
+                                          "title": "使两个整数相等的数位操作",
+                                          "score": "2186"
+                                    },
+                                    {
+                                          "id": "2045",
+                                          "title": "到达目的地的第二短时间 2202 也可以 BFS"
+                                    },
+                                    {
+                                          "id": "3419",
+                                          "title": "图的最大边权的最小值 2243 做法不止一种"
+                                    },
+                                    {
+                                          "id": "882",
+                                          "title": "细分图中的可到达节点",
+                                          "score": "2328"
+                                    },
+                                    {
+                                          "id": "2203",
+                                          "title": "得到要求路径的最小带权子图",
+                                          "score": "2364"
+                                    },
+                                    {
+                                          "id": "2577",
+                                          "title": "在网格图中访问一个格子的最少时间 2382 网格图"
+                                    },
+                                    {
+                                          "id": "818",
+                                          "title": "赛车",
+                                          "score": "2392"
+                                    },
+                                    {
+                                          "id": "1928",
+                                          "title": "规定时间内到达终点的最小花费",
+                                          "score": "2413"
+                                    },
+                                    {
+                                          "id": "787",
+                                          "title": "K 站中转内最便宜的航班 类似 1928 题"
+                                    },
+                                    {
+                                          "id": "2699",
+                                          "title": "修改图中的边权",
+                                          "score": "2874"
+                                    },
+                                    {
+                                          "id": "1810",
+                                          "title": "隐藏网格下的最小消耗路径",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "2093",
+                                          "title": "前往目标城市的最小费用",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "2473",
+                                          "title": "购买苹果的最低成本",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "2737",
+                                          "title": "找到最近的标记节点",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "LCP 35",
+                                          "title": "电动车游城市"
+                                    },
+                                    {
+                                          "id": "3599",
+                                          "title": "划分数组得到最小 XOR 做法不止一种"
+                                    },
+                                    {
+                                          "id": "3594",
+                                          "title": "所有人渡河所需的最短时间",
+                                          "score": "2604"
+                                    },
+                                    {
+                                          "id": "2714",
+                                          "title": "找到 K 次跨越的最短路径",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "2589",
+                                          "title": "完成所有任务的最少时间 2381 做法不止一种"
+                                    }
+                              ],
+                              "desc": "Dijkstra 算法介绍\n模板：\nPython3\nJava\nC++\nGo\n# 返回从起点 start 到每个点的最短路长度 dis，如果节点 x 不可达，则 dis[x] = math.inf\n# 要求：没有负数边权\n# 时间复杂度 O(n + mlogm)，其中 m 是 edges 的长度。注意堆中有 O(m) 个元素\ndef shortestPathDijkstra(n: int, edges: List[List[int]], start: int) -> List[int]:\n# 注：如果节点编号从 1 开始（而不是从 0 开始），可以把 n 加一\ng = [[] for _ in range(n)]  # 邻接表\nfor x, y, wt in edges:\ng[x].append((y, wt))\n# g[y].append((x, wt))  # 无向图加上这行\ndis = [inf] * n\ndis[start] = 0  # 起点到自己的距离是 0\nh = [(0, start)]  # 堆中保存 (起点到节点 x 的最短路长度，节点 x)\nwhile h:\ndis_x, x = heappop(h)\nif dis_x > dis[x]:  # x 之前出堆过\ncontinue\nfor y, wt in g[x]:\nnew_dis_y = dis_x + wt\nif new_dis_y < dis[y]:\ndis[y] = new_dis_y  # 更新 x 的邻居的最短路\n# 懒更新堆：只插入数据，不更新堆中数据\n# 相同节点可能有多个不同的 new_dis_y，除了最小的 new_dis_y，其余值都会触发上面的 continue\nheappush(h, (new_dis_y, y))\nreturn dis\n分层图最短路：\nSPFA 与差分约束：\n力扣上的 SPFA 题很少。"
+                        },
+                        {
+                              "title": "§3.2 全源最短路：Floyd 算法",
+                              "problems": [
+                                    {
+                                          "id": "2642",
+                                          "title": "设计可以求最短路径的图类 1811 动态加边"
+                                    },
+                                    {
+                                          "id": "1334",
+                                          "title": "阈值距离内邻居最少的城市",
+                                          "score": "1855"
+                                    },
+                                    {
+                                          "id": "2976",
+                                          "title": "转换字符串的最小成本 I",
+                                          "score": "1882"
+                                    },
+                                    {
+                                          "id": "2959",
+                                          "title": "关闭分部的可行集合数目",
+                                          "score": "2077"
+                                    },
+                                    {
+                                          "id": "2977",
+                                          "title": "转换字符串的最小成本 II",
+                                          "score": "2696"
+                                    },
+                                    {
+                                          "id": "1462",
+                                          "title": "课程表 IV",
+                                          "score": "1693"
+                                    },
+                                    {
+                                          "id": "2101",
+                                          "title": "引爆最多的炸弹"
+                                    }
+                              ],
+                              "desc": "Floyd 算法本质是三维 DP。\n带你发明 Floyd 算法：从记忆化搜索到递推\n模板：\nPython3\nJava\nC++\nGo\n# 返回一个二维列表，其中 (i,j) 这一项表示从 i 到 j 的最短路长度\n# 如果无法从 i 到 j，则最短路长度为 math.inf\n# 允许负数边权\n# 如果计算完毕后，存在 i，使得从 i 到 i 的最短路长度小于 0，说明图中有负环\n# 节点编号从 0 到 n-1\n# 时间复杂度 O(n^3 + m)，其中 m 是 edges 的长度\ndef shortestPathFloyd(self, n: int, edges: List[List[int]]) -> List[List[int]]:\nf = [[inf] * n for _ in range(n)]\nfor i in range(n):\nf[i][i] = 0\nfor x, y, wt in edges:\nf[x][y] = min(f[x][y], wt)  # 如果有重边，取边权最小值\nf[y][x] = min(f[y][x], wt)  # 无向图\nfor k in range(n):\nfor i in range(n):\nif f[i][k] == inf:  # 针对稀疏图的优化\ncontinue\nfor j in range(n):\nf[i][j] = min(f[i][j], f[i][k] + f[k][j])\nreturn f\nBitset 优化 Floyd"
+                        }
+                  ]
+            },
+            {
+                  "title": "四、最小生成树",
+                  "children": [
+                        {
+                              "title": "四、最小生成树",
+                              "problems": [
+                                    {
+                                          "id": "1584",
+                                          "title": "连接所有点的最小费用",
+                                          "score": "1858"
+                                    },
+                                    {
+                                          "id": "3600",
+                                          "title": "升级后最大生成树稳定性 2301 做法不止一种"
+                                    },
+                                    {
+                                          "id": "1489",
+                                          "title": "找到最小生成树里的关键边和伪关键边",
+                                          "score": "2572"
+                                    },
+                                    {
+                                          "id": "1135",
+                                          "title": "最低成本连通所有城市",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "1168",
+                                          "title": "水资源分配优化",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "3219",
+                                          "title": "切蛋糕的最小总开销 II"
+                                    }
+                              ],
+                              "desc": "思维扩展"
+                        }
+                  ]
+            },
+            {
+                  "title": "五、欧拉路径/欧拉回路",
+                  "children": [
+                        {
+                              "title": "五、欧拉路径/欧拉回路",
+                              "problems": [
+                                    {
+                                          "id": "332",
+                                          "title": "重新安排行程"
+                                    },
+                                    {
+                                          "id": "753",
+                                          "title": "破解保险箱",
+                                          "score": "2274"
+                                    },
+                                    {
+                                          "id": "2097",
+                                          "title": "合法重新排列数对",
+                                          "score": "2651"
+                                    }
+                              ],
+                              "desc": ""
+                        }
+                  ]
+            },
+            {
+                  "title": "六、强连通分量/双连通分量",
+                  "children": [
+                        {
+                              "title": "六、强连通分量/双连通分量",
+                              "problems": [
+                                    {
+                                          "id": "1192",
+                                          "title": "查找集群内的关键连接",
+                                          "score": "2085"
+                                    },
+                                    {
+                                          "id": "1568",
+                                          "title": "使陆地分离的最少天数",
+                                          "score": "2209"
+                                    },
+                                    {
+                                          "id": "LCP 54",
+                                          "title": "夺回据点"
+                                    },
+                                    {
+                                          "id": "3383",
+                                          "title": "施法所需最低符文数量",
+                                          "vip": true
+                                    }
+                              ],
+                              "desc": ""
+                        }
+                  ]
+            },
+            {
+                  "title": "七、二分图染色",
+                  "children": [
+                        {
+                              "title": "七、二分图染色",
+                              "problems": [
+                                    {
+                                          "id": "785",
+                                          "title": "判断二分图",
+                                          "score": "1625"
+                                    },
+                                    {
+                                          "id": "886",
+                                          "title": "可能的二分法",
+                                          "score": "1795"
+                                    },
+                                    {
+                                          "id": "3710",
+                                          "title": "最大划分因子"
+                                    }
+                              ],
+                              "desc": "关于二分图的最大匹配，见下面网络流的题目。其中标有「一对一」的题目也可以用带权二分图最大匹配做。"
+                        }
+                  ]
+            },
+            {
+                  "title": "八、网络流",
+                  "children": [
+                        {
+                              "title": "八、网络流",
+                              "problems": [
+                                    {
+                                          "id": "1947",
+                                          "title": "最大兼容性评分和 1704 一对一"
+                                    },
+                                    {
+                                          "id": "3376",
+                                          "title": "破解锁的最少时间 I 1793 一对一"
+                                    },
+                                    {
+                                          "id": "2850",
+                                          "title": "将石头分散到网格图的最少移动次数 2001 一对多"
+                                    },
+                                    {
+                                          "id": "1879",
+                                          "title": "两个数组最小的异或值之和 2145 一对一"
+                                    },
+                                    {
+                                          "id": "1349",
+                                          "title": "参加考试的最大学生数 2386 二分图最大独立集"
+                                    },
+                                    {
+                                          "id": "2172",
+                                          "title": "数组的最大与和 2392 多对一"
+                                    },
+                                    {
+                                          "id": "3276",
+                                          "title": "选择矩阵中单元格的最大得分",
+                                          "score": "2403"
+                                    },
+                                    {
+                                          "id": "1595",
+                                          "title": "连通两组点的最小成本 2538 带权二分图最小边覆盖"
+                                    },
+                                    {
+                                          "id": "3257",
+                                          "title": "放三个车的价值之和最大 II",
+                                          "score": "2553"
+                                    },
+                                    {
+                                          "id": "LCP 04",
+                                          "title": "覆盖 二分图最大匹配·模板题"
+                                    },
+                                    {
+                                          "id": "LCP 38",
+                                          "title": "守卫城堡 最小割"
+                                    },
+                                    {
+                                          "id": "1820",
+                                          "title": "最多邀请的个数二分图最大匹配·模板题",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "2403",
+                                          "title": "杀死所有怪物的最短时间同 3376 题",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "3385",
+                                          "title": "破解锁的最少时间 II同 3376 题",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "1066",
+                                          "title": "校园自行车分配 II一对一，但不是完美匹配",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "2123",
+                                          "title": "使矩阵中的 1 互不相邻的最小操作数二分图最大独立集",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "2463",
+                                          "title": "最小移动总距离 做到 O((n+m)log(n+m))"
+                                    }
+                              ],
+                              "desc": "模拟费用流"
+                        }
+                  ]
+            },
+            {
+                  "title": "九、其他",
+                  "children": [
+                        {
+                              "title": "九、其他",
+                              "problems": [
+                                    {
+                                          "id": "1042",
+                                          "title": "不邻接植花",
+                                          "score": "1712"
+                                    },
+                                    {
+                                          "id": "1761",
+                                          "title": "一个图中连通三元组的最小度数",
+                                          "score": "2005"
+                                    },
+                                    {
+                                          "id": "2508",
+                                          "title": "添加边使所有节点度数都为偶数",
+                                          "score": "2060"
+                                    },
+                                    {
+                                          "id": "1579",
+                                          "title": "保证图可完全遍历",
+                                          "score": "2132"
+                                    },
+                                    {
+                                          "id": "2065",
+                                          "title": "最大化一张图中的路径价值",
+                                          "score": "2178"
+                                    },
+                                    {
+                                          "id": "1697",
+                                          "title": "检查边长度限制的路径是否存在",
+                                          "score": "2300"
+                                    },
+                                    {
+                                          "id": "2242",
+                                          "title": "节点序列的最大得分",
+                                          "score": "2304"
+                                    },
+                                    {
+                                          "id": "2493",
+                                          "title": "将节点分成尽可能多的组 2415 推荐"
+                                    },
+                                    {
+                                          "id": "1782",
+                                          "title": "统计点对的数目",
+                                          "score": "2457"
+                                    },
+                                    {
+                                          "id": "3666",
+                                          "title": "使二进制字符串全为 1 的最少操作次数 2477 进阶 BFS / Gale-Ryser 定理"
+                                    },
+                                    {
+                                          "id": "2612",
+                                          "title": "最少翻转操作数 2824 进阶 BFS"
+                                    },
+                                    {
+                                          "id": "3435",
+                                          "title": "最短公共超序列的字母出现频率",
+                                          "score": "3028"
+                                    },
+                                    {
+                                          "id": "466",
+                                          "title": "统计重复个数 做到 O(∣s"
+                                    },
+                                    {
+                                          "id": "LCP 16",
+                                          "title": "游乐园的游览计划"
+                                    },
+                                    {
+                                          "id": "277",
+                                          "title": "搜寻名人",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "1724",
+                                          "title": "检查边长度限制的路径是否存在 II",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "2077",
+                                          "title": "殊途同归三元环计数",
+                                          "vip": true
+                                    },
+                                    {
+                                          "id": "3656",
+                                          "title": "判断是否存在简单图Erdős–Gallai 定理",
+                                          "vip": true
+                                    }
+                              ],
+                              "desc": "1\n​\n∣+∣s\n2\n​\n∣)"
+                        }
+                  ]
+            }
+      ]
+}
   },
   'dynamic-programming': {
     title: '动态规划',
