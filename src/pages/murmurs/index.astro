@@ -2,18 +2,18 @@
 import { getCollection, render } from 'astro:content'
 import PageLayout from '@/layouts/CommonPage.astro'
 
-const moodEntries = await getCollection('mood', ({ data }) => !data.draft)
-const sortedMoods = moodEntries.sort((a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf())
+const murmursEntries = await getCollection('murmurs', ({ data }) => !data.draft)
+const sortedMurmurs = murmursEntries.sort((a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf())
 
-const renderedMoods = await Promise.all(sortedMoods.map(async (entry) => {
+const renderedMurmurs = await Promise.all(sortedMurmurs.map(async (entry) => {
   const { Content } = await render(entry)
   return { entry, Content }
 }))
 ---
 
-<PageLayout title='Mood' comment>
+<PageLayout title='Murmurs' comment>
   <div class='space-y-8 mt-4'>
-    {renderedMoods.map(({ entry, Content }) => (
+    {renderedMurmurs.map(({ entry, Content }) => (
       <div class='relative pl-8 before:absolute before:left-0 before:top-2 before:h-full before:w-[2px] before:bg-border last:before:hidden'>
         <div class='absolute left-[-5px] top-2 h-3 w-3 rounded-full bg-primary border-2 border-background'></div>
         <div class='text-sm text-muted-foreground mb-2'>

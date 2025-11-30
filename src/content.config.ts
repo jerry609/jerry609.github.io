@@ -56,9 +56,9 @@ const docs = defineCollection({
     })
 })
 
-// Define mood collection
-const mood = defineCollection({
-  loader: glob({ base: './src/content/mood', pattern: '**/*.{md,mdx}' }),
+// Define murmurs collection
+const murmurs = defineCollection({
+  loader: glob({ base: './src/content/murmurs', pattern: '**/*.{md,mdx}' }),
   schema: () =>
     z.object({
       publishDate: z.coerce.date(),
@@ -69,4 +69,4 @@ const mood = defineCollection({
     })
 })
 
-export const collections = { blog, docs, mood }
+export const collections = { blog, docs, murmurs }
