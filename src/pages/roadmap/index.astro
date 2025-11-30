@@ -414,7 +414,92 @@ const topics: Record<string, Topic> = {
   'monotonic-stack': {
     title: '单调栈',
     prerequisites: [],
-    problems: []
+    rootSection: {
+      title: '单调栈',
+      children: [
+        {
+          title: '一、单调栈',
+          children: [
+            {
+              title: '§1.1 基础',
+              desc: '原理讲解：单调栈【基础算法精讲 26】\n\n模板：\n```python\ndef nearestGreater(nums: List[int]) -> Tuple[List[int], List[int]]:\n    n = len(nums)\n    # left[i] 是 nums[i] 左侧最近的严格大于 nums[i] 的数的下标，若不存在则为 -1\n    left = [-1] * n\n    st = []\n    for i, x in enumerate(nums):\n        while st and nums[st[-1]] <= x:  # 如果求严格小于，改成 >=\n            st.pop()\n        if st:\n            left[i] = st[-1]\n        st.append(i)\n\n    # right[i] 是 nums[i] 右侧最近的严格大于 nums[i] 的数的下标，若不存在则为 n\n    right = [n] * n\n    st = []\n    for i in range(n - 1, -1, -1):\n        x = nums[i]\n        while st and nums[st[-1]] <= x:\n            st.pop()\n        if st:\n            right[i] = st[-1]\n        st.append(i)\n\n    return left, right\n```',
+              problems: [
+                { id: '739', title: '每日温度' },
+                { id: '1475', title: '商品折扣后的最终价格', desc: '非暴力做法' },
+                { id: '496', title: '下一个更大元素 I' },
+                { id: '503', title: '下一个更大元素 II' },
+                { id: '901', title: '股票价格跨度', score: '1709' },
+                { id: '853', title: '车队' }
+              ]
+            },
+            {
+              title: '§1.2 进阶（选做）',
+              problems: [
+                { id: '1019', title: '链表中的下一个更大节点', score: '1571' },
+                { id: '768', title: '最多能完成排序的块 II', score: '1788' },
+                { id: '654', title: '最大二叉树', desc: '做到 O(n)' },
+                { id: '456', title: '132 模式', desc: '约 2000' },
+                { id: '3113', title: '边界元素是最大值的子数组数目', score: '2046' },
+                { id: '2866', title: '美丽塔 II', score: '2072' },
+                { id: '1944', title: '队列中可以看到的人数', score: '2105' },
+                { id: '2454', title: '下一个更大元素 IV', score: '2175' },
+                { id: '1130', title: '叶值的最小代价生成树', desc: 'O(n) 做法' },
+                { id: '2289', title: '使数组按非递减顺序排列', score: '2482' },
+                { id: '1776', title: '车队 II', score: '2531' },
+                { id: '2736', title: '最大和查询', score: '2533' },
+                { id: '3420', title: '统计 K 次操作以内得到非递减子数组的数目', score: '2855', desc: '树形结构' },
+                { id: '3221', title: '最大数组跳跃得分 II', vip: true },
+                { id: '1966', title: '未排序数组中的可被二分搜索的数', vip: true },
+                { id: '2832', title: '每个元素为最大值的最大范围', vip: true },
+                { id: '2282', title: '在一个网格中可以看到的人数', vip: true },
+                { id: '3555', title: '排序每个滑动窗口中最小的子数组', vip: true, desc: '非暴力做法' },
+                { id: '962', title: '最大宽度坡', score: '1608' },
+                { id: '3542', title: '将所有元素变为 0 的最少操作次数', score: '1890' },
+                { id: '1124', title: '表现良好的最长时间段', score: '1908' }
+              ]
+            }
+          ]
+        },
+        {
+          title: '二、矩形',
+          problems: [
+            { id: '84', title: '柱状图中最大的矩形' },
+            { id: '1793', title: '好子数组的最大分数', score: '1946' },
+            { id: '85', title: '最大矩形' },
+            { id: '221', title: '最大正方形' },
+            { id: '42', title: '接雨水', desc: '做法不止一种' },
+            { id: '1504', title: '统计全 1 子矩形' },
+            { id: '1277', title: '统计全为 1 的正方形子矩阵' },
+            { id: '755', title: '倒水', vip: true }
+          ]
+        },
+        {
+          title: '三、贡献法',
+          problems: [
+            { id: '907', title: '子数组的最小值之和', score: '1976' },
+            { id: '2104', title: '子数组范围和（最大值-最小值）', desc: 'O(n) 做法难度大约 2000' },
+            { id: '1856', title: '子数组最小乘积的最大值', score: '2051' },
+            { id: '2818', title: '操作使得分最大', score: '2397' },
+            { id: '2281', title: '巫师的总力量和（最小值×和）', score: '2621' },
+            { id: '3430', title: '最多 K 个元素的子数组的最值之和', score: '2645' },
+            { id: '3359', title: '查找最大元素不超过 K 的有序子矩阵', vip: true, desc: '矩形' },
+            { id: '2334', title: '元素值大于变化阈值的子数组', score: '2381' },
+            { id: '2962', title: '统计最大元素出现至少 K 次的子数组', desc: '我的题解 中的思考题（解答见评论）' }
+          ]
+        },
+        {
+          title: '四、最小字典序',
+          problems: [
+            { id: '402', title: '移掉 K 位数字', desc: '约 1800' },
+            { id: '1673', title: '找出最具竞争力的子序列', score: '1802' },
+            { id: '316', title: '去除重复字母', score: '2185', desc: '扩展：重复个数不超过 limit' },
+            { id: '1081', title: '不同字符的最小子序列', desc: '同 316 题' },
+            { id: '321', title: '拼接最大数' },
+            { id: '2030', title: '含特定字母的最小子序列', score: '2562' }
+          ]
+        }
+      ]
+    }
   },
   'grid-graph': {
     title: '网格图',
