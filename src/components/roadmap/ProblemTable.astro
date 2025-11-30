@@ -4,73 +4,71 @@ interface Props {
 }
 
 const { problems } = Astro.props
+
+const difficultyColor = {
+  Easy: 'text-green-600 bg-green-500/10 border-green-500/20 dark:text-green-400 dark:bg-green-500/10 dark:border-green-400/20',
+  Medium:
+    'text-yellow-600 bg-yellow-500/10 border-yellow-500/20 dark:text-yellow-400 dark:bg-yellow-500/10 dark:border-yellow-400/20',
+  Hard: 'text-red-600 bg-red-500/10 border-red-500/20 dark:text-red-400 dark:bg-red-500/10 dark:border-red-400/20'
+}
 ---
 
-<div class="w-full overflow-hidden rounded-xl border border-border">
-  <table class="w-full text-sm table-fixed">
-    <thead class="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border">
+<div class='w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm'>
+  <table class='w-full text-sm table-fixed'>
+    <thead class='text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border'>
       <tr>
-        <th scope="col" class="w-20 px-4 py-3 text-center">Status</th>
-        <th scope="col" class="px-4 py-3 text-left">Problem</th>
-        <th scope="col" class="w-28 px-4 py-3 text-center">Difficulty</th>
+        <th scope='col' class='w-16 px-4 py-3 text-center font-medium'>Status</th>
+        <th scope='col' class='px-4 py-3 text-left font-medium'>Problem</th>
+        <th scope='col' class='w-28 px-4 py-3 text-center font-medium'>Difficulty</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-border">
-      {problems.map((p) => (
-        <tr class="bg-card hover:bg-muted/30 transition-colors">
-          <td class="w-20 px-4 py-4 text-center align-middle">
-            <input type='checkbox' class='prob-check' data-link={p.link} />
-          </td>
-          <td class="px-4 py-4 text-left align-middle">
-            <a href={p.link} target='_blank' class='text-primary font-medium hover:underline decoration-primary/50 underline-offset-4'>{p.name}</a>
-          </td>
-          <td class="w-28 px-4 py-4 text-center align-middle">
-            <span class={`diff diff-${p.difficulty.toLowerCase()}`}>{p.difficulty}</span>
-          </td>
-        </tr>
-      ))}
+    <tbody class='divide-y divide-border'>
+      {
+        problems.map((p) => (
+          <tr class='group hover:bg-muted/40 transition-colors'>
+            <td class='w-16 px-4 py-4 text-center align-middle'>
+              <div class='flex justify-center'>
+                <input
+                  type='checkbox'
+                  class='prob-check h-5 w-5 rounded border-muted-foreground/50 bg-transparent text-primary focus:ring-primary/50 focus:ring-offset-0 transition-all cursor-pointer'
+                  data-link={p.link}
+                />
+              </div>
+            </td>
+            <td class='px-4 py-4 text-left align-middle'>
+              <a
+                href={p.link}
+                target='_blank'
+                class='text-foreground font-medium hover:text-primary transition-colors flex items-center gap-2 group-hover:translate-x-1 transition-transform duration-200'
+              >
+                {p.name}
+                <svg
+                  xmlns='http://www.w3.org/2000/svg'
+                  width='12'
+                  height='12'
+                  viewBox='0 0 24 24'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-width='2'
+                  stroke-linecap='round'
+                  stroke-linejoin='round'
+                  class='opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground'
+                >
+                  <path d='M7 17l9.2-9.2M17 17V7H7' />
+                </svg>
+              </a>
+            </td>
+            <td class='w-28 px-4 py-4 text-center align-middle'>
+              <span
+                class={`inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${difficultyColor[p.difficulty]}`}
+              >
+                {p.difficulty}
+              </span>
+            </td>
+          </tr>
+        ))
+      }
     </tbody>
   </table>
 </div>
 
-<style>
-  .diff {
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 0.25rem 0.6rem;
-    border-radius: 9999px;
-    display: inline-block;
-    min-width: 60px;
-  }
-  .diff-easy { color: #22c55e; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.2); }
-  .diff-medium { color: #eab308; background: rgba(234, 179, 8, 0.15); border: 1px solid rgba(234, 179, 8, 0.2); }
-  .diff-hard { color: #ef4444; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.2); }
-  
-  input[type='checkbox'] {
-    appearance: none;
-    width: 1.25rem;
-    height: 1.25rem;
-    border: 2px solid hsl(var(--muted-foreground));
-    border-radius: 4px;
-    background: transparent;
-    cursor: pointer;
-    position: relative;
-    transition: all 0.2s;
-    vertical-align: middle;
-  }
-  input[type='checkbox']:checked {
-    background: #22c55e;
-    border-color: #22c55e;
-  }
-  input[type='checkbox']:checked::after {
-    content: '';
-    position: absolute;
-    left: 5px;
-    top: 1px;
-    width: 5px;
-    height: 10px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-  }
-</style>

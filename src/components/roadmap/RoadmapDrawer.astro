@@ -1,0 +1,235 @@
+---
+import ProblemTable from './ProblemTable.astro'
+
+interface Props {
+  topics: Record<string, any>
+}
+
+const { topics } = Astro.props
+---
+
+<div
+  id='roadmap-drawer'
+  class='fixed inset-0 z-50 hidden'
+  aria-labelledby='drawer-title'
+  role='dialog'
+  aria-modal='true'
+>
+  <!-- Backdrop -->
+  <div
+    class='fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity opacity-0'
+    id='drawer-backdrop'
+  >
+  </div>
+
+  <!-- Drawer Panel -->
+  <div
+    class='fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-card shadow-2xl transition-transform duration-300 translate-x-full border-l border-border flex flex-col'
+    id='drawer-panel'
+  >
+    <!-- Header -->
+    <div class='flex items-center justify-between px-6 py-4 border-b border-border'>
+      <h2 id='drawer-title' class='text-2xl font-bold tracking-tight'>Topic Title</h2>
+      <button
+        id='drawer-close'
+        class='rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors'
+      >
+        <svg
+          xmlns='http://www.w3.org/2000/svg'
+          width='24'
+          height='24'
+          viewBox='0 0 24 24'
+          fill='none'
+          stroke='currentColor'
+          stroke-width='2'
+          stroke-linecap='round'
+          stroke-linejoin='round'><line x1='18' y1='6' x2='6' y2='18'></line><line x1='6' y1='6' x2='18' y2='18'
+          ></line></svg
+        >
+        <span class='sr-only'>Close</span>
+      </button>
+    </div>
+
+    <!-- Content Scroll Area -->
+    <div class='flex-1 overflow-y-auto p-6'>
+      <!-- Progress Section -->
+      <div class='mb-8'>
+        <div class='flex justify-between items-end mb-2'>
+          <span class='text-sm font-medium text-muted-foreground'>Progress</span>
+          <span id='drawer-count' class='text-sm font-medium'>0 / 0 (0%)</span>
+        </div>
+        <div class='h-2.5 w-full bg-muted rounded-full overflow-hidden'>
+          <div id='drawer-progress' class='h-full bg-primary transition-all duration-500 ease-out' style='width: 0%'
+          >
+          </div>
+        </div>
+      </div>
+
+      <!-- Prerequisites Section -->
+      <div class='mb-8'>
+        <h3 class='text-lg font-semibold mb-4 flex items-center gap-2'>
+          <div class='w-1 h-5 bg-primary rounded-full'></div>
+          Prerequisites
+        </h3>
+        <div id='drawer-prereqs' class='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+          <!-- Prereq cards injected here -->
+        </div>
+      </div>
+
+      <!-- Problems Section -->
+      <div>
+        <h3 class='text-lg font-semibold mb-4 flex items-center gap-2'>
+          <div class='w-1 h-5 bg-primary rounded-full'></div>
+          Problems
+        </h3>
+        <div id='drawer-problems'>
+          <!-- Problem table injected here -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden Templates for Problem Tables -->
+<div style='display: none;'>
+  {
+    Object.entries(topics).map(([id, topic]) => (
+      <template id={`problems-${id}`}>
+        <ProblemTable problems={topic.problems} />
+      </template>
+    ))
+  }
+</div>
+
+<script define:vars={{ topics }}>
+  const drawer = document.getElementById('roadmap-drawer')
+  const backdrop = document.getElementById('drawer-backdrop')
+  const panel = document.getElementById('drawer-panel')
+  const closeBtn = document.getElementById('drawer-close')
+  const titleEl = document.getElementById('drawer-title')
+  const countEl = document.getElementById('drawer-count')
+  const progressEl = document.getElementById('drawer-progress')
+  const prereqsEl = document.getElementById('drawer-prereqs')
+  const problemsEl = document.getElementById('drawer-problems')
+
+  let activeTopicId = null
+
+  // State Management
+  const STORAGE_KEY = 'algo-roadmap-progress'
+  let progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
+    updateAllProgress()
+  }
+
+  function updateAllProgress() {
+    Object.keys(topics).forEach((id) => {
+      const total = topics[id].problems.length
+      const completed = topics[id].problems.filter((p) => progress[p.link]).length
+      const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
+
+      // Update SVG Node Progress
+      const node = document.querySelector(`.node-box[data-id="${id}"] .node-progress`)
+      if (node) {
+        node.setAttribute('width', `${(percent / 100) * 180}`)
+        node.style.fill = percent === 100 ? '#22c55e' : '#60a5fa'
+      }
+
+      // Update List View Progress
+      const listBar = document.querySelector(`.list-progress-bar[data-id="${id}"]`)
+      if (listBar) {
+        listBar.style.width = `${percent}%`
+      }
+    })
+  }
+
+  function updateDrawerProgress(topicId) {
+    const total = topics[topicId].problems.length
+    const completed = topics[topicId].problems.filter((p) => progress[p.link]).length
+    const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
+
+    countEl.textContent = `${completed} / ${total} (${percent}%)`
+    progressEl.style.width = `${percent}%`
+  }
+
+  function openDrawer(id) {
+    const topic = topics[id]
+    if (!topic) return
+
+    activeTopicId = id
+    titleEl.textContent = topic.title
+
+    // Render Prerequisites
+    prereqsEl.innerHTML = topic.prerequisites
+      .map(
+        (p) => `
+      <div class="bg-muted/50 border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
+        <div class="font-medium text-foreground">${p.name}</div>
+        <div class="text-xs text-muted-foreground mt-1">${p.course}</div>
+      </div>
+    `
+      )
+      .join('')
+
+    // Render Problems
+    const template = document.getElementById(`problems-${id}`)
+    problemsEl.innerHTML = ''
+    if (template) {
+      const clone = template.content.cloneNode(true)
+      problemsEl.appendChild(clone)
+
+      // Restore checked state
+      problemsEl.querySelectorAll('.prob-check').forEach((cb) => {
+        if (progress[cb.dataset.link]) cb.checked = true
+      })
+    }
+
+    updateDrawerProgress(id)
+
+    // Show Drawer
+    drawer.classList.remove('hidden')
+    // Small delay to allow display:block to apply before transition
+    requestAnimationFrame(() => {
+      backdrop.classList.remove('opacity-0')
+      panel.classList.remove('translate-x-full')
+    })
+  }
+
+  function closeDrawer() {
+    backdrop.classList.add('opacity-0')
+    panel.classList.add('translate-x-full')
+
+    setTimeout(() => {
+      drawer.classList.add('hidden')
+      activeTopicId = null
+    }, 300)
+  }
+
+  // Event Listeners
+  closeBtn.addEventListener('click', closeDrawer)
+  backdrop.addEventListener('click', closeDrawer)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDrawer()
+  })
+
+  // Problem Checkbox Delegation
+  problemsEl.addEventListener('change', (e) => {
+    if (e.target.classList.contains('prob-check')) {
+      const link = e.target.dataset.link
+      if (e.target.checked) {
+        progress[link] = true
+      } else {
+        delete progress[link]
+      }
+      save()
+      if (activeTopicId) updateDrawerProgress(activeTopicId)
+    }
+  })
+
+  // Expose open function globally so index.astro can call it
+  window.openRoadmapDrawer = openDrawer
+
+  // Initial update
+  updateAllProgress()
+</script>
