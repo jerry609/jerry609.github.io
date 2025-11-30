@@ -9,220 +9,98 @@ type Topic = {
 }
 
 const topics: Record<string, Topic> = {
-  'arrays-hashing': {
-    title: 'Arrays & Hashing',
-    prerequisites: [
-      { name: 'Dynamic Arrays', course: 'DSA for Beginners' },
-      { name: 'Hash Tables', course: 'DSA for Beginners' }
-    ],
-    problems: [
-      { name: 'Contains Duplicate', difficulty: 'Easy', link: 'https://leetcode.com/problems/contains-duplicate/' },
-      { name: 'Valid Anagram', difficulty: 'Easy', link: 'https://leetcode.com/problems/valid-anagram/' },
-      { name: 'Two Sum', difficulty: 'Easy', link: 'https://leetcode.com/problems/two-sum/' },
-      { name: 'Group Anagrams', difficulty: 'Medium', link: 'https://leetcode.com/problems/group-anagrams/' },
-      { name: 'Top K Frequent Elements', difficulty: 'Medium', link: 'https://leetcode.com/problems/top-k-frequent-elements/' },
-      { name: 'Product of Array Except Self', difficulty: 'Medium', link: 'https://leetcode.com/problems/product-of-array-except-self/' },
-      { name: 'Valid Sudoku', difficulty: 'Medium', link: 'https://leetcode.com/problems/valid-sudoku/' },
-      { name: 'Longest Consecutive Sequence', difficulty: 'Medium', link: 'https://leetcode.com/problems/longest-consecutive-sequence/' }
-    ]
-  },
-  'two-pointers': {
-    title: 'Two Pointers',
-    prerequisites: [{ name: 'Pointer Techniques', course: 'DSA for Beginners' }],
-    problems: [
-      { name: 'Valid Palindrome', difficulty: 'Easy', link: 'https://leetcode.com/problems/valid-palindrome/' },
-      { name: 'Two Sum II', difficulty: 'Medium', link: 'https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/' },
-      { name: '3Sum', difficulty: 'Medium', link: 'https://leetcode.com/problems/3sum/' },
-      { name: 'Container With Most Water', difficulty: 'Medium', link: 'https://leetcode.com/problems/container-with-most-water/' },
-      { name: 'Trapping Rain Water', difficulty: 'Hard', link: 'https://leetcode.com/problems/trapping-rain-water/' }
-    ]
-  },
-  'stack': {
-    title: 'Stack',
-    prerequisites: [{ name: 'Call Stack', course: 'DSA for Beginners' }],
-    problems: [
-      { name: 'Valid Parentheses', difficulty: 'Easy', link: 'https://leetcode.com/problems/valid-parentheses/' },
-      { name: 'Min Stack', difficulty: 'Medium', link: 'https://leetcode.com/problems/min-stack/' },
-      { name: 'Daily Temperatures', difficulty: 'Medium', link: 'https://leetcode.com/problems/daily-temperatures/' },
-      { name: 'Largest Rectangle in Histogram', difficulty: 'Hard', link: 'https://leetcode.com/problems/largest-rectangle-in-histogram/' }
-    ]
+  'sliding-window-two-pointers': {
+    title: '滑动窗口与双指针',
+    prerequisites: [],
+    problems: []
   },
   'binary-search': {
-    title: 'Binary Search',
-    prerequisites: [{ name: 'Sorted Arrays', course: 'DSA for Beginners' }],
-    problems: [
-      { name: 'Binary Search', difficulty: 'Easy', link: 'https://leetcode.com/problems/binary-search/' },
-      { name: 'Search 2D Matrix', difficulty: 'Medium', link: 'https://leetcode.com/problems/search-a-2d-matrix/' },
-      { name: 'Koko Eating Bananas', difficulty: 'Medium', link: 'https://leetcode.com/problems/koko-eating-bananas/' },
-      { name: 'Median of Two Sorted Arrays', difficulty: 'Hard', link: 'https://leetcode.com/problems/median-of-two-sorted-arrays/' }
-    ]
+    title: '二分算法',
+    prerequisites: [],
+    problems: []
   },
-  'sliding-window': {
-    title: 'Sliding Window',
-    prerequisites: [{ name: 'Window Basics', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Best Time to Buy and Sell Stock', difficulty: 'Easy', link: 'https://leetcode.com/problems/best-time-to-buy-and-sell-stock/' },
-      { name: 'Longest Substring Without Repeating', difficulty: 'Medium', link: 'https://leetcode.com/problems/longest-substring-without-repeating-characters/' },
-      { name: 'Minimum Window Substring', difficulty: 'Hard', link: 'https://leetcode.com/problems/minimum-window-substring/' }
-    ]
+  'monotonic-stack': {
+    title: '单调栈',
+    prerequisites: [],
+    problems: []
   },
-  'linked-list': {
-    title: 'Linked List',
-    prerequisites: [{ name: 'Pointers', course: 'DSA for Beginners' }],
-    problems: [
-      { name: 'Reverse Linked List', difficulty: 'Easy', link: 'https://leetcode.com/problems/reverse-linked-list/' },
-      { name: 'Linked List Cycle', difficulty: 'Easy', link: 'https://leetcode.com/problems/linked-list-cycle/' },
-      { name: 'Reorder List', difficulty: 'Medium', link: 'https://leetcode.com/problems/reorder-list/' },
-      { name: 'LRU Cache', difficulty: 'Medium', link: 'https://leetcode.com/problems/lru-cache/' },
-      { name: 'Merge K Sorted Lists', difficulty: 'Hard', link: 'https://leetcode.com/problems/merge-k-sorted-lists/' }
-    ]
-  },
-  'trees': {
-    title: 'Trees',
-    prerequisites: [{ name: 'DFS / BFS', course: 'DSA for Beginners' }],
-    problems: [
-      { name: 'Invert Binary Tree', difficulty: 'Easy', link: 'https://leetcode.com/problems/invert-binary-tree/' },
-      { name: 'Validate BST', difficulty: 'Medium', link: 'https://leetcode.com/problems/validate-binary-search-tree/' },
-      { name: 'Binary Tree Maximum Path Sum', difficulty: 'Hard', link: 'https://leetcode.com/problems/binary-tree-maximum-path-sum/' }
-    ]
-  },
-  'tries': {
-    title: 'Tries',
-    prerequisites: [{ name: 'Prefix Trees', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Implement Trie', difficulty: 'Medium', link: 'https://leetcode.com/problems/implement-trie-prefix-tree/' },
-      { name: 'Word Search II', difficulty: 'Hard', link: 'https://leetcode.com/problems/word-search-ii/' }
-    ]
-  },
-  'heap': {
-    title: 'Heap / Priority Queue',
-    prerequisites: [{ name: 'Binary Heap', course: 'DSA for Beginners' }],
-    problems: [
-      { name: 'K Closest Points', difficulty: 'Medium', link: 'https://leetcode.com/problems/k-closest-points-to-origin/' },
-      { name: 'Find Median from Data Stream', difficulty: 'Hard', link: 'https://leetcode.com/problems/find-median-from-data-stream/' }
-    ]
-  },
-  'backtracking': {
-    title: 'Backtracking',
-    prerequisites: [{ name: 'Subsets & Permutations', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Subsets', difficulty: 'Medium', link: 'https://leetcode.com/problems/subsets/' },
-      { name: 'Combination Sum', difficulty: 'Medium', link: 'https://leetcode.com/problems/combination-sum/' },
-      { name: 'N-Queens', difficulty: 'Hard', link: 'https://leetcode.com/problems/n-queens/' }
-    ]
-  },
-  'graphs': {
-    title: 'Graphs',
-    prerequisites: [{ name: 'Adjacency List', course: 'DSA for Beginners' }],
-    problems: [
-      { name: 'Number of Islands', difficulty: 'Medium', link: 'https://leetcode.com/problems/number-of-islands/' },
-      { name: 'Course Schedule', difficulty: 'Medium', link: 'https://leetcode.com/problems/course-schedule/' },
-      { name: 'Word Ladder', difficulty: 'Hard', link: 'https://leetcode.com/problems/word-ladder/' }
-    ]
-  },
-  '1d-dp': {
-    title: '1-D DP',
-    prerequisites: [{ name: 'Memoization', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Climbing Stairs', difficulty: 'Easy', link: 'https://leetcode.com/problems/climbing-stairs/' },
-      { name: 'House Robber', difficulty: 'Medium', link: 'https://leetcode.com/problems/house-robber/' },
-      { name: 'Longest Increasing Subsequence', difficulty: 'Medium', link: 'https://leetcode.com/problems/longest-increasing-subsequence/' }
-    ]
-  },
-  'intervals': {
-    title: 'Intervals',
-    prerequisites: [{ name: 'Sorting', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Merge Intervals', difficulty: 'Medium', link: 'https://leetcode.com/problems/merge-intervals/' },
-      { name: 'Meeting Rooms II', difficulty: 'Medium', link: 'https://leetcode.com/problems/meeting-rooms-ii/' }
-    ]
-  },
-  'greedy': {
-    title: 'Greedy',
-    prerequisites: [{ name: 'Greedy Strategy', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Jump Game', difficulty: 'Medium', link: 'https://leetcode.com/problems/jump-game/' },
-      { name: 'Gas Station', difficulty: 'Medium', link: 'https://leetcode.com/problems/gas-station/' }
-    ]
-  },
-  'advanced-graphs': {
-    title: 'Advanced Graphs',
-    prerequisites: [{ name: 'Dijkstra', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Network Delay Time', difficulty: 'Medium', link: 'https://leetcode.com/problems/network-delay-time/' },
-      { name: 'Swim in Rising Water', difficulty: 'Hard', link: 'https://leetcode.com/problems/swim-in-rising-water/' }
-    ]
-  },
-  '2d-dp': {
-    title: '2-D DP',
-    prerequisites: [{ name: 'Knapsack', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Unique Paths', difficulty: 'Medium', link: 'https://leetcode.com/problems/unique-paths/' },
-      { name: 'Edit Distance', difficulty: 'Hard', link: 'https://leetcode.com/problems/edit-distance/' }
-    ]
+  'grid-graph': {
+    title: '网格图',
+    prerequisites: [],
+    problems: []
   },
   'bit-manipulation': {
-    title: 'Bit Manipulation',
-    prerequisites: [{ name: 'Bitwise Ops', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Single Number', difficulty: 'Easy', link: 'https://leetcode.com/problems/single-number/' },
-      { name: 'Reverse Integer', difficulty: 'Medium', link: 'https://leetcode.com/problems/reverse-integer/' }
-    ]
+    title: '位运算',
+    prerequisites: [],
+    problems: []
   },
-  'math-geometry': {
-    title: 'Math & Geometry',
-    prerequisites: [{ name: 'Matrix Ops', course: 'Advanced Algorithms' }],
-    problems: [
-      { name: 'Rotate Image', difficulty: 'Medium', link: 'https://leetcode.com/problems/rotate-image/' },
-      { name: 'Spiral Matrix', difficulty: 'Medium', link: 'https://leetcode.com/problems/spiral-matrix/' }
-    ]
+  'graph-algorithms': {
+    title: '图论算法',
+    prerequisites: [],
+    problems: []
+  },
+  'dynamic-programming': {
+    title: '动态规划',
+    prerequisites: [],
+    problems: []
+  },
+  'data-structures': {
+    title: '常用数据结构',
+    prerequisites: [],
+    problems: []
+  },
+  'math': {
+    title: '数学算法',
+    prerequisites: [],
+    problems: []
+  },
+  'greedy-thinking': {
+    title: '贪心与思维',
+    prerequisites: [],
+    problems: []
+  },
+  'linked-list-tree-backtracking': {
+    title: '链表、二叉树与回溯',
+    prerequisites: [],
+    problems: []
+  },
+  'strings': {
+    title: '字符串',
+    prerequisites: [],
+    problems: []
   }
 }
 
 const nodes = [
-  { id: 'arrays-hashing', x: 400, y: 30 },
-  { id: 'two-pointers', x: 180, y: 180 },
-  { id: 'stack', x: 620, y: 180 },
-  { id: 'binary-search', x: 50, y: 330 },
-  { id: 'sliding-window', x: 400, y: 330 },
-  { id: 'linked-list', x: 750, y: 330 },
-  { id: 'trees', x: 400, y: 480 },
-  { id: 'tries', x: 150, y: 630 },
-  { id: 'backtracking', x: 650, y: 630 },
-  { id: 'heap', x: 50, y: 780 },
-  { id: 'graphs', x: 400, y: 780 },
-  { id: '1d-dp', x: 750, y: 780 },
-  { id: 'intervals', x: 50, y: 930 },
-  { id: 'greedy', x: 230, y: 930 },
-  { id: 'advanced-graphs', x: 410, y: 930 },
-  { id: '2d-dp', x: 590, y: 930 },
-  { id: 'bit-manipulation', x: 770, y: 930 },
-  { id: 'math-geometry', x: 590, y: 1080 }
+  { id: 'sliding-window-two-pointers', x: 400, y: 50 },
+  { id: 'binary-search', x: 150, y: 200 },
+  { id: 'linked-list-tree-backtracking', x: 650, y: 200 },
+  { id: 'monotonic-stack', x: 150, y: 350 },
+  { id: 'data-structures', x: 400, y: 350 },
+  { id: 'strings', x: 650, y: 350 },
+  { id: 'grid-graph', x: 150, y: 500 },
+  { id: 'graph-algorithms', x: 400, y: 500 },
+  { id: 'greedy-thinking', x: 650, y: 500 },
+  { id: 'math', x: 150, y: 650 },
+  { id: 'bit-manipulation', x: 400, y: 650 },
+  { id: 'dynamic-programming', x: 400, y: 800 }
 ]
 
 const edges = [
-  ['arrays-hashing', 'two-pointers'],
-  ['arrays-hashing', 'stack'],
-  ['two-pointers', 'binary-search'],
-  ['two-pointers', 'sliding-window'],
-  ['stack', 'sliding-window'],
-  ['stack', 'linked-list'],
-  ['binary-search', 'trees'],
-  ['sliding-window', 'trees'],
-  ['linked-list', 'trees'],
-  ['trees', 'tries'],
-  ['trees', 'backtracking'],
-  ['tries', 'heap'],
-  ['backtracking', 'graphs'],
-  ['backtracking', '1d-dp'],
-  ['heap', 'intervals'],
-  ['heap', 'greedy'],
-  ['heap', 'advanced-graphs'],
-  ['graphs', 'advanced-graphs'],
-  ['graphs', '2d-dp'],
-  ['1d-dp', '2d-dp'],
-  ['1d-dp', 'bit-manipulation'],
-  ['2d-dp', 'math-geometry']
+  ['sliding-window-two-pointers', 'binary-search'],
+  ['sliding-window-two-pointers', 'linked-list-tree-backtracking'],
+  ['binary-search', 'monotonic-stack'],
+  ['linked-list-tree-backtracking', 'data-structures'],
+  ['linked-list-tree-backtracking', 'strings'],
+  ['monotonic-stack', 'grid-graph'],
+  ['data-structures', 'graph-algorithms'],
+  ['strings', 'greedy-thinking'],
+  ['grid-graph', 'graph-algorithms'],
+  ['graph-algorithms', 'math'],
+  ['graph-algorithms', 'bit-manipulation'],
+  ['math', 'dynamic-programming'],
+  ['bit-manipulation', 'dynamic-programming'],
+  ['greedy-thinking', 'dynamic-programming']
 ]
 
 const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
@@ -231,7 +109,7 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
 <PageLayout title='Algorithm Roadmap' {headings}>
   <p class='mb-6 text-muted-foreground'>
     点击节点查看题目列表，参考
-    <a href='https://neetcode.io/roadmap' target='_blank' class='text-primary hover:underline'>NeetCode</a>。
+    <a href='https://leetcode.cn/discuss/post/RvFUtj/' target='_blank' class='text-primary hover:underline'>灵茶山艾府 - 算法竞赛模板库</a>。
   </p>
 
   <div class='roadmap-container'>
