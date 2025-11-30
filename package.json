@@ -15,6 +15,7 @@
     "astro": "astro",
     "pure": "astro-pure",
     "new": "astro-pure new",
+    "ai:summary": "tsx scripts/ai-summary.ts",
     "format": "prettier --write  '**/*.{js,jsx,ts,tsx,md,mdx,astro}'",
     "lint": "eslint --fix 'src/**/*.{js,ts,jsx,tsx,astro}'",
     "yijiansilian": "bun lint && bun sync && bun check && bun format",
@@ -35,9 +36,12 @@
   },
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "^4.7.0",
+    "@types/glob": "^9.0.0",
     "@typescript-eslint/parser": "^8.47.0",
     "eslint": "^9.39.1",
     "eslint-plugin-astro": "^1.5.0",
+    "glob": "^13.0.0",
+    "gray-matter": "^4.0.3",
     "prettier": "^3.6.2",
     "prettier-plugin-astro": "^0.14.1"
   }
