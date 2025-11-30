@@ -1,0 +1,79 @@
+---
+import ProblemTable from './ProblemTable.astro';
+
+interface Problem {
+  id: string;
+  title: string;
+  difficulty?: string;
+  score?: string;
+  url?: string;
+  vip?: boolean;
+}
+
+interface Section {
+  title: string;
+  desc?: string;
+  children?: Section[];
+  problems?: Problem[];
+}
+
+interface Props {
+  section: Section;
+  level?: number;
+}
+
+const { section, level = 1 } = Astro.props;
+
+// Dynamic styling based on nesting level
+const headerSize = level === 1 ? "text-xl font-bold text-primary-600 dark:text-primary-400 mt-6 mb-4" : "text-lg font-semibold text-gray-800 dark:text-gray-200 mt-4 mb-2";
+const containerClass = level === 1 ? "mb-8" : "mb-4 ml-0";
+---
+
+<div class={containerClass}>
+  {/* Render Title */}
+  {level === 1 ? (
+    <h3 class={headerSize}>{section.title}</h3>
+  ) : (
+    <details class="group" open={level < 3}>
+      <summary class={`cursor-pointer list-none flex items-center gap-2 ${headerSize} hover:text-primary-500 transition-colors`}>
+        <span class="i-carbon-chevron-right group-open:rotate-90 transition-transform"></span>
+        {section.title}
+      </summary>
+      <div class="mt-2 pl-4 border-l-2 border-gray-100 dark:border-gray-800">
+        {/* Render Description if exists */}
+        {section.desc && (
+          <div class="mb-4 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg whitespace-pre-line">
+            {section.desc}
+          </div>
+        )}
+
+        {/* Render Sub-sections (Recursive) */}
+        {section.children && section.children.map((child) => (
+          <Astro.self section={child} level={level + 1} />
+        ))}
+
+        {/* Render Problems Table */}
+        {section.problems && section.problems.length > 0 && (
+          <ProblemTable problems={section.problems} />
+        )}
+      </div>
+    </details>
+  )}
+
+  {/* Level 1 content that isn't in a details block (usually just the description or direct children) */}
+  {level === 1 && (
+    <>
+      {section.desc && (
+        <div class="mb-4 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg whitespace-pre-line">
+          {section.desc}
+        </div>
+      )}
+      {section.children && section.children.map((child) => (
+        <Astro.self section={child} level={level + 1} />
+      ))}
+      {section.problems && section.problems.length > 0 && (
+        <ProblemTable problems={section.problems} />
+      )}
+    </>
+  )}
+</div>

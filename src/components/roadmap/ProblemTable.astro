@@ -1,11 +1,24 @@
 ---
-import DifficultyBadge from './DifficultyBadge.astro'
-
 interface Props {
-  problems: { name: string; difficulty: string; link: string }[]
+  problems: {
+    id: string
+    title: string
+    score?: string
+    url?: string
+    vip?: boolean
+  }[]
 }
 
 const { problems } = Astro.props
+
+function getDifficultyColor(score: string | undefined) {
+  if (!score) return 'text-gray-500 bg-gray-100 dark:bg-gray-800'
+  const s = parseInt(score)
+  if (isNaN(s)) return 'text-gray-500 bg-gray-100 dark:bg-gray-800'
+  if (s < 1400) return 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400'
+  if (s < 1900) return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400'
+  return 'text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400'
+}
 ---
 
 <div class='flex flex-col w-full rounded-xl border border-border bg-card overflow-hidden shadow-sm'>
@@ -13,53 +26,39 @@ const { problems } = Astro.props
   <div
     class='flex items-center border-b border-border bg-muted/40 px-4 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground'
   >
-    <div class='w-12 text-center'>Status</div>
+    <div class='w-16 text-center'>ID</div>
     <div class='flex-1 px-4'>Problem</div>
-    <div class='w-24 text-center'>Difficulty</div>
+    <div class='w-24 text-center'>Score</div>
   </div>
 
   <!-- Rows -->
   <div class='divide-y divide-border'>
     {
-      problems.map((p) => (
-        <div class='group flex items-center px-4 py-3 hover:bg-muted/40 transition-colors'>
-          <!-- Checkbox -->
-          <div class='w-12 flex justify-center'>
-              <input
-                type='checkbox'
-                class='prob-check h-5 w-5 rounded border-2 border-muted-foreground bg-card text-primary focus:ring-primary/20 focus:ring-offset-0 transition-all cursor-pointer hover:border-primary hover:bg-primary/5 checked:border-primary checked:bg-primary'
-                data-link={p.link}
-              />
+      problems.map((problem) => (
+        <div class='group flex items-center px-4 py-3 hover:bg-muted/50 transition-colors'>
+          <div class='w-16 text-center text-sm font-mono text-muted-foreground'>
+            {problem.id}
           </div>
-
-          <!-- Problem Name -->
           <div class='flex-1 px-4 min-w-0'>
             <a
-              href={p.link}
+              href={problem.url || `https://leetcode.cn/problemset/?search=${problem.id}`}
               target='_blank'
-              class='flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors group-hover:translate-x-0.5 duration-200'
+              class='block truncate text-sm font-medium text-foreground hover:text-primary transition-colors'
             >
-              <span class='truncate'>{p.name}</span>
-              <svg
-                xmlns='http://www.w3.org/2000/svg'
-                width='12'
-                height='12'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-                stroke-linecap='round'
-                stroke-linejoin='round'
-                class='opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-muted-foreground'
-              >
-                <path d='M7 17l9.2-9.2M17 17V7H7' />
-              </svg>
+              {problem.title}
+              {problem.vip && (
+                <span class='ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'>
+                  VIP
+                </span>
+              )}
             </a>
           </div>
-
-          <!-- Difficulty Badge -->
           <div class='w-24 flex justify-center'>
-            <DifficultyBadge difficulty={p.difficulty} />
+            <span
+              class={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getDifficultyColor(problem.score)}`}
+            >
+              {problem.score || '-'}
+            </span>
           </div>
         </div>
       ))
@@ -67,22 +66,4 @@ const { problems } = Astro.props
   </div>
 </div>
 
-<style>
-  /* Custom Checkbox Checkmark */
-  input[type='checkbox'] {
-    appearance: none;
-    position: relative;
-  }
-  input[type='checkbox']:checked::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 45%;
-    width: 5px;
-    height: 9px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: translate(-50%, -50%) rotate(45deg);
-  }
-</style>
 

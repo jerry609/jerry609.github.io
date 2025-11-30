@@ -1,5 +1,6 @@
 ---
 import ProblemTable from './ProblemTable.astro'
+import ProblemSection from './ProblemSection.astro'
 
 interface Props {
   topics: Record<string, any>
@@ -95,7 +96,11 @@ const { topics } = Astro.props
   {
     Object.entries(topics).map(([id, topic]) => (
       <template id={`problems-${id}`}>
-        <ProblemTable problems={topic.problems} />
+        {topic.rootSection ? (
+          <ProblemSection section={topic.rootSection} />
+        ) : (
+          <ProblemTable problems={topic.problems || []} />
+        )}
       </template>
     ))
   }
