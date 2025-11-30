@@ -5,8 +5,6 @@ publishDate: '2025-11-30'
 tags: ['claude', 'ai', 'tools']
 ---
 
-![Claude Code Ecosystem](./claude-code-ecosystem.png)
-
 > 引用来自 X [@axtrur](https://x.com/axtrur)
 
 ### Basic
