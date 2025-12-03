@@ -39,11 +39,11 @@ $$P(\text{正确}) \times C_{\text{节省}} - C_{\text{人工验证}} - P(\text{
 
 我们评估了向 GPT-5 模型提供仓库访问和代码执行能力，发现这会产生更强的审查器，能够捕获更多关键问题并减少误报。专门针对代码审查的训练进一步改善了结果。
 
-![不同模型的错误评论](https://alignment.openai.com/scaling-code-verification/figures/incorrect_comments_rate.svg)
-
-![不同模型的高影响评论](https://alignment.openai.com/scaling-code-verification/figures/high_impact_comments_rate.svg)
-
-![不同模型每个PR的评论数](https://alignment.openai.com/scaling-code-verification/figures/total_comments_per_pr.svg)
+<div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin: 1.5rem 0;">
+  <img src="https://alignment.openai.com/scaling-code-verification/figures/incorrect_comments_rate.svg" alt="不同模型的错误评论" style="flex: 1; min-width: 200px; max-width: 32%;" />
+  <img src="https://alignment.openai.com/scaling-code-verification/figures/high_impact_comments_rate.svg" alt="不同模型的高影响评论" style="flex: 1; min-width: 200px; max-width: 32%;" />
+  <img src="https://alignment.openai.com/scaling-code-verification/figures/total_comments_per_pr.svg" alt="不同模型每个PR的评论数" style="flex: 1; min-width: 200px; max-width: 32%;" />
+</div>
 
 **图2.** 对流行开源仓库最近提交的代码审查性能的人工评估。专门为更高信噪比训练的 GPT-5-Codex 做出的评论更不可能是错误的或不重要的，为关键问题保留用户注意力。使用默认提示且仅访问 PR diff 上下文时，GPT-5 能够识别大量高影响评论，但也产生大量误报。
 
@@ -61,9 +61,10 @@ $$P(\text{正确}) \times C_{\text{节省}} - C_{\text{人工验证}} - P(\text{
 
 为了进一步研究验证-生成差距与推理预算的关系，我们进行了一项对照研究，其中我们从之前一代强大的代码审查模型中获取之前经过人工验证的评论，并扫描代码审查器的推理预算。即使在生成器 token 支出的一小部分预算下，验证器也能捕获 PR 作者确认的大部分先前识别的高严重性问题，额外的预算主要改善了校准并减少了误报。然而，我们也观察到，与人类编写的代码相比，审查模型生成的代码时，性能随思考预算下降得更快。这个评估有局限性，因为测试集只包含人类已经识别的问题。如果审查器在给予更多时间时提出新的见解，这个评估无法在没有额外人工输入的情况下告诉我们这些发现是否正确。
 
-![Codex 生成代码的已知 bug 召回率与预算关系](https://alignment.openai.com/scaling-code-verification/figures/recall_on_known_bugs_on_codex_generated_code.svg)
-
-![人类编写代码的已知 bug 召回率与预算关系](https://alignment.openai.com/scaling-code-verification/figures/recall_on_known_bugs_on_human_written_code.svg)
+<div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin: 1.5rem 0;">
+  <img src="https://alignment.openai.com/scaling-code-verification/figures/recall_on_known_bugs_on_codex_generated_code.svg" alt="Codex 生成代码的已知 bug 召回率与预算关系" style="flex: 1; min-width: 280px; max-width: 48%;" />
+  <img src="https://alignment.openai.com/scaling-code-verification/figures/recall_on_known_bugs_on_human_written_code.svg" alt="人类编写代码的已知 bug 召回率与预算关系" style="flex: 1; min-width: 280px; max-width: 48%;" />
+</div>
 
 **图3.** 自动审查器（GPT-5.1-Codex）在 Codex 生成的（左）和人类编写的（右）代码上的召回率作为推理预算的函数，在 OpenAI 代码库中之前识别的问题集上评估。即使在较低预算下，验证器也能恢复相当比例的已知问题，在人类编写的代码上恢复率始终较高，表明验证难度存在潜在的分布偏移。
 
