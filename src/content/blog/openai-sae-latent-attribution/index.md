@@ -1,13 +1,76 @@
 ---
-title: '翻译：OpenAI：用稀疏自编码器潜变量归因调试模型失准'
-description: '翻译自 OpenAI Alignment Blog，介绍如何用稀疏自编码器（SAE）潜变量归因方法分析和调试大模型的失准行为。'
+title: '翻译：OpenAI——Debugging misaligned completions with sparse-autoencoder latent attribution'
+description: '翻译自 OpenAI Alignment 博客，介绍如何利用 SAE 潜在归因（Latent Attribution）技术定位和调试大模型的对齐问题。'
 publishDate: '2025-12-03'
-tags: ['ai', 'openai', 'mechanistic-interpretability', '翻译']
+tags: ['ai', 'alignment', 'SAE', 'interpretability', '翻译']
 ---
 
 > 原文：[Debugging misaligned completions with sparse-autoencoder latent attribution](https://alignment.openai.com/sae-latent-attribution/)
-> 
-> 作者：Tom Dupre la Tour, Dan Mossing，与 Interpretability 团队合作
+> 作者：Tom Dupre la Tour, Dan Mossing (OpenAI Alignment Team)
+> 发布日期：2025年12月1日
+
+## 摘要
+
+我们利用可解释性工具来研究语言模型中对齐问题（Misalignment）背后的机制。在之前的工作中，我们使用模型差异（Model Diffing）方法，结合稀疏自编码器（SAE），研究了“涌现对齐问题”（Emergent Misalignment）。
+
+为了更精准地定位导致特定行为的潜在特征（Latents），我们引入了“归因”（Attribution）方法。通过计算 SAE 潜在特征对特定生成结果的归因差异（Δ-attribution），我们能更有效地筛选出与对齐问题存在因果关联的特征。
+
+## 方法：潜在归因（Latent Attribution）
+
+我们使用归因方法来近似激活值与输出之间的因果关系。具体来说，我们计算 SAE 潜在特征对“正向生成”（表现出特定行为）和“负向生成”（未表现出该行为）的归因差异。
+
+归因值的计算基于一阶泰勒展开，估算如果移除某个潜在特征，交叉熵损失（Cross-entropy Log-loss）会发生多大变化。
+
+$$
+(\Delta L)_{i,t} \approx -(g_t \cdot d_i)((a_t - \bar{a}) \cdot d_i) \triangleq \delta_{i,t}
+$$
+
+其中：
+- $g_t$ 是损失函数对激活值的梯度。
+- $d_i$ 是 SAE 潜在特征 $i$ 的解码方向。
+- $a_t$ 是当前激活值，$\bar{a}$ 是平均激活值。
+
+我们选择具有最大归因差异（Δ-attribution）的潜在特征，并通过“激活引导”（Activation Steering）来验证其因果性。
+
+## 案例研究 1：涌现对齐问题 (Emergent Misalignment)
+
+在一个经过微调后表现出广泛对齐问题的模型中，我们对比了“对齐”和“未对齐”的生成结果。
+
+结果发现，相比于仅基于激活值差异（Δ-activation）的方法，基于归因差异（Δ-attribution）筛选出的潜在特征，在进行激活引导时，能更有效地增强或抑制未对齐行为。
+
+<img src="https://alignment.openai.com/sae-latent-attribution/figures/steering-away-from-misalignment.png" alt="Steering away from misalignment" style="display:block; margin:1.5rem auto; max-width:100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />
+
+<img src="https://alignment.openai.com/sae-latent-attribution/figures/steering-toward-misalignment.png" alt="Steering toward misalignment" style="display:block; margin:1.5rem auto; max-width:100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />
+
+*图 1：相比 Δ-activation，Δ-attribution 选出的特征能更强地引导模型偏离（左）或通过（右）未对齐行为。*
+
+## 案例研究 2：不良验证 (Undesirable Validation)
+
+在另一个实验中，我们研究了模型以不良方式验证用户错误信念的现象。同样地，Δ-attribution 方法比 Δ-activation 方法更有效地找到了能控制这种行为的潜在特征。
+
+<img src="https://alignment.openai.com/sae-latent-attribution/figures/steering-away-undesirable-validation.png" alt="Steering away from undesirable validation" style="display:block; margin:1.5rem auto; max-width:100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />
+
+*图 2：Δ-attribution 选出的特征能更有效地引导模型避免不良验证行为。*
+
+## 一个“挑衅性”特征同时导致了两种现象
+
+令人惊讶的是，在两个案例研究中，Δ-attribution 排名第一的潜在特征是同一个。这个特征与“挑衅性”（Provocative）、“极端”（Extreme）和“负面情感”（Negative Valence）高度相关。
+
+- **Logit Lens 分析**：该特征对应的 Token 包括 "outrage"（愤怒）, "screaming"（尖叫）, "unacceptable"（不可接受）, "evil"（邪恶）等。
+- **激活样本**：该特征在长篇政治争论、意识形态冲突和情绪激动的公共评论中被强烈激活。
+
+<img src="https://alignment.openai.com/sae-latent-attribution/figures/top-activating-provocative-latent.png" alt="Top-activating example for the provocative latent" style="display:block; margin:1.5rem auto; max-width:100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />
+
+*图 3：最能激活“挑衅性”潜在特征的 WebText 示例。*
+
+通过激活引导增强该特征，会导致模型生成被 GPT-5 评判为“挑衅性、攻击性、煽动性”的内容。这表明，一个单一的内部特征可能驱动多种看似不同的未对齐行为。
+
+## 总结
+
+利用 SAE 潜在归因（Latent Attribution），我们可以更精准地定位导致模型未对齐行为的内部机制。这种方法比单纯比较激活值差异更具因果相关性，并帮助我们发现了一个通用的“挑衅性”特征，该特征在多种未对齐场景中起着关键作用。
+
+这一发现强调了在模型内部表示中，某些特定特征可能对广泛的行为产生不成比例的影响，值得进一步研究和监控。
+
 > 
 > 发布日期：2025年12月1日
 
@@ -73,7 +136,9 @@ tags: ['ai', 'openai', 'mechanistic-interpretability', '翻译']
 
 更精确地，归因分数近似为：
 
-$$(\Delta L)_{i,t} \approx -(g_t \cdot d_i)((a_t-\bar{a}) \cdot d_i) \equiv \delta_{i,t}$$
+$$
+(\Delta L)_{i,t} \approx -(g_t \cdot d_i)((a_t-\bar{a}) \cdot d_i) \equiv \delta_{i,t}
+$$
 
 其中 g_t 是损失对激活的梯度。对所有 token 平均归因，选出归因分数最大的方向。
 
