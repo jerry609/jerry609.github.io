@@ -6,9 +6,9 @@ tags: ['沙箱', '容器', 'wasm', 'serverless', 'ai', '安全']
 language: 'zh-CN'
 ---
 
-> 这篇文章尝试把过去四十多年里「沙箱技术」的发展放在一条连续的时间线上：从最早的 chroot，到容器、微虚拟机、Wasm，再到今天 Serverless 与 AI Agent 的多层沙箱，希望帮你建立一个整体的心智模型。
 
-![从 chroot 到 Serverless/AI 的沙箱技术发展时间线（1979–未来趋势）](/images/sandbox-timeline.png)
+
+![从 chroot 到 Serverless/AI 的沙箱技术发展时间线（1979–未来趋势）](./sandbox-timeline.png)
 
 *从 OS 级虚拟化到容器与云原生，再到 Serverless、Edge 与 AI 沙箱/Agent 的演进全景图，可与下文的文字时间线对照阅读。*
 
