@@ -121,7 +121,17 @@ const { topics } = Astro.props
 
   // State Management
   const STORAGE_KEY = 'algo-roadmap-progress'
-  let progress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+  
+  // Initialize progress from global data (loaded by ActivityGraph) or localStorage
+  let progress = window.roadmapData?.progress || JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+  
+  // Listen for data loaded event
+  window.addEventListener('roadmap-data-loaded', () => {
+    if (window.roadmapData?.progress) {
+      progress = window.roadmapData.progress
+      updateAllProgress()
+    }
+  })
 
   function getTopicProblems(topic) {
     if (topic.problems && topic.problems.length > 0) return topic.problems
@@ -139,6 +149,29 @@ const { topics } = Astro.props
   function save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(progress))
     updateAllProgress()
+  }
+
+  // Export progress data for manual update
+  window.exportRoadmapProgress = function() {
+    const currentProgress = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+    const currentActivity = JSON.parse(localStorage.getItem('roadmap_activity') || '{}')
+    const exportData = {
+      progress: currentProgress,
+      activity: currentActivity
+    }
+    const jsonStr = JSON.stringify(exportData, null, 2)
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      alert('进度数据已复制到剪贴板！\n\n请将内容粘贴到 public/roadmap-progress.json 文件中，然后提交代码。')
+    }).catch(() => {
+      // Fallback: show in console
+      console.log('=== 复制以下内容到 public/roadmap-progress.json ===')
+      console.log(jsonStr)
+      alert('无法复制到剪贴板，请打开浏览器控制台查看数据。')
+    })
+    
+    return exportData
   }
 
   function updateAllProgress() {

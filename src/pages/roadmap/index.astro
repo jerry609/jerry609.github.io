@@ -8420,7 +8420,21 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
 
   <!-- Activity Graph -->
   <div class='mt-12 mb-8'>
-    <h2 class='text-2xl font-bold mb-4'>Activity</h2>
+    <div class='flex items-center justify-between mb-4'>
+      <h2 class='text-2xl font-bold'>Activity</h2>
+      <button 
+        id='export-progress-btn'
+        class='inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-border bg-card hover:bg-muted transition-colors'
+        title='导出进度数据'
+      >
+        <svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+          <path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/>
+          <polyline points='7 10 12 15 17 10'/>
+          <line x1='12' y1='15' x2='12' y2='3'/>
+        </svg>
+        导出进度
+      </button>
+    </div>
     <div class='border rounded-xl p-4 bg-card'>
       <ActivityGraph />
     </div>
@@ -8467,6 +8481,16 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
         open(btn.dataset.id)
       })
     })
+
+    // Export progress button
+    const exportBtn = document.getElementById('export-progress-btn')
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        if (window.exportRoadmapProgress) {
+          window.exportRoadmapProgress()
+        }
+      })
+    }
 
     // Panning / Dragging the canvas
     const svg = document.querySelector('.roadmap-svg')

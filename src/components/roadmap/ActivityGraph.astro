@@ -21,12 +21,33 @@
 </div>
 
 <script is:inline>
-  function renderActivityGraph() {
+  // Global data cache
+  window.roadmapData = window.roadmapData || { progress: {}, activity: {} }
+  
+  async function loadRoadmapData() {
+    try {
+      const response = await fetch('/roadmap-progress.json')
+      if (response.ok) {
+        const data = await response.json()
+        window.roadmapData = data
+        // Also sync to localStorage for local changes
+        localStorage.setItem('roadmap_activity', JSON.stringify(data.activity || {}))
+        localStorage.setItem('algo-roadmap-progress', JSON.stringify(data.progress || {}))
+      }
+    } catch (e) {
+      console.warn('Failed to load roadmap progress:', e)
+    }
+  }
+
+  async function renderActivityGraph() {
     const grid = document.getElementById('activity-grid')
     if (!grid) return
 
-    // Get activity data from localStorage
-    const activityData = JSON.parse(localStorage.getItem('roadmap_activity') || '{}')
+    // First try to get data from server JSON, fallback to localStorage
+    let activityData = window.roadmapData?.activity || {}
+    if (Object.keys(activityData).length === 0) {
+      activityData = JSON.parse(localStorage.getItem('roadmap_activity') || '{}')
+    }
 
     // Generate last 365 days
     const today = new Date()
@@ -88,8 +109,12 @@
     `).join('')
   }
 
-  // Initial render
-  renderActivityGraph()
+  // Initial load and render
+  loadRoadmapData().then(() => {
+    renderActivityGraph()
+    // Dispatch event so other components know data is ready
+    window.dispatchEvent(new CustomEvent('roadmap-data-loaded'))
+  })
 
   // Listen for updates
   window.addEventListener('roadmap-updated', () => {
