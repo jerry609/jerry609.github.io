@@ -28,10 +28,10 @@ language: 'zh-CN'
 
 - 对下：  
   - 同一个 SDK 实际打到两条不同的后端通道：
-    1. **控制平面（Control Plane）**  
-       - 负责「资源管理」：创建/列出/删除模版、沙箱、团队等。
-       - 对应的协议是 **HTTP + OpenAPI**，规范在 openapi.yml 中。
-       - JS SDK 中通过 `src/api/*` 来访问；Python SDK 则是 `e2b/api/*`。
+   1. **控制平面（Control Plane）**  
+     - 负责「资源管理」：创建/列出/删除模版、沙箱、团队等。
+     - 对应的协议是 **HTTP + OpenAPI**，规范在 `spec/openapi.yml` 中。
+     - JS SDK 中通过 `packages/js-sdk/src/api/*` 来访问；Python SDK 则是 `packages/python-sdk/e2b/api/*`。
 
     2. **执行平面 / 数据平面（Data Plane）**  
        - 负责「具体沙箱里的行为」：执行命令、读写文件、PTY 交互、获取指标等。
@@ -47,7 +47,7 @@ SDK 的职责，就是让绝大多数用户完全不用关心「OpenAPI / Protob
 
 ## 二、JavaScript SDK：总体结构与入口
 
-E2B 的 JavaScript SDK 位于仓库的 js-sdk 目录，package.json 和 index.ts 两个文件几乎可以勾勒出它的整体轮廓。
+E2B 的 JavaScript SDK 位于仓库的 `packages/js-sdk` 目录，`packages/js-sdk/package.json` 和 `packages/js-sdk/src/index.ts` 两个文件几乎可以勾勒出它的整体轮廓。
 
 ### 2.1 包配置与构建脚本
 
@@ -70,8 +70,8 @@ E2B 的 JavaScript SDK 位于仓库的 js-sdk 目录，package.json 和 index.ts
     - 基于清洗过的 OpenAPI 文件 `spec/openapi_generated.yml`
     - 生成 `src/api/schema.gen.ts`
   - `generate:envd` / `generate:envd-api`：
-    - 在 envd 目录下用 `buf` 生成 JS/TS 版的 Connect / Protobuf 客户端
-    - 输出到 `src/envd/**/*`
+    - 在 `spec/envd` 目录下用 `buf`（结合 `buf-js.gen.yaml`）生成 ENVD 的 RPC 客户端代码，输出到 `packages/js-sdk/src/envd/**/*`
+    - 使用 `openapi-typescript` 将 `spec/envd/envd.yaml` 转成 TypeScript 类型，输出到 `packages/js-sdk/src/envd/schema.gen.ts`
   - `generate:mcp`：
     - 从 mcp-server.json 生成 `src/sandbox/mcp.d.ts` 类型定义
   - `generate_sdk_ref.sh`：
@@ -90,7 +90,7 @@ E2B 的 JavaScript SDK 位于仓库的 js-sdk 目录，package.json 和 index.ts
 
 ### 2.2 入口文件：index.ts 的导出设计
 
-JavaScript SDK 的主入口位于 index.ts。这个文件没有复杂逻辑，但它决定了使用者在 `import 'e2b'` 时能拿到什么。
+JavaScript SDK 的主入口位于 `packages/js-sdk/src/index.ts`。这个文件没有复杂逻辑，但它决定了使用者在 `import 'e2b'` 时能拿到什么。
 
 从上到下，主要的导出可以分为几类。
 
@@ -120,6 +120,8 @@ export type { ConnectionOpts, Username } from './connectionConfig'
     - 请求超时时间
   - 为后续所有与 E2B 通信的模块提供统一的配置。
 - `ConnectionOpts` 和 `Username` 则是对应的类型定义，方便在应用中进行类型标注。
+
+除此之外，入口还导出了 `getSignature` 这样的工具函数（来自 `./sandbox/signature`），用于生成与沙箱上传/下载等相关的签名，在高级或内部场景下会被用到，普通使用者通常无需直接调用。
 
 #### 2.2.3 错误体系
 
@@ -394,7 +396,7 @@ SDK 与控制平面（Control Plane）之间的交互主要集中在一个 `ApiC
 
 #### 3.2.2 ApiClient 与 openapi-fetch
 
-在 `index.ts` 中，SDK 使用 `openapi-fetch` 作为底层 HTTP 调用库，大致模式如下（伪代码）：
+在 `src/api/index.ts` 中，SDK 使用 `openapi-fetch` 作为底层 HTTP 调用库，大致模式如下（伪代码）：
 
 ```ts
 import createClient from 'openapi-fetch'
