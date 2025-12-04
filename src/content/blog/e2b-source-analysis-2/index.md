@@ -45,6 +45,8 @@ SDK 的职责，就是让绝大多数用户完全不用关心「OpenAPI / Protob
 
 接下来，我们先从 JavaScript SDK 入手，从它的入口文件开始，一步步拆到内部的配置、API 通信、`Sandbox` 实现，再和 Python 版本对照。
 
+![E2B SDK 在整体架构中的调用链示意图](/src/content/blog/e2b-source-analysis-2/E2B2-1.png)
+
 ## 二、JavaScript SDK：总体结构与入口
 
 E2B 的 JavaScript SDK 位于仓库的 `packages/js-sdk` 目录，`packages/js-sdk/package.json` 和 `packages/js-sdk/src/index.ts` 两个文件几乎可以勾勒出它的整体轮廓。
@@ -502,6 +504,8 @@ console.log(result.stdout)
 ```
 
 沿着 `Sandbox.create()` 的路径，一步步跟到内部的 ENVD 调用。
+
+![Sandbox.create 调用链的时序图](/src/content/blog/e2b-source-analysis-2/E2B2-2.png)
 
 > 主要源码文件：
 >
@@ -1004,6 +1008,8 @@ async kill(opts?: Pick<SandboxOpts, 'requestTimeoutMs'>) {
 >   - `packages/js-sdk/src/envd/filesystem/filesystem_connect.ts`
 >   - `packages/js-sdk/src/envd/filesystem/filesystem_pb.ts`
 
+![packages/js-sdk 目录下各子模块结构示意图](/src/content/blog/e2b-source-analysis-2/E2B2-5.png)
+
 ### 5.1 Commands：远程命令执行与进程管理
 
 在用户代码中，`sandbox.commands` 的典型用法大致如下：
@@ -1230,6 +1236,8 @@ const content = await sandbox.files.read('/app/main.py')
 - 当 ENVD 协议或控制平面 API 升级时，只要更新 Protobuf / OpenAPI 并重新生成客户端，就可以相对低成本地演进整个系统。
 
 到这里，JS 侧「命令 + 文件系统」子模块就讲完了，下一节我们换到 Python 视角，看另一门语言里的 SDK 如何按同样的架构复刻这一套设计。
+
+![用户层 API、SDK 封装层与协议/服务层的三层分层示意图](/src/content/blog/e2b-source-analysis-2/E2B2-6.png)
 
 > 补充：常用术语对照表
 >
@@ -1563,6 +1571,8 @@ except TimeoutException:
 - OpenAPI 和 Protobuf/Connect schema 是协议层的单一事实来源；
 - JS/Python SDK 则是在不同语言下对同一协议的两种「友好包装」。
 
+![JavaScript SDK 与 Python SDK 模块层级的对照图](/src/content/blog/e2b-source-analysis-2/E2B2-4.png)
+
 在后续关于 CLI 或 API 设计的分析中，你可以继续沿着这个思路，去拆 CLI 如何在 Node 里利用 JS SDK 和 Docker，把本地 `Dockerfile` + 代码构建成模板；以及 openapi.yml / `spec/envd/*` 本身的接口设计和演进策略。
 
 ## 八、模板管理 API 概览（为 CLI 篇埋伏笔）
@@ -1612,6 +1622,8 @@ CLI 的 `e2b template build` 命令本质上就是：
 1. 用 Docker 把你的本地代码和依赖打包成镜像或压缩包；
 2. 调用 SDK 所封装的模板 API，把构建信息和文件上传到控制平面；
 3. 轮询模板构建状态，并把构建日志回显到终端。
+
+![模板 DSL → SDK 模板 API → 控制平面模板构建任务 → 模板 ID 的流程图](/src/content/blog/e2b-source-analysis-2/E2B2-3.png)
 
 第三篇我们会从 `packages/cli` 的源码里，沿着这条调用链把每一个步骤拆开。
 
