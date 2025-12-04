@@ -53,6 +53,7 @@ export const theme: ThemeUserConfig = {
       { title: 'Roadmap', link: '/roadmap' },
       { title: 'Murmurs', link: '/murmurs' },
       { title: 'Plan', link: '/plan' },
+      { title: 'Photos', link: '/photos' },
       { title: 'Projects', link: '/projects' },
       { title: 'Links', link: '/links' },
       { title: 'About', link: '/about' }

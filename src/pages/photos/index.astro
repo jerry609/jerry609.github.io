@@ -1,0 +1,170 @@
+---
+import PageLayout from '@/layouts/CommonPage.astro'
+
+const title = 'Photos'
+
+// 照片数据 - 后续可以迁移到 Content Collections
+const photos = [
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840430_.pic.jpg',
+    title: '生活随拍 1',
+    alt: '生活随拍照片'
+  },
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840431_.pic.jpg',
+    title: '生活随拍 2',
+    alt: '生活随拍照片'
+  },
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840432_.pic.jpg',
+    title: '生活随拍 3',
+    alt: '生活随拍照片'
+  },
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840433_.pic.jpg',
+    title: '生活随拍 4',
+    alt: '生活随拍照片'
+  },
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840434_.pic.jpg',
+    title: '生活随拍 5',
+    alt: '生活随拍照片'
+  },
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840435_.pic.jpg',
+    title: '生活随拍 6',
+    alt: '生活随拍照片'
+  },
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840436_.pic.jpg',
+    title: '生活随拍 7',
+    alt: '生活随拍照片'
+  },
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840437_.pic.jpg',
+    title: '生活随拍 8',
+    alt: '生活随拍照片'
+  },
+  {
+    src: 'https://photo-1311563466.cos.ap-guangzhou.myqcloud.com/30161764840438_.pic.jpg',
+    title: '生活随拍 9',
+    alt: '生活随拍照片'
+  }
+]
+---
+
+<PageLayout {title}>
+  <div class="mx-auto max-w-screen-xl px-4 py-8">
+    <!-- 页面标题 -->
+    <header class="mb-12 text-center">
+      <h1 class="text-4xl font-bold mb-4">Photos</h1>
+      <p class="text-muted-foreground text-lg">记录生活中的美好瞬间</p>
+    </header>
+
+    <!-- 照片网格 -->
+    <div class="photo-grid">
+      {
+        photos.map((photo) => (
+          <article class="photo-card group">
+            <div class="photo-image-wrapper">
+              <img
+                src={photo.src}
+                alt={photo.alt}
+                title={photo.title}
+                loading="lazy"
+                class="zoomable photo-image"
+              />
+            </div>
+            <div class="photo-info">
+              <h2 class="photo-title">{photo.title}</h2>
+            </div>
+          </article>
+        ))
+      }
+    </div>
+
+    <!-- 空状态提示 -->
+    {
+      photos.length === 0 && (
+        <div class="text-center py-16">
+          <p class="text-muted-foreground text-lg">暂无照片，敬请期待...</p>
+        </div>
+      )
+    }
+  </div>
+</PageLayout>
+
+<style>
+  .photo-grid {
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: repeat(1, 1fr);
+  }
+
+  /* 平板：2列 */
+  @media (min-width: 768px) {
+    .photo-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  /* 桌面：3列 */
+  @media (min-width: 1024px) {
+    .photo-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .photo-card {
+    background: hsl(var(--card));
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    transition: all 0.3s ease;
+  }
+
+  .photo-card:hover {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    transform: translateY(-2px);
+  }
+
+  .photo-image-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: hsl(var(--muted));
+  }
+
+  .photo-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+  }
+
+  .photo-card:hover .photo-image {
+    transform: scale(1.05);
+  }
+
+  .photo-info {
+    padding: 1rem;
+  }
+
+  .photo-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: hsl(var(--foreground));
+  }
+
+  .photo-date {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* 确保 medium-zoom 正常工作 */
+  .zoomable {
+    cursor: zoom-in;
+  }
+</style>
