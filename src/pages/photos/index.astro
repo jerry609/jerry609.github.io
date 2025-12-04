@@ -18,10 +18,12 @@ const photos = (await getCollection('photos')).sort((a, b) => {
       {
         photos.map((photo, index) => (
           <article
-            class='group break-inside-avoid mb-4'
+            class='photo-card group break-inside-avoid mb-4'
             style={`animation-delay: ${index * 50}ms`}
+            data-story={photo.data.story}
+            data-mood={photo.data.mood}
           >
-            <div class='relative overflow-hidden rounded-lg bg-muted shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md'>
+            <div class='relative overflow-hidden rounded-lg bg-muted shadow-photo transition-all duration-300 hover:-translate-y-1 hover:shadow-photo-hover'>
               <img
                 src={photo.data.src}
                 alt={photo.data.alt || photo.data.title}
@@ -31,7 +33,19 @@ const photos = (await getCollection('photos')).sort((a, b) => {
               />
               <div class='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100'>
                 <h2 class='text-sm font-medium text-white'>{photo.data.title}</h2>
+                {photo.data.mood && (
+                  <span class='text-xs text-white/80'>{photo.data.mood}</span>
+                )}
               </div>
+
+              {/* Story overlay (hidden by default) */}
+              {photo.data.story && (
+                <div class='story-overlay'>
+                  <div class='story-content'>
+                    <p class='story-text'>{photo.data.story}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </article>
         ))
@@ -47,6 +61,9 @@ const photos = (await getCollection('photos')).sort((a, b) => {
       )
     }
   </div>
+
+  <!-- Particle container for Konoha effects -->
+  <div id='particle-container' aria-hidden='true'></div>
 </PageLayout>
 
 <style>
@@ -66,8 +83,183 @@ const photos = (await getCollection('photos')).sort((a, b) => {
     }
   }
 
+  /* Dark mode optimized shadows */
+  .shadow-photo {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  }
+
+  .shadow-photo-hover {
+    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.15), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+
+  /* Dark mode adjustments */
+  @media (prefers-color-scheme: dark) {
+    .shadow-photo {
+      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.2);
+    }
+
+    .shadow-photo-hover {
+      box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+    }
+  }
+
+  /* Story overlay */
+  .story-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 10;
+  }
+
+  .story-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .story-content {
+    padding: 1.5rem;
+    max-width: 90%;
+    animation: story-slide-up 0.3s ease-out;
+  }
+
+  .story-text {
+    color: white;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  @keyframes story-slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Particle container */
+  #particle-container {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* Particle styles */
+  .particle {
+    position: absolute;
+    pointer-events: none;
+    font-size: 1.5rem;
+    animation: float-away 2s ease-out forwards;
+  }
+
+  @keyframes float-away {
+    0% {
+      opacity: 1;
+      transform: translateY(0) rotate(0deg);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-100px) rotate(180deg);
+    }
+  }
+
   /* Ensure medium-zoom works */
   .zoomable {
     cursor: zoom-in;
   }
+
+  .photo-card {
+    position: relative;
+  }
 </style>
+
+<script>
+  // Long-press detection
+  let pressTimer: number | null = null
+  let currentCard: HTMLElement | null = null
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const photoCards = document.querySelectorAll('.photo-card')
+
+    photoCards.forEach((card) => {
+      const element = card as HTMLElement
+      const story = element.dataset.story
+      if (!story) return
+
+      const overlay = element.querySelector('.story-overlay') as HTMLElement
+
+      // Mouse/Touch start
+      const startPress = (e: Event) => {
+        e.preventDefault()
+        pressTimer = window.setTimeout(() => {
+          overlay?.classList.add('active')
+          currentCard = element
+          // Haptic feedback simulation
+          element.style.transform = 'scale(0.98)'
+        }, 500)
+      }
+
+      // Mouse/Touch end
+      const endPress = () => {
+        if (pressTimer) {
+          clearTimeout(pressTimer)
+          pressTimer = null
+        }
+        overlay?.classList.remove('active')
+        element.style.transform = ''
+        currentCard = null
+      }
+
+      element.addEventListener('mousedown', startPress)
+      element.addEventListener('touchstart', startPress)
+      element.addEventListener('mouseup', endPress)
+      element.addEventListener('mouseleave', endPress)
+      element.addEventListener('touchend', endPress)
+      element.addEventListener('touchcancel', endPress)
+    })
+
+    // Konoha effect: Click anywhere to spawn particles
+    document.addEventListener('click', (e) => {
+      // Don't trigger on zoom clicks
+      if ((e.target as HTMLElement).classList.contains('zoomable')) return
+
+      createParticles(e.clientX, e.clientY)
+    })
+  })
+
+  // Particle effects
+  function createParticles(x: number, y: number) {
+    const container = document.getElementById('particle-container')
+    if (!container) return
+
+    const emojis = ['🍃', '🌸', '🍂', '✨', '🌺']
+    const count = Math.floor(Math.random() * 3) + 2
+
+    for (let i = 0; i < count; i++) {
+      const particle = document.createElement('div')
+      particle.className = 'particle'
+      particle.textContent = emojis[Math.floor(Math.random() * emojis.length)]
+      particle.style.left = `${x}px`
+      particle.style.top = `${y}px`
+      particle.style.setProperty('--rotation', `${Math.random() * 360}deg`)
+
+      container.appendChild(particle)
+
+      // Remove after animation
+      setTimeout(() => {
+        particle.remove()
+      }, 2000)
+    }
+  }
+</script>

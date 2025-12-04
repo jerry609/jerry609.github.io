@@ -82,7 +82,10 @@ const photos = defineCollection({
       // Compatibility with astro-pure
       draft: z.boolean().default(false),
       tags: z.array(z.string()).default([]),
-      updatedDate: z.coerce.date().optional()
+      updatedDate: z.coerce.date().optional(),
+      // Easter egg fields
+      story: z.string().optional(),
+      mood: z.string().optional()
     })
 })
 
