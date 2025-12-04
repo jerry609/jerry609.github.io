@@ -22,6 +22,7 @@ const photos = (await getCollection('photos')).sort((a, b) => {
             style={`animation-delay: ${index * 50}ms`}
             data-story={photo.data.story}
             data-mood={photo.data.mood}
+            data-photo-id={photo.data.id}
           >
             <div class='relative overflow-hidden rounded-lg bg-muted shadow-photo transition-all duration-300 hover:-translate-y-1 hover:shadow-photo-hover'>
               <img
@@ -46,6 +47,51 @@ const photos = (await getCollection('photos')).sort((a, b) => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Interaction Bar */}
+            <div class='interaction-bar'>
+              {/* Like Button */}
+              <button
+                class='like-btn'
+                data-photo-id={photo.data.id}
+                aria-label='Like this photo'
+              >
+                <span class='heart-icon'>❤️</span>
+                <span class='like-count'>0</span>
+              </button>
+
+              {/* Comment Button */}
+              <button
+                class='comment-btn'
+                data-photo-id={photo.data.id}
+                aria-label='View comments'
+              >
+                <span class='comment-icon'>💬</span>
+                <span class='comment-count'>0</span>
+              </button>
+            </div>
+
+            {/* Comments Section (hidden by default) */}
+            <div class='comments-section' data-photo-id={photo.data.id}>
+              <div class='comments-list'></div>
+              <form class='comment-form'>
+                <input
+                  type='text'
+                  class='comment-username'
+                  placeholder='你的昵称'
+                  maxlength='50'
+                  required
+                />
+                <textarea
+                  class='comment-input'
+                  placeholder='留下你的想法...'
+                  maxlength='500'
+                  rows='2'
+                  required
+                ></textarea>
+                <button type='submit' class='comment-submit'>发送</button>
+              </form>
             </div>
           </article>
         ))
@@ -182,6 +228,159 @@ const photos = (await getCollection('photos')).sort((a, b) => {
   .photo-card {
     position: relative;
   }
+
+  /* Interaction Bar */
+  .interaction-bar {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: hsl(var(--card));
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  .like-btn,
+  .comment-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.375rem;
+    background: transparent;
+    color: hsl(var(--foreground));
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .like-btn:hover,
+  .comment-btn:hover {
+    background: hsl(var(--muted));
+    transform: translateY(-1px);
+  }
+
+  .like-btn.liked {
+    background: hsl(var(--primary) / 0.1);
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary));
+  }
+
+  .like-btn.liked .heart-icon {
+    animation: heart-beat 0.3s ease;
+  }
+
+  @keyframes heart-beat {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.3);
+    }
+  }
+
+  /* Comments Section */
+  .comments-section {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background: hsl(var(--muted) / 0.3);
+  }
+
+  .comments-section.open {
+    max-height: 500px;
+    overflow-y: auto;
+  }
+
+  .comments-list {
+    padding: 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .comment-item {
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    background: hsl(var(--card));
+    border-radius: 0.375rem;
+    border-left: 2px solid hsl(var(--primary));
+  }
+
+  .comment-author {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: hsl(var(--primary));
+    margin-bottom: 0.25rem;
+  }
+
+  .comment-text {
+    font-size: 0.875rem;
+    color: hsl(var(--foreground));
+    line-height: 1.5;
+  }
+
+  .comment-time {
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.25rem;
+  }
+
+  .comment-form {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  .comment-username,
+  .comment-input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.375rem;
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    font-size: 0.875rem;
+  }
+
+  .comment-username {
+    width: 50%;
+  }
+
+  .comment-input {
+    resize: vertical;
+    font-family: inherit;
+  }
+
+  .comment-submit {
+    align-self: flex-end;
+    padding: 0.5rem 1.5rem;
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border: none;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .comment-submit:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  .comment-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .empty-comments {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.875rem;
+  }
 </style>
 
 <script>
@@ -261,5 +460,196 @@ const photos = (await getCollection('photos')).sort((a, b) => {
         particle.remove()
       }, 2000)
     }
+  }
+</script>
+
+<script>
+  import {
+    likePhoto,
+    unlikePhoto,
+    getPhotoLikes,
+    hasUserLiked,
+    addComment,
+    getComments,
+    getCommentCount
+  } from '@/utils/supabase'
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize all photo cards with Supabase data
+    const photoCards = document.querySelectorAll('.photo-card')
+
+    for (const card of photoCards) {
+      const photoId = (card as HTMLElement).dataset.photoId
+      if (!photoId) continue
+
+      // Load likes
+      const { count: likeCount } = await getPhotoLikes(photoId)
+      const { liked } = await hasUserLiked(photoId)
+
+      const likeBtn = card.querySelector('.like-btn') as HTMLButtonElement
+      const likeCountSpan = likeBtn?.querySelector('.like-count') as HTMLSpanElement
+
+      if (likeCountSpan) likeCountSpan.textContent = String(likeCount)
+      if (liked && likeBtn) likeBtn.classList.add('liked')
+
+      // Load comments count
+      const { count: commentCount } = await getCommentCount(photoId)
+      const commentCountSpan = card.querySelector('.comment-count') as HTMLSpanElement
+      if (commentCountSpan) commentCountSpan.textContent = String(commentCount)
+    }
+
+    // Like button handlers
+    document.querySelectorAll('.like-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation()
+        const button = e.currentTarget as HTMLButtonElement
+        const photoId = button.dataset.photoId
+        if (!photoId) return
+
+        const isLiked = button.classList.contains('liked')
+        const likeCountSpan = button.querySelector('.like-count') as HTMLSpanElement
+
+        if (isLiked) {
+          // Unlike
+          await unlikePhoto(photoId)
+          button.classList.remove('liked')
+          likeCountSpan.textContent = String(Number(likeCountSpan.textContent) - 1)
+        } else {
+          // Like
+          const result = await likePhoto(photoId)
+          if (result.alreadyLiked) return // Already liked
+
+          button.classList.add('liked')
+          likeCountSpan.textContent = String(Number(likeCountSpan.textContent) + 1)
+        }
+      })
+    })
+
+    // Comment button handlers (toggle comments section)
+    document.querySelectorAll('.comment-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation()
+        const button = e.currentTarget as HTMLButtonElement
+        const photoId = button.dataset.photoId
+        if (!photoId) return
+
+        const commentsSection = document.querySelector(
+          `.comments-section[data-photo-id="${photoId}"]`
+        ) as HTMLElement
+
+        if (!commentsSection) return
+
+        const isOpen = commentsSection.classList.contains('open')
+
+        if (isOpen) {
+          commentsSection.classList.remove('open')
+        } else {
+          commentsSection.classList.add('open')
+          // Load comments
+          await loadComments(photoId)
+        }
+      })
+    })
+
+    // Comment form handlers
+    document.querySelectorAll('.comment-form').forEach((form) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const formElement = e.currentTarget as HTMLFormElement
+        const photoId = formElement.closest('.comments-section')?.getAttribute('data-photo-id')
+        if (!photoId) return
+
+        const usernameInput = formElement.querySelector('.comment-username') as HTMLInputElement
+        const commentInput = formElement.querySelector('.comment-input') as HTMLTextAreaElement
+        const submitBtn = formElement.querySelector('.comment-submit') as HTMLButtonElement
+
+        const username = usernameInput.value.trim()
+        const comment = commentInput.value.trim()
+
+        if (!username || !comment) return
+
+        // Disable form
+        submitBtn.disabled = true
+        submitBtn.textContent = '发送中...'
+
+        // Add comment
+        const { error } = await addComment(photoId, username, comment)
+
+        if (error) {
+          alert('评论发送失败，请稍后再试')
+          submitBtn.disabled = false
+          submitBtn.textContent = '发送'
+          return
+        }
+
+        // Clear form
+        usernameInput.value = ''
+        commentInput.value = ''
+        submitBtn.disabled = false
+        submitBtn.textContent = '发送'
+
+        // Reload comments
+        await loadComments(photoId)
+
+        // Update comment count
+        const { count } = await getCommentCount(photoId)
+        const commentCountSpan = document.querySelector(
+          `.comment-btn[data-photo-id="${photoId}"] .comment-count`
+        ) as HTMLSpanElement
+        if (commentCountSpan) commentCountSpan.textContent = String(count)
+      })
+    })
+  })
+
+  async function loadComments(photoId: string) {
+    const { data: comments } = await getComments(photoId)
+    const commentsList = document.querySelector(
+      `.comments-section[data-photo-id="${photoId}"] .comments-list`
+    ) as HTMLElement
+
+    if (!commentsList) return
+
+    if (comments.length === 0) {
+      commentsList.innerHTML = '<div class="empty-comments">还没有评论，快来抢沙发吧！</div>'
+      return
+    }
+
+    commentsList.innerHTML = comments
+      .map(
+        (comment: {
+          id: number
+          username: string
+          comment: string
+          created_at: string
+        }) => {
+          const date = new Date(comment.created_at)
+          const timeAgo = getTimeAgo(date)
+
+          return `
+          <div class="comment-item">
+            <div class="comment-author">${escapeHtml(comment.username)}</div>
+            <div class="comment-text">${escapeHtml(comment.comment)}</div>
+            <div class="comment-time">${timeAgo}</div>
+          </div>
+        `
+        }
+      )
+      .join('')
+  }
+
+  function getTimeAgo(date: Date): string {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000)
+
+    if (seconds < 60) return '刚刚'
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时前`
+    if (seconds < 2592000) return `${Math.floor(seconds / 86400)} 天前`
+    return date.toLocaleDateString('zh-CN')
+  }
+
+  function escapeHtml(text: string): string {
+    const div = document.createElement('div')
+    div.textContent = text
+    return div.innerHTML
   }
 </script>
