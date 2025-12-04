@@ -69,4 +69,21 @@ const murmurs = defineCollection({
     })
 })
 
-export const collections = { blog, docs, murmurs }
+// Define photos collection
+const photos = defineCollection({
+  loader: glob({ base: './src/content/photos', pattern: '**/*.{yaml,yml}' }),
+  schema: () =>
+    z.object({
+      id: z.string().or(z.number().transform(String)),
+      src: z.string(),
+      title: z.string(),
+      alt: z.string().optional(),
+      publishDate: z.coerce.date().optional(),
+      // Compatibility with astro-pure
+      draft: z.boolean().default(false),
+      tags: z.array(z.string()).default([]),
+      updatedDate: z.coerce.date().optional()
+    })
+})
+
+export const collections = { blog, docs, murmurs, photos }

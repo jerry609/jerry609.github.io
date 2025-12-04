@@ -1,108 +1,48 @@
 ---
+import { getCollection } from 'astro:content'
 import PageLayout from '@/layouts/CommonPage.astro'
 
 const title = 'Photos'
 
-// 照片数据 - 后续可以迁移到 Content Collections
-const photos = [
-  {
-    src: '/images/photos/WechatIMG3004.jpg',
-    title: '杂记 1',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3005.jpg',
-    title: '杂记 2',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3006.jpg',
-    title: '杂记 3',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3007.jpg',
-    title: '杂记 4',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3008.jpg',
-    title: '杂记 5',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3009.jpg',
-    title: '杂记 6',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3010.jpg',
-    title: '杂记 7',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3012.jpg',
-    title: '杂记 8',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3013.jpg',
-    title: '杂记 9',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3014.jpg',
-    title: '杂记 10',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3015.jpg',
-    title: '杂记 11',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3016.jpg',
-    title: '杂记 12',
-    alt: '生活杂记照片'
-  },
-  {
-    src: '/images/photos/WechatIMG3017.jpg',
-    title: '杂记 13',
-    alt: '生活杂记照片'
-  }
-]
+// Fetch photos from Content Collections
+const photos = (await getCollection('photos')).sort((a, b) => {
+  // Sort by ID (filename) numerically
+  return parseInt(a.data.id) - parseInt(b.data.id)
+})
 ---
 
 <PageLayout {title}>
-  <div class="mx-auto max-w-screen-xl px-4 py-8">
-
-    <!-- 照片网格 -->
-    <div class="photo-grid">
+  <div class='mx-auto max-w-screen-xl px-4 py-8'>
+    <!-- Photo Grid (Masonry) -->
+    <div class='columns-1 gap-4 sm:columns-2 lg:columns-3 space-y-4'>
       {
-        photos.map((photo) => (
-          <article class="photo-card group">
-            <div class="photo-image-wrapper">
+        photos.map((photo, index) => (
+          <article
+            class='group break-inside-avoid mb-4'
+            style={`animation-delay: ${index * 50}ms`}
+          >
+            <div class='relative overflow-hidden rounded-lg bg-muted shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md'>
               <img
-                src={photo.src}
-                alt={photo.alt}
-                title={photo.title}
-                loading="lazy"
-                class="zoomable photo-image"
+                src={photo.data.src}
+                alt={photo.data.alt || photo.data.title}
+                title={photo.data.title}
+                loading='lazy'
+                class='zoomable w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105'
               />
-            </div>
-            <div class="photo-info">
-              <h2 class="photo-title">{photo.title}</h2>
+              <div class='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100'>
+                <h2 class='text-sm font-medium text-white'>{photo.data.title}</h2>
+              </div>
             </div>
           </article>
         ))
       }
     </div>
 
-    <!-- 空状态提示 -->
+    <!-- Empty State -->
     {
       photos.length === 0 && (
-        <div class="text-center py-16">
-          <p class="text-muted-foreground text-lg">暂无照片，敬请期待...</p>
+        <div class='text-center py-16'>
+          <p class='text-muted-foreground text-lg'>暂无照片，敬请期待...</p>
         </div>
       )
     }
@@ -110,75 +50,23 @@ const photos = [
 </PageLayout>
 
 <style>
-  .photo-grid {
-    display: grid;
-    gap: 2rem;
-    grid-template-columns: repeat(1, 1fr);
+  /* Entry Animation */
+  article {
+    animation: fade-up 0.6s ease-out backwards;
   }
 
-  /* 平板：2列 */
-  @media (min-width: 768px) {
-    .photo-grid {
-      grid-template-columns: repeat(2, 1fr);
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 
-  /* 桌面：3列 */
-  @media (min-width: 1024px) {
-    .photo-grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
-  }
-
-  .photo-card {
-    background: hsl(var(--card));
-    border-radius: 0.5rem;
-    overflow: hidden;
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-    transition: all 0.3s ease;
-  }
-
-  .photo-card:hover {
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    transform: translateY(-2px);
-  }
-
-  .photo-image-wrapper {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 4 / 3;
-    overflow: hidden;
-    background: hsl(var(--muted));
-  }
-
-  .photo-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.3s ease;
-  }
-
-  .photo-card:hover .photo-image {
-    transform: scale(1.05);
-  }
-
-  .photo-info {
-    padding: 1rem;
-  }
-
-  .photo-title {
-    font-size: 1.125rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: hsl(var(--foreground));
-  }
-
-  .photo-date {
-    font-size: 0.875rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  /* 确保 medium-zoom 正常工作 */
+  /* Ensure medium-zoom works */
   .zoomable {
     cursor: zoom-in;
   }
