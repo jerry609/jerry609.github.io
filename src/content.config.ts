@@ -59,12 +59,13 @@ const docs = defineCollection({
 // Define murmurs collection
 const murmurs = defineCollection({
   loader: glob({ base: './src/content/murmurs', pattern: '**/*.{md,mdx}' }),
-  schema: () =>
+  schema: ({ image }) =>
     z.object({
       publishDate: z.coerce.date(),
       updatedDate: z.coerce.date().optional(),
       tags: z.array(z.string()).default([]),
       title: z.string().optional(),
+      cover: image().optional(),
       draft: z.boolean().default(false)
     })
 })

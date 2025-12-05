@@ -1,227 +1,111 @@
 ---
 import { getCollection, render } from 'astro:content'
+import { Image } from 'astro:assets'
 import PageLayout from '@/layouts/CommonPage.astro'
+
 
 const murmursEntries = await getCollection('murmurs', ({ data }) => !data.draft)
 const sortedMurmurs = murmursEntries.sort((a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf())
 
 const renderedMurmurs = await Promise.all(sortedMurmurs.map(async (entry) => {
   const { Content } = await render(entry)
-  return { entry, Content }
+  // Extract a brief summary from the body if description is missing
+  const summary = entry.body?.slice(0, 100).replace(/[#*`]/g, '') + '...'
+  return { entry, Content, summary }
 }))
 ---
 
 <PageLayout title='Murmurs'>
-  <div class='murmurs-container'>
+  <div class='max-w-[1200px] mx-auto px-4 py-8'>
     <!-- Header -->
-    <div class='murmurs-header'>
-      <h1 class='header-title'>碎碎念</h1>
-      <p class='header-desc'>记录生活中的片刻感悟</p>
+    <div class='text-center mb-12'>
+      <h1 class='text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60'>
+        过往与夕
+      </h1>
+      <p class='text-muted-foreground'>记录生活中的片刻感悟</p>
     </div>
 
-    <!-- Murmurs List -->
-    <div class='murmurs-list'>
-      {renderedMurmurs.map(({ entry, Content }, index) => (
+    <!-- Grid Layout -->
+    <div class='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
+      {renderedMurmurs.map(({ entry, summary }, index) => (
         <article 
-          class='murmur-card'
-          style={`animation-delay: ${index * 80}ms`}
+          class='group flex flex-col bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1'
+          style={`animation: fade-up 0.5s ease-out backwards ${index * 100}ms`}
         >
-          <div class='card-date'>
-            <span class='date-day'>{entry.data.publishDate.getDate()}</span>
-            <span class='date-month'>
-              {entry.data.publishDate.toLocaleDateString('zh-CN', { month: 'short' })}
-            </span>
-            <span class='date-year'>{entry.data.publishDate.getFullYear()}</span>
+          <!-- Cover Image -->
+          <div class='relative aspect-[16/10] overflow-hidden bg-muted'>
+            {entry.data.cover ? (
+              <Image 
+                src={entry.data.cover} 
+                alt={entry.data.title || 'Cover'} 
+                class='w-full h-full object-cover transition-transform duration-500 group-hover:scale-105'
+                width={600}
+                height={400}
+              />
+            ) : (
+              <div class='w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10 text-primary/20'>
+                <svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            )}
+            
+            <!-- Tags Overlay -->
+            {entry.data.tags.length > 0 && (
+              <div class='absolute top-3 left-3 flex flex-wrap gap-2'>
+                {entry.data.tags.map(tag => (
+                  <span class='px-2 py-1 text-xs font-medium bg-black/50 text-white backdrop-blur-sm rounded-md'>
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          
-          <div class='card-content'>
-            <div class='card-weekday'>
-              {entry.data.publishDate.toLocaleDateString('zh-CN', { weekday: 'long' })}
+
+          <!-- Content -->
+          <div class='flex flex-col flex-1 p-5'>
+            <div class='flex items-center gap-2 text-xs text-muted-foreground mb-3'>
+              <span>人间游记</span>
+              {entry.data.tags.length > 0 && <span>·</span>}
+              {entry.data.tags.length > 0 && <span class='text-primary'>#{entry.data.tags[0]}</span>}
             </div>
-            <div class='card-body prose dark:prose-invert'>
-              <Content />
+
+            <h2 class='text-xl font-bold mb-3 line-clamp-2 group-hover:text-primary transition-colors'>
+              {entry.data.title || entry.data.publishDate.toLocaleDateString('zh-CN')}
+            </h2>
+
+            <p class='text-sm text-muted-foreground line-clamp-3 mb-4 flex-1 leading-relaxed'>
+              {summary}
+            </p>
+
+            <!-- Footer -->
+            <div class='flex items-center justify-between pt-4 border-t border-border/50 mt-auto'>
+              <div class='flex items-center gap-2'>
+                <div class='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs text-primary font-bold'>
+                  J
+                </div>
+                <span class='text-xs text-muted-foreground font-medium'>Jerry</span>
+              </div>
+              <time class='text-xs text-muted-foreground'>
+                {entry.data.publishDate.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+              </time>
             </div>
           </div>
         </article>
       ))}
     </div>
-
-    <!-- Empty State -->
-    {renderedMurmurs.length === 0 && (
-      <div class='empty-state'>
-        <span class='empty-icon'>✨</span>
-        <p>暂无内容</p>
-      </div>
-    )}
   </div>
 </PageLayout>
 
 <style>
-  .murmurs-container {
-    max-width: 48rem;
-    margin: 0 auto;
-    padding: 0 1rem;
-  }
-
-  /* Header */
-  .murmurs-header {
-    text-align: center;
-    padding: 2rem 0 3rem;
-  }
-
-  .header-title {
-    font-size: 2.5rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.7) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 0.5rem;
-  }
-
-  .header-desc {
-    color: hsl(var(--muted-foreground));
-    font-size: 1rem;
-  }
-
-  /* List */
-  .murmurs-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-
-  /* Card */
-  .murmur-card {
-    display: flex;
-    gap: 1.5rem;
-    padding: 1.5rem;
-    background: hsl(var(--card));
-    border: 1px solid hsl(var(--border));
-    border-radius: 1rem;
-    transition: all 0.3s ease;
-    animation: card-in 0.5s ease-out backwards;
-  }
-
-  .murmur-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 30px hsl(var(--foreground) / 0.08);
-    border-color: hsl(var(--primary) / 0.3);
-  }
-
-  @keyframes card-in {
+  @keyframes fade-up {
     from {
       opacity: 0;
-      transform: translateY(16px);
+      transform: translateY(20px);
     }
-  }
-
-  /* Date Column */
-  .card-date {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    min-width: 4rem;
-    padding: 0.75rem;
-    background: linear-gradient(135deg, hsl(var(--primary) / 0.1) 0%, hsl(var(--primary) / 0.05) 100%);
-    border-radius: 0.75rem;
-    text-align: center;
-  }
-
-  .date-day {
-    font-size: 2rem;
-    font-weight: 700;
-    color: hsl(var(--primary));
-    line-height: 1;
-  }
-
-  .date-month {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: hsl(var(--foreground));
-    margin-top: 0.25rem;
-  }
-
-  .date-year {
-    font-size: 0.7rem;
-    color: hsl(var(--muted-foreground));
-    margin-top: 0.125rem;
-  }
-
-  /* Content */
-  .card-content {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .card-weekday {
-    font-size: 0.8rem;
-    color: hsl(var(--muted-foreground));
-    margin-bottom: 0.75rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .card-weekday::before {
-    content: '📅';
-    font-size: 0.9rem;
-  }
-
-  .card-body {
-    font-size: 0.95rem;
-    line-height: 1.8;
-  }
-
-  .card-body :global(p) {
-    margin: 0;
-    color: hsl(var(--foreground));
-  }
-
-  .card-body :global(p + p) {
-    margin-top: 1rem;
-  }
-
-  /* Empty State */
-  .empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .empty-icon {
-    font-size: 3rem;
-    display: block;
-    margin-bottom: 1rem;
-  }
-
-  /* Mobile */
-  @media (max-width: 640px) {
-    .murmur-card {
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    .card-date {
-      flex-direction: row;
-      gap: 0.5rem;
-      justify-content: center;
-      padding: 0.5rem 1rem;
-    }
-
-    .date-day {
-      font-size: 1.5rem;
-    }
-
-    .date-month,
-    .date-year {
-      font-size: 0.85rem;
-      margin: 0;
-    }
-
-    .header-title {
-      font-size: 2rem;
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 </style>
