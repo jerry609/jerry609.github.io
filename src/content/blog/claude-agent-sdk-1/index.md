@@ -61,6 +61,17 @@ Claude Code CLI（子进程）
 Claude API
 ```
 
+下面这张图更直观地展示了整个分层架构，以及各层之间的数据流向：
+
+![Claude Agent SDK 分层架构图](./cadk.png)
+
+从图中可以看到：
+- **左侧**是你的业务代码，通过 `query()` 或 `ClaudeSDKClient` 发起调用；
+- **中间**是 SDK 的三层实现：Public API → Internal Implementation → Transport；
+- **右侧**是 Claude Code CLI 子进程，它再去调用真正的 Claude API。
+
+所有的 Hook、Permission、MCP 等横切关注点都在 Internal Implementation 层处理，对上层使用者透明。
+
 这意味着：
 
 - SDK 的核心工作是**管理与 CLI 子进程的双向通信**；
@@ -431,6 +442,20 @@ class Query:
 ```
 
 这里可以把 `Query` 想象成 SDK 的「事件循环 + 路由器」：一边从传输层不断读取 JSON 行，一边把控制请求分发给权限回调、Hook、MCP 服务器等组件。
+
+下面这张时序图展示了控制协议的完整生命周期，包括初始化、消息流、权限检查、Hook 回调和 MCP 调用：
+
+![Claude Agent SDK 控制协议时序图](./cadk_ts.png)
+
+从图中可以看到几个关键阶段：
+
+1. **初始化阶段**：`InternalClient` 启动 CLI 子进程，`Query` 发送 `initialize` 控制请求完成 Hook / MCP 注册；
+2. **消息流阶段**：CLI 从 Claude API 拿到响应后，通过 JSON Lines 流式返回，`message_parser` 负责把原始 JSON 转成强类型 Message；
+3. **权限检查**：当 CLI 要调用工具时，会发 `can_use_tool` 控制请求，SDK 调用你的回调函数做决策；
+4. **Hook 回调**：`PreToolUse` / `PostToolUse` 等 Hook 也是通过控制协议触发，让你能在关键节点拦截或修改行为；
+5. **SDK MCP 调用**：如果你注册了 SDK 内置的 MCP 服务器，CLI 会通过 `mcp_message` 请求来调用它们。
+
+这套双向协议是整个 SDK 最核心的设计，理解了它，后面看权限系统、Hook、MCP 就会非常顺畅。
 
 ### 5.3 工具权限系统：PermissionMode + can_use_tool
 
