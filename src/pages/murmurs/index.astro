@@ -11,18 +11,217 @@ const renderedMurmurs = await Promise.all(sortedMurmurs.map(async (entry) => {
 }))
 ---
 
-<PageLayout title='Murmurs' comment>
-  <div class='space-y-8 mt-4'>
-    {renderedMurmurs.map(({ entry, Content }) => (
-      <div class='relative pl-8 before:absolute before:left-0 before:top-2 before:h-full before:w-[2px] before:bg-border last:before:hidden'>
-        <div class='absolute left-[-5px] top-2 h-3 w-3 rounded-full bg-primary border-2 border-background'></div>
-        <div class='text-sm text-muted-foreground mb-2'>
-          {entry.data.publishDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
-        </div>
-        <div class='prose dark:prose-invert max-w-none'>
-          <Content />
-        </div>
+<PageLayout title='Murmurs'>
+  <div class='murmurs-container'>
+    <!-- Header -->
+    <div class='murmurs-header'>
+      <h1 class='header-title'>碎碎念</h1>
+      <p class='header-desc'>记录生活中的片刻感悟</p>
+    </div>
+
+    <!-- Murmurs List -->
+    <div class='murmurs-list'>
+      {renderedMurmurs.map(({ entry, Content }, index) => (
+        <article 
+          class='murmur-card'
+          style={`animation-delay: ${index * 80}ms`}
+        >
+          <div class='card-date'>
+            <span class='date-day'>{entry.data.publishDate.getDate()}</span>
+            <span class='date-month'>
+              {entry.data.publishDate.toLocaleDateString('zh-CN', { month: 'short' })}
+            </span>
+            <span class='date-year'>{entry.data.publishDate.getFullYear()}</span>
+          </div>
+          
+          <div class='card-content'>
+            <div class='card-weekday'>
+              {entry.data.publishDate.toLocaleDateString('zh-CN', { weekday: 'long' })}
+            </div>
+            <div class='card-body prose dark:prose-invert'>
+              <Content />
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+
+    <!-- Empty State -->
+    {renderedMurmurs.length === 0 && (
+      <div class='empty-state'>
+        <span class='empty-icon'>✨</span>
+        <p>暂无内容</p>
       </div>
-    ))}
+    )}
   </div>
 </PageLayout>
+
+<style>
+  .murmurs-container {
+    max-width: 48rem;
+    margin: 0 auto;
+    padding: 0 1rem;
+  }
+
+  /* Header */
+  .murmurs-header {
+    text-align: center;
+    padding: 2rem 0 3rem;
+  }
+
+  .header-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.7) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+  }
+
+  .header-desc {
+    color: hsl(var(--muted-foreground));
+    font-size: 1rem;
+  }
+
+  /* List */
+  .murmurs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* Card */
+  .murmur-card {
+    display: flex;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+    animation: card-in 0.5s ease-out backwards;
+  }
+
+  .murmur-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px hsl(var(--foreground) / 0.08);
+    border-color: hsl(var(--primary) / 0.3);
+  }
+
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+  }
+
+  /* Date Column */
+  .card-date {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 4rem;
+    padding: 0.75rem;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.1) 0%, hsl(var(--primary) / 0.05) 100%);
+    border-radius: 0.75rem;
+    text-align: center;
+  }
+
+  .date-day {
+    font-size: 2rem;
+    font-weight: 700;
+    color: hsl(var(--primary));
+    line-height: 1;
+  }
+
+  .date-month {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: hsl(var(--foreground));
+    margin-top: 0.25rem;
+  }
+
+  .date-year {
+    font-size: 0.7rem;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.125rem;
+  }
+
+  /* Content */
+  .card-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .card-weekday {
+    font-size: 0.8rem;
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-weekday::before {
+    content: '📅';
+    font-size: 0.9rem;
+  }
+
+  .card-body {
+    font-size: 0.95rem;
+    line-height: 1.8;
+  }
+
+  .card-body :global(p) {
+    margin: 0;
+    color: hsl(var(--foreground));
+  }
+
+  .card-body :global(p + p) {
+    margin-top: 1rem;
+  }
+
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 1rem;
+  }
+
+  /* Mobile */
+  @media (max-width: 640px) {
+    .murmur-card {
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .card-date {
+      flex-direction: row;
+      gap: 0.5rem;
+      justify-content: center;
+      padding: 0.5rem 1rem;
+    }
+
+    .date-day {
+      font-size: 1.5rem;
+    }
+
+    .date-month,
+    .date-year {
+      font-size: 0.85rem;
+      margin: 0;
+    }
+
+    .header-title {
+      font-size: 2rem;
+    }
+  }
+</style>
