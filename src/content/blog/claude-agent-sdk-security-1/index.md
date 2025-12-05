@@ -1,4 +1,5 @@
-title: 'Claude Agent SDK 源码实战（安全篇）：我怎么用权限、Hook 和 Sandbox 把 Claude 关在笼子里'
+---
+title: 'Claude Agent SDK 安全篇：权限、Hook 与 Sandbox'
 description: '从安全工程和平台治理的视角，拆解 Claude Agent SDK 里的工具权限系统、Hook 回调机制和 Bash Sandbox 配置，结合源码和实战用法，聊聊怎么在让 Claude 真正“动手”时，做到事前可控、事中可观、事后可查。'
 publishDate: '2025-12-06'
 tags: ['源码分析', 'claude', 'sdk', 'python', 'agent', 'security']
