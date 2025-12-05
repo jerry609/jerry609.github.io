@@ -95,11 +95,47 @@ function getDifficultyColor(score: string | undefined) {
 <script>
   import { getProblemProgress, updateProblemStatus } from '@/lib/supabaseClient'
 
-  // 页面加载时，从 Supabase 加载进度并更新 checkbox 状态
+  // Admin password - 改成你自己的密码
+  const ADMIN_PASSWORD = 'jerry609'
+  const ADMIN_KEY = 'roadmap_admin_mode'
+
+  // 检查是否是管理员模式
+  function isAdminMode(): boolean {
+    return localStorage.getItem(ADMIN_KEY) === 'true'
+  }
+
+  // 切换管理员模式
+  function toggleAdminMode() {
+    if (isAdminMode()) {
+      localStorage.removeItem(ADMIN_KEY)
+      updateCheckboxState(false)
+      alert('已退出管理员模式')
+    } else {
+      const password = prompt('请输入管理员密码：')
+      if (password === ADMIN_PASSWORD) {
+        localStorage.setItem(ADMIN_KEY, 'true')
+        updateCheckboxState(true)
+        alert('管理员模式已开启，现在可以编辑进度')
+      } else if (password !== null) {
+        alert('密码错误')
+      }
+    }
+  }
+
+  // 更新 checkbox 的可编辑状态
+  function updateCheckboxState(editable: boolean) {
+    const checkboxes = document.querySelectorAll<HTMLInputElement>('.prob-check')
+    checkboxes.forEach((checkbox) => {
+      checkbox.disabled = !editable
+      checkbox.style.cursor = editable ? 'pointer' : 'not-allowed'
+      checkbox.style.opacity = editable ? '1' : '0.7'
+    })
+  }
+
+  // 页面加载时，从 Supabase 加载进度
   async function loadProgress() {
     const progressMap = await getProblemProgress()
     
-    // 更新所有 checkbox 的状态
     const checkboxes = document.querySelectorAll<HTMLInputElement>('.prob-check')
     checkboxes.forEach((checkbox) => {
       const problemId = checkbox.dataset.id
@@ -109,12 +145,20 @@ function getDifficultyColor(score: string | undefined) {
     })
   }
 
-  // 当 checkbox 状态改变时，保存到 Supabase
+  // 设置 checkbox 监听器
   function setupCheckboxListeners() {
     const checkboxes = document.querySelectorAll<HTMLInputElement>('.prob-check')
     
     checkboxes.forEach((checkbox) => {
       checkbox.addEventListener('change', async (event) => {
+        // 再次检查权限
+        if (!isAdminMode()) {
+          event.preventDefault()
+          checkbox.checked = !checkbox.checked // 回滚
+          alert('请先进入管理员模式')
+          return
+        }
+
         const target = event.target as HTMLInputElement
         const problemId = target.dataset.id
         
@@ -124,10 +168,9 @@ function getDifficultyColor(score: string | undefined) {
           
           if (!success) {
             console.warn(`Failed to update status for problem ${problemId}`)
-            // 可选：回滚 checkbox 状态
-            // target.checked = !completed
+            target.checked = !completed // 回滚
+            alert('保存失败，请检查网络连接')
           } else {
-            // 触发自定义事件，通知 ProgressStats 组件更新
             document.dispatchEvent(new CustomEvent('problem-status-changed'))
           }
         }
@@ -135,10 +178,41 @@ function getDifficultyColor(score: string | undefined) {
     })
   }
 
-  // 页面加载完成后初始化
+  // 创建管理员按钮
+  function createAdminButton() {
+    const btn = document.createElement('button')
+    btn.id = 'admin-toggle-btn'
+    btn.innerHTML = isAdminMode() ? '🔓 退出编辑' : '🔐 管理员'
+    btn.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 16px;
+      background: ${isAdminMode() ? 'hsl(142 76% 36%)' : 'hsl(var(--primary))'};
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1000;
+      transition: all 0.2s;
+    `
+    btn.addEventListener('click', () => {
+      toggleAdminMode()
+      btn.innerHTML = isAdminMode() ? '🔓 退出编辑' : '🔐 管理员'
+      btn.style.background = isAdminMode() ? 'hsl(142 76% 36%)' : 'hsl(var(--primary))'
+    })
+    document.body.appendChild(btn)
+  }
+
+  // 初始化
   document.addEventListener('DOMContentLoaded', async () => {
     await loadProgress()
     setupCheckboxListeners()
+    updateCheckboxState(isAdminMode())
+    createAdminButton()
   })
 </script>
 
