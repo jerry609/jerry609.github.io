@@ -34,8 +34,8 @@ const renderedMurmurs = await Promise.all(sortedMurmurs.map(async (entry) => {
           style={`animation: fade-up 0.5s ease-out backwards ${index * 100}ms`}
         >
           <!-- Cover Image -->
-          <div class='relative aspect-[16/10] overflow-hidden bg-muted'>
-            {entry.data.cover ? (
+          {entry.data.cover && (
+            <div class='relative aspect-[16/10] overflow-hidden bg-muted'>
               <Image 
                 src={entry.data.cover} 
                 alt={entry.data.title || 'Cover'} 
@@ -43,25 +43,19 @@ const renderedMurmurs = await Promise.all(sortedMurmurs.map(async (entry) => {
                 width={600}
                 height={400}
               />
-            ) : (
-              <div class='w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10 text-primary/20'>
-                <svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            )}
-            
-            <!-- Tags Overlay -->
-            {entry.data.tags.length > 0 && (
-              <div class='absolute top-3 left-3 flex flex-wrap gap-2'>
-                {entry.data.tags.map(tag => (
-                  <span class='px-2 py-1 text-xs font-medium bg-black/50 text-white backdrop-blur-sm rounded-md'>
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+              
+              <!-- Tags Overlay -->
+              {entry.data.tags.length > 0 && (
+                <div class='absolute top-3 left-3 flex flex-wrap gap-2'>
+                  {entry.data.tags.map(tag => (
+                    <span class='px-2 py-1 text-xs font-medium bg-black/50 text-white backdrop-blur-sm rounded-md'>
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <!-- Content -->
           <div class='flex flex-col flex-1 p-5'>
