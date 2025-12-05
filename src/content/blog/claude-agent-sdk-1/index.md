@@ -6,7 +6,7 @@ tags: ['源码分析', 'claude', 'sdk', 'python', 'agent']
 language: 'zh-CN'
 ---
 
-> 这一篇是 Claude Agent SDK 源码分析系列的开篇：先不急着钻函数细节，而是**跑通最小示例 + 读懂项目结构 + 理解它到底在解决什么问题**。后面几篇再一点点下潜到类型系统、内部 Client、消息解析、MCP 工具等实现细节。
+
 
 ## 一、为啥要关心 Claude Agent SDK？
 
