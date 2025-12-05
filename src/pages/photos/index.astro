@@ -6,91 +6,144 @@ const title = 'Photos'
 
 // Fetch photos from Content Collections
 const photos = (await getCollection('photos')).sort((a, b) => {
-  // Sort by ID (filename) numerically
   return parseInt(a.data.id) - parseInt(b.data.id)
 })
+
+const photoIds = photos.map(p => p.data.id)
 ---
 
 <PageLayout {title}>
   <div class='mx-auto max-w-screen-xl px-4 py-8'>
+    <!-- Stats Header -->
+    <div class='stats-header'>
+      <div class='stat-card'>
+        <span class='stat-icon'>📸</span>
+        <div class='stat-info'>
+          <span class='stat-value'>{photos.length}</span>
+          <span class='stat-label'>照片</span>
+        </div>
+      </div>
+      <div class='stat-card'>
+        <span class='stat-icon'>❤️</span>
+        <div class='stat-info'>
+          <span class='stat-value' id='total-likes'>-</span>
+          <span class='stat-label'>点赞</span>
+        </div>
+      </div>
+      <div class='stat-card'>
+        <span class='stat-icon'>💬</span>
+        <div class='stat-info'>
+          <span class='stat-value' id='total-comments'>-</span>
+          <span class='stat-label'>评论</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Photo Grid (Masonry) -->
-    <div class='columns-1 gap-4 sm:columns-2 lg:columns-3 space-y-4'>
+    <div class='columns-1 gap-5 sm:columns-2 lg:columns-3 space-y-5'>
       {
         photos.map((photo, index) => (
           <article
-            class='photo-card group break-inside-avoid mb-4'
-            style={`animation-delay: ${index * 50}ms`}
+            class='photo-card group break-inside-avoid'
+            style={`animation-delay: ${index * 60}ms`}
             data-story={photo.data.story}
             data-mood={photo.data.mood}
             data-photo-id={photo.data.id}
           >
-            <div class='relative overflow-hidden rounded-lg bg-muted shadow-photo transition-all duration-300 hover:-translate-y-1 hover:shadow-photo-hover'>
+            <!-- Image Container -->
+            <div class='image-wrapper'>
               <img
                 src={photo.data.src}
                 alt={photo.data.alt || photo.data.title}
                 title={photo.data.title}
                 loading='lazy'
-                class='zoomable w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105'
+                class='photo-image'
+                data-zoomable
               />
-              <div class='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100'>
-                <h2 class='text-sm font-medium text-white'>{photo.data.title}</h2>
+              
+              <!-- Hover Overlay -->
+              <div class='hover-overlay'>
+                <h2 class='photo-title'>{photo.data.title}</h2>
                 {photo.data.mood && (
-                  <span class='text-xs text-white/80'>{photo.data.mood}</span>
+                  <span class='photo-mood'>{photo.data.mood}</span>
                 )}
               </div>
 
-              {/* Story overlay (hidden by default) */}
+              <!-- Story Overlay (Long Press) -->
               {photo.data.story && (
                 <div class='story-overlay'>
                   <div class='story-content'>
+                    <div class='story-icon'>📖</div>
                     <p class='story-text'>{photo.data.story}</p>
                   </div>
                 </div>
               )}
+
+              <!-- Loading Skeleton -->
+              <div class='image-skeleton'>
+                <div class='skeleton-shimmer' />
+              </div>
             </div>
 
-            {/* Interaction Bar */}
+            <!-- Interaction Bar -->
             <div class='interaction-bar'>
-              {/* Like Button */}
               <button
-                class='like-btn'
+                class='action-btn like-btn'
                 data-photo-id={photo.data.id}
-                aria-label='Like this photo'
+                aria-label='点赞'
               >
-                <span class='heart-icon'>❤️</span>
-                <span class='like-count'>0</span>
+                <span class='btn-icon'>❤️</span>
+                <span class='btn-count like-count'>
+                  <span class='count-skeleton' />
+                </span>
               </button>
 
-              {/* Comment Button */}
               <button
-                class='comment-btn'
+                class='action-btn comment-btn'
                 data-photo-id={photo.data.id}
-                aria-label='View comments'
+                aria-label='评论'
               >
-                <span class='comment-icon'>💬</span>
-                <span class='comment-count'>0</span>
+                <span class='btn-icon'>💬</span>
+                <span class='btn-count comment-count'>
+                  <span class='count-skeleton' />
+                </span>
+              </button>
+
+              <button
+                class='action-btn share-btn'
+                data-photo-id={photo.data.id}
+                aria-label='分享'
+              >
+                <span class='btn-icon'>📤</span>
               </button>
             </div>
 
-            {/* Comments Section (hidden by default) */}
+            <!-- Comments Section -->
             <div class='comments-section' data-photo-id={photo.data.id}>
-              <div class='comments-list'></div>
+              <div class='comments-list' />
               <form class='comment-form'>
-                <input
-                  type='text'
-                  class='comment-username'
-                  placeholder='你的昵称'
-                  maxlength='50'
-                  required
-                />
-                <textarea
-                  class='comment-input'
-                  placeholder='留下你的想法...'
-                  maxlength='500'
-                  rows='2'
-                  required
-                ></textarea>
-                <button type='submit' class='comment-submit'>发送</button>
+                <div class='form-row'>
+                  <input
+                    type='text'
+                    class='comment-username'
+                    placeholder='昵称'
+                    maxlength='30'
+                    required
+                  />
+                </div>
+                <div class='form-row'>
+                  <textarea
+                    class='comment-input'
+                    placeholder='留下你的想法...'
+                    maxlength='500'
+                    rows='2'
+                    required
+                  />
+                </div>
+                <button type='submit' class='comment-submit'>
+                  <span class='submit-text'>发送</span>
+                  <span class='submit-loading'>发送中...</span>
+                </button>
               </form>
             </div>
           </article>
@@ -101,60 +154,197 @@ const photos = (await getCollection('photos')).sort((a, b) => {
     <!-- Empty State -->
     {
       photos.length === 0 && (
-        <div class='text-center py-16'>
-          <p class='text-muted-foreground text-lg'>暂无照片，敬请期待...</p>
+        <div class='empty-state'>
+          <span class='empty-icon'>📷</span>
+          <p class='empty-text'>暂无照片，敬请期待...</p>
         </div>
       )
     }
   </div>
 
-  <!-- Particle container for Konoha effects -->
-  <div id='particle-container' aria-hidden='true'></div>
+  <!-- Particle Effects Container -->
+  <div id='particle-container' aria-hidden='true' />
+
+  <!-- Pass photoIds to client -->
+  <script define:vars={{ photoIds }}>
+    window.__photoIds = photoIds
+  </script>
 </PageLayout>
 
 <style>
-  /* Entry Animation */
-  article {
-    animation: fade-up 0.6s ease-out backwards;
+  /* ===== Stats Header ===== */
+  .stats-header {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
   }
 
-  @keyframes fade-up {
+  .stat-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--muted) / 0.3) 100%);
+    border: 1px solid hsl(var(--border));
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px hsl(var(--primary) / 0.1);
+    border-color: hsl(var(--primary) / 0.3);
+  }
+
+  .stat-icon {
+    font-size: 1.75rem;
+  }
+
+  .stat-info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+    line-height: 1.2;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ===== Photo Card ===== */
+  .photo-card {
+    position: relative;
+    background: hsl(var(--card));
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 4px 20px hsl(var(--foreground) / 0.05);
+    border: 1px solid hsl(var(--border));
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: card-enter 0.6s ease-out backwards;
+  }
+
+  .photo-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px hsl(var(--foreground) / 0.12);
+    border-color: hsl(var(--primary) / 0.2);
+  }
+
+  @keyframes card-enter {
     from {
       opacity: 0;
-      transform: translateY(20px);
+      transform: translateY(24px) scale(0.96);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
+      transform: translateY(0) scale(1);
     }
   }
 
-  /* Dark mode optimized shadows */
-  .shadow-photo {
-    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  /* ===== Image ===== */
+  .image-wrapper {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--muted));
   }
 
-  .shadow-photo-hover {
-    box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.15), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  .photo-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    cursor: zoom-in;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Dark mode adjustments */
-  @media (prefers-color-scheme: dark) {
-    .shadow-photo {
-      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.2);
-    }
-
-    .shadow-photo-hover {
-      box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.4), 0 8px 10px -6px rgb(0 0 0 / 0.3);
-    }
+  .photo-card:hover .photo-image {
+    transform: scale(1.03);
   }
 
-  /* Story overlay */
+  .image-skeleton {
+    position: absolute;
+    inset: 0;
+    background: hsl(var(--muted));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .photo-image:not([src]), .photo-image[src=""] {
+    opacity: 0;
+  }
+
+  .photo-image:not([src]) + .hover-overlay + .story-overlay + .image-skeleton,
+  .photo-image[src=""]:not([src]) + .hover-overlay + .story-overlay + .image-skeleton {
+    opacity: 1;
+  }
+
+  .skeleton-shimmer {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(var(--foreground) / 0.05) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* ===== Hover Overlay ===== */
+  .hover-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top,
+      hsl(0 0% 0% / 0.7) 0%,
+      hsl(0 0% 0% / 0.3) 40%,
+      transparent 100%
+    );
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 1.25rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .photo-card:hover .hover-overlay {
+    opacity: 1;
+  }
+
+  .photo-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: white;
+    margin: 0;
+    text-shadow: 0 1px 3px hsl(0 0% 0% / 0.3);
+  }
+
+  .photo-mood {
+    font-size: 0.8rem;
+    color: hsl(0 0% 100% / 0.85);
+    margin-top: 0.25rem;
+  }
+
+  /* ===== Story Overlay ===== */
   .story-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(10px);
+    background: hsl(0 0% 0% / 0.88);
+    backdrop-filter: blur(12px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -170,145 +360,147 @@ const photos = (await getCollection('photos')).sort((a, b) => {
   }
 
   .story-content {
-    padding: 1.5rem;
-    max-width: 90%;
-    animation: story-slide-up 0.3s ease-out;
+    padding: 2rem;
+    text-align: center;
+    animation: story-appear 0.3s ease-out;
+  }
+
+  .story-icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
   }
 
   .story-text {
     color: white;
-    font-size: 0.875rem;
-    line-height: 1.6;
-    text-align: center;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    max-width: 280px;
   }
 
-  @keyframes story-slide-up {
+  @keyframes story-appear {
     from {
       opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
+      transform: translateY(8px);
     }
   }
 
-  /* Particle container */
-  #particle-container {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 9999;
-  }
-
-  /* Particle styles */
-  .particle {
-    position: absolute;
-    pointer-events: none;
-    font-size: 1.5rem;
-    animation: float-away 2s ease-out forwards;
-  }
-
-  @keyframes float-away {
-    0% {
-      opacity: 1;
-      transform: translateY(0) rotate(0deg);
-    }
-    100% {
-      opacity: 0;
-      transform: translateY(-100px) rotate(180deg);
-    }
-  }
-
-  /* Ensure medium-zoom works */
-  .zoomable {
-    cursor: zoom-in;
-  }
-
-  .photo-card {
-    position: relative;
-  }
-
-  /* Interaction Bar */
+  /* ===== Interaction Bar ===== */
   .interaction-bar {
     display: flex;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
     background: hsl(var(--card));
-    border-top: 1px solid hsl(var(--border));
+    border-top: 1px solid hsl(var(--border) / 0.5);
   }
 
-  .like-btn,
-  .comment-btn {
+  .action-btn {
     display: flex;
     align-items: center;
-    gap: 0.375rem;
-    padding: 0.375rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
-    background: transparent;
+    gap: 0.4rem;
+    padding: 0.5rem 0.875rem;
+    background: hsl(var(--muted) / 0.5);
+    border: 1px solid transparent;
+    border-radius: 2rem;
     color: hsl(var(--foreground));
-    font-size: 0.875rem;
+    font-size: 0.8rem;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s ease;
   }
 
-  .like-btn:hover,
-  .comment-btn:hover {
+  .action-btn:hover {
     background: hsl(var(--muted));
     transform: translateY(-1px);
   }
 
+  .action-btn:active {
+    transform: scale(0.96);
+  }
+
+  .btn-icon {
+    font-size: 1rem;
+    transition: transform 0.3s ease;
+  }
+
+  .btn-count {
+    font-weight: 600;
+    min-width: 1rem;
+    text-align: center;
+  }
+
+  .count-skeleton {
+    display: inline-block;
+    width: 1rem;
+    height: 0.875rem;
+    background: hsl(var(--muted));
+    border-radius: 0.25rem;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* Like Button States */
   .like-btn.liked {
-    background: hsl(var(--primary) / 0.1);
-    border-color: hsl(var(--primary));
-    color: hsl(var(--primary));
+    background: hsl(350 80% 50% / 0.15);
+    border-color: hsl(350 80% 50% / 0.3);
+    color: hsl(350 80% 45%);
   }
 
-  .like-btn.liked .heart-icon {
-    animation: heart-beat 0.3s ease;
+  .like-btn.liked .btn-icon {
+    animation: heart-pop 0.4s ease;
   }
 
-  @keyframes heart-beat {
-    0%,
-    100% {
-      transform: scale(1);
-    }
-    50% {
-      transform: scale(1.3);
-    }
+  @keyframes heart-pop {
+    0% { transform: scale(1); }
+    25% { transform: scale(1.25); }
+    50% { transform: scale(0.95); }
+    100% { transform: scale(1); }
   }
 
-  /* Comments Section */
+  .share-btn {
+    margin-left: auto;
+  }
+
+  /* ===== Comments Section ===== */
   .comments-section {
     max-height: 0;
     overflow: hidden;
-    transition: max-height 0.3s ease;
-    background: hsl(var(--muted) / 0.3);
+    transition: max-height 0.35s ease;
+    background: hsl(var(--muted) / 0.2);
   }
 
   .comments-section.open {
-    max-height: 500px;
+    max-height: 600px;
     overflow-y: auto;
   }
 
   .comments-list {
     padding: 1rem;
-    max-height: 300px;
+    max-height: 280px;
     overflow-y: auto;
   }
 
   .comment-item {
-    padding: 0.75rem;
-    margin-bottom: 0.75rem;
+    padding: 0.875rem;
+    margin-bottom: 0.625rem;
     background: hsl(var(--card));
-    border-radius: 0.375rem;
-    border-left: 2px solid hsl(var(--primary));
+    border-radius: 0.75rem;
+    border-left: 3px solid hsl(var(--primary));
+    animation: comment-in 0.3s ease;
+  }
+
+  @keyframes comment-in {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
   }
 
   .comment-author {
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: 0.85rem;
     color: hsl(var(--primary));
     margin-bottom: 0.25rem;
   }
@@ -320,96 +512,213 @@ const photos = (await getCollection('photos')).sort((a, b) => {
   }
 
   .comment-time {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: hsl(var(--muted-foreground));
-    margin-top: 0.25rem;
+    margin-top: 0.375rem;
   }
 
+  .empty-comments {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.875rem;
+  }
+
+  /* Comment Form */
   .comment-form {
     padding: 1rem;
+    border-top: 1px solid hsl(var(--border) / 0.5);
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    border-top: 1px solid hsl(var(--border));
+    gap: 0.625rem;
+  }
+
+  .form-row {
+    display: flex;
   }
 
   .comment-username,
   .comment-input {
-    padding: 0.5rem 0.75rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.375rem;
+    flex: 1;
+    padding: 0.625rem 0.875rem;
     background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.625rem;
     color: hsl(var(--foreground));
     font-size: 0.875rem;
+    transition: all 0.2s ease;
   }
 
-  .comment-username {
-    width: 50%;
+  .comment-username:focus,
+  .comment-input:focus {
+    outline: none;
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 
   .comment-input {
-    resize: vertical;
+    resize: none;
     font-family: inherit;
   }
 
   .comment-submit {
     align-self: flex-end;
-    padding: 0.5rem 1.5rem;
-    background: hsl(var(--primary));
+    padding: 0.625rem 1.5rem;
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.85) 100%);
     color: hsl(var(--primary-foreground));
     border: none;
-    border-radius: 0.375rem;
-    font-size: 0.875rem;
-    font-weight: 500;
+    border-radius: 2rem;
+    font-size: 0.85rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s ease;
   }
 
-  .comment-submit:hover {
-    opacity: 0.9;
+  .comment-submit:hover:not(:disabled) {
     transform: translateY(-1px);
+    box-shadow: 0 4px 12px hsl(var(--primary) / 0.3);
   }
 
   .comment-submit:disabled {
-    opacity: 0.5;
+    opacity: 0.6;
     cursor: not-allowed;
   }
 
-  .empty-comments {
-    padding: 2rem 1rem;
+  .submit-loading {
+    display: none;
+  }
+
+  .comment-submit.loading .submit-text {
+    display: none;
+  }
+
+  .comment-submit.loading .submit-loading {
+    display: inline;
+  }
+
+  /* ===== Empty State ===== */
+  .empty-state {
     text-align: center;
+    padding: 4rem 2rem;
+  }
+
+  .empty-icon {
+    font-size: 4rem;
+    display: block;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-text {
     color: hsl(var(--muted-foreground));
-    font-size: 0.875rem;
+    font-size: 1.1rem;
+  }
+
+  /* ===== Particles ===== */
+  #particle-container {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  :global(.particle) {
+    position: absolute;
+    pointer-events: none;
+    font-size: 1.5rem;
+    animation: float-away 2s ease-out forwards;
+  }
+
+  @keyframes float-away {
+    0% {
+      opacity: 1;
+      transform: translateY(0) rotate(0deg) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-80px) rotate(180deg) scale(0.5);
+    }
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 640px) {
+    .stats-header {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+
+    .stat-card {
+      flex-direction: column;
+      text-align: center;
+      padding: 0.75rem;
+      gap: 0.25rem;
+    }
+
+    .stat-icon {
+      font-size: 1.25rem;
+    }
+
+    .stat-value {
+      font-size: 1.125rem;
+    }
+
+    .stat-label {
+      font-size: 0.65rem;
+    }
   }
 </style>
 
 <script>
-  // Long-press detection
-  let pressTimer: number | null = null
-  let currentCard: HTMLElement | null = null
+  import mediumZoom from 'medium-zoom'
+  import {
+    likePhoto,
+    unlikePhoto,
+    getAllPhotosStats,
+    addComment,
+    getComments,
+    getCommentCount,
+  } from '@/utils/supabase'
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const photoCards = document.querySelectorAll('.photo-card')
+  // Debounce helper
+  function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    return (...args: Parameters<T>) => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => fn(...args), ms)
+    }
+  }
 
-    photoCards.forEach((card) => {
+  document.addEventListener('DOMContentLoaded', async () => {
+    const photoIds = (window as any).__photoIds as string[]
+
+    // ===== Initialize Medium Zoom =====
+    const zoom = mediumZoom('[data-zoomable]', {
+      margin: 24,
+      background: 'hsl(0 0% 0% / 0.9)',
+      scrollOffset: 0,
+    })
+
+    // ===== Long Press for Story =====
+    let pressTimer: number | null = null
+
+    document.querySelectorAll('.photo-card').forEach((card) => {
       const element = card as HTMLElement
       const story = element.dataset.story
       if (!story) return
 
       const overlay = element.querySelector('.story-overlay') as HTMLElement
 
-      // Mouse/Touch start
       const startPress = (e: Event) => {
+        // Don't interfere with zoom
+        if ((e.target as HTMLElement).hasAttribute('data-zoomable')) return
+        
         e.preventDefault()
         pressTimer = window.setTimeout(() => {
           overlay?.classList.add('active')
-          currentCard = element
-          // Haptic feedback simulation
           element.style.transform = 'scale(0.98)'
         }, 500)
       }
 
-      // Mouse/Touch end
       const endPress = () => {
         if (pressTimer) {
           clearTimeout(pressTimer)
@@ -417,233 +726,236 @@ const photos = (await getCollection('photos')).sort((a, b) => {
         }
         overlay?.classList.remove('active')
         element.style.transform = ''
-        currentCard = null
       }
 
       element.addEventListener('mousedown', startPress)
-      element.addEventListener('touchstart', startPress)
+      element.addEventListener('touchstart', startPress, { passive: false })
       element.addEventListener('mouseup', endPress)
       element.addEventListener('mouseleave', endPress)
       element.addEventListener('touchend', endPress)
       element.addEventListener('touchcancel', endPress)
     })
 
-    // Konoha effect: Click anywhere to spawn particles
-    document.addEventListener('click', (e) => {
-      // Don't trigger on zoom clicks
-      if ((e.target as HTMLElement).classList.contains('zoomable')) return
+    // ===== Particle Effects =====
+    const createParticles = (x: number, y: number) => {
+      const container = document.getElementById('particle-container')
+      if (!container) return
 
+      const emojis = ['🍃', '🌸', '🍂', '✨', '🌺', '💫']
+      const count = Math.floor(Math.random() * 3) + 2
+
+      for (let i = 0; i < count; i++) {
+        const particle = document.createElement('div')
+        particle.className = 'particle'
+        particle.textContent = emojis[Math.floor(Math.random() * emojis.length)]
+        particle.style.left = `${x + (Math.random() - 0.5) * 30}px`
+        particle.style.top = `${y}px`
+        container.appendChild(particle)
+        setTimeout(() => particle.remove(), 2000)
+      }
+    }
+
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement
+      if (target.hasAttribute('data-zoomable') || target.closest('.action-btn, .comment-form, .medium-zoom-overlay')) return
       createParticles(e.clientX, e.clientY)
     })
-  })
 
-  // Particle effects
-  function createParticles(x: number, y: number) {
-    const container = document.getElementById('particle-container')
-    if (!container) return
+    // ===== Load Stats (Batch Query - Only 2 requests!) =====
+    const statsMap = await getAllPhotosStats(photoIds)
+    
+    let totalLikes = 0
+    let totalComments = 0
 
-    const emojis = ['🍃', '🌸', '🍂', '✨', '🌺']
-    const count = Math.floor(Math.random() * 3) + 2
+    statsMap.forEach((stats, photoId) => {
+      totalLikes += stats.likeCount
+      totalComments += stats.commentCount
 
-    for (let i = 0; i < count; i++) {
-      const particle = document.createElement('div')
-      particle.className = 'particle'
-      particle.textContent = emojis[Math.floor(Math.random() * emojis.length)]
-      particle.style.left = `${x}px`
-      particle.style.top = `${y}px`
-      particle.style.setProperty('--rotation', `${Math.random() * 360}deg`)
-
-      container.appendChild(particle)
-
-      // Remove after animation
-      setTimeout(() => {
-        particle.remove()
-      }, 2000)
-    }
-  }
-</script>
-
-<script>
-  import {
-    likePhoto,
-    unlikePhoto,
-    getPhotoLikes,
-    hasUserLiked,
-    addComment,
-    getComments,
-    getCommentCount
-  } from '@/utils/supabase'
-
-  document.addEventListener('DOMContentLoaded', async () => {
-    // Initialize all photo cards with Supabase data
-    const photoCards = document.querySelectorAll('.photo-card')
-
-    for (const card of photoCards) {
-      const photoId = (card as HTMLElement).dataset.photoId
-      if (!photoId) continue
-
-      // Load likes
-      const { count: likeCount } = await getPhotoLikes(photoId)
-      const { liked } = await hasUserLiked(photoId)
+      const card = document.querySelector(`[data-photo-id="${photoId}"]`) as HTMLElement
+      if (!card) return
 
       const likeBtn = card.querySelector('.like-btn') as HTMLButtonElement
-      const likeCountSpan = likeBtn?.querySelector('.like-count') as HTMLSpanElement
+      const likeCount = likeBtn?.querySelector('.like-count')
+      const commentCount = card.querySelector('.comment-count')
 
-      if (likeCountSpan) likeCountSpan.textContent = String(likeCount)
-      if (liked && likeBtn) likeBtn.classList.add('liked')
+      if (likeCount) likeCount.textContent = String(stats.likeCount)
+      if (commentCount) commentCount.textContent = String(stats.commentCount)
+      if (stats.userLiked && likeBtn) likeBtn.classList.add('liked')
+    })
 
-      // Load comments count
-      const { count: commentCount } = await getCommentCount(photoId)
-      const commentCountSpan = card.querySelector('.comment-count') as HTMLSpanElement
-      if (commentCountSpan) commentCountSpan.textContent = String(commentCount)
-    }
+    // Update header stats
+    document.getElementById('total-likes')!.textContent = String(totalLikes)
+    document.getElementById('total-comments')!.textContent = String(totalComments)
 
-    // Like button handlers
-    document.querySelectorAll('.like-btn').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation()
-        const button = e.currentTarget as HTMLButtonElement
-        const photoId = button.dataset.photoId
-        if (!photoId) return
+    // ===== Username localStorage =====
+    const STORAGE_KEY = 'photo_comment_username'
+    const savedUsername = localStorage.getItem(STORAGE_KEY) || ''
 
-        const isLiked = button.classList.contains('liked')
-        const likeCountSpan = button.querySelector('.like-count') as HTMLSpanElement
+    document.querySelectorAll('.comment-username').forEach((input) => {
+      const el = input as HTMLInputElement
+      el.value = savedUsername
+    })
 
-        if (isLiked) {
-          // Unlike
-          await unlikePhoto(photoId)
-          button.classList.remove('liked')
-          likeCountSpan.textContent = String(Number(likeCountSpan.textContent) - 1)
-        } else {
-          // Like
-          const result = await likePhoto(photoId)
-          if (result.alreadyLiked) return // Already liked
+    // ===== Like Button Handler =====
+    const handleLike = debounce(async (button: HTMLButtonElement) => {
+      const photoId = button.dataset.photoId
+      if (!photoId) return
 
+      const isLiked = button.classList.contains('liked')
+      const countEl = button.querySelector('.like-count') as HTMLElement
+      const currentCount = parseInt(countEl.textContent || '0')
+
+      // Optimistic update
+      button.classList.toggle('liked')
+      countEl.textContent = String(isLiked ? currentCount - 1 : currentCount + 1)
+
+      const updateTotalLikes = (delta: number) => {
+        const el = document.getElementById('total-likes')!
+        el.textContent = String(parseInt(el.textContent || '0') + delta)
+      }
+
+      if (isLiked) {
+        await unlikePhoto(photoId)
+        updateTotalLikes(-1)
+      } else {
+        const result = await likePhoto(photoId)
+        if (result.alreadyLiked) {
+          // Revert optimistic update
           button.classList.add('liked')
-          likeCountSpan.textContent = String(Number(likeCountSpan.textContent) + 1)
+          countEl.textContent = String(currentCount)
+        } else {
+          updateTotalLikes(1)
         }
+      }
+    }, 300)
+
+    document.querySelectorAll('.like-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        handleLike(e.currentTarget as HTMLButtonElement)
       })
     })
 
-    // Comment button handlers (toggle comments section)
+    // ===== Comment Toggle =====
     document.querySelectorAll('.comment-btn').forEach((btn) => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation()
-        const button = e.currentTarget as HTMLButtonElement
-        const photoId = button.dataset.photoId
+        const photoId = (e.currentTarget as HTMLButtonElement).dataset.photoId
         if (!photoId) return
 
-        const commentsSection = document.querySelector(
+        const section = document.querySelector(
           `.comments-section[data-photo-id="${photoId}"]`
         ) as HTMLElement
 
-        if (!commentsSection) return
-
-        const isOpen = commentsSection.classList.contains('open')
-
-        if (isOpen) {
-          commentsSection.classList.remove('open')
+        if (section.classList.contains('open')) {
+          section.classList.remove('open')
         } else {
-          commentsSection.classList.add('open')
-          // Load comments
+          section.classList.add('open')
           await loadComments(photoId)
         }
       })
     })
 
-    // Comment form handlers
+    // ===== Share Button =====
+    document.querySelectorAll('.share-btn').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation()
+        const photoId = (e.currentTarget as HTMLElement).dataset.photoId
+        const url = `${window.location.origin}/photos#photo-${photoId}`
+
+        if (navigator.share) {
+          await navigator.share({ title: '分享照片', url })
+        } else {
+          await navigator.clipboard.writeText(url)
+          // Simple feedback
+          const icon = (e.currentTarget as HTMLElement).querySelector('.btn-icon')!
+          icon.textContent = '✅'
+          setTimeout(() => (icon.textContent = '📤'), 1500)
+        }
+      })
+    })
+
+    // ===== Comment Form =====
     document.querySelectorAll('.comment-form').forEach((form) => {
       form.addEventListener('submit', async (e) => {
         e.preventDefault()
-        const formElement = e.currentTarget as HTMLFormElement
-        const photoId = formElement.closest('.comments-section')?.getAttribute('data-photo-id')
+        const formEl = e.currentTarget as HTMLFormElement
+        const photoId = formEl.closest('.comments-section')?.getAttribute('data-photo-id')
         if (!photoId) return
 
-        const usernameInput = formElement.querySelector('.comment-username') as HTMLInputElement
-        const commentInput = formElement.querySelector('.comment-input') as HTMLTextAreaElement
-        const submitBtn = formElement.querySelector('.comment-submit') as HTMLButtonElement
+        const usernameInput = formEl.querySelector('.comment-username') as HTMLInputElement
+        const commentInput = formEl.querySelector('.comment-input') as HTMLTextAreaElement
+        const submitBtn = formEl.querySelector('.comment-submit') as HTMLButtonElement
 
         const username = usernameInput.value.trim()
         const comment = commentInput.value.trim()
-
         if (!username || !comment) return
 
-        // Disable form
-        submitBtn.disabled = true
-        submitBtn.textContent = '发送中...'
+        // Save username
+        localStorage.setItem(STORAGE_KEY, username)
 
-        // Add comment
+        // Show loading
+        submitBtn.disabled = true
+        submitBtn.classList.add('loading')
+
         const { error } = await addComment(photoId, username, comment)
 
         if (error) {
           alert('评论发送失败，请稍后再试')
-          submitBtn.disabled = false
-          submitBtn.textContent = '发送'
-          return
+        } else {
+          commentInput.value = ''
+          await loadComments(photoId)
+
+          // Update counts
+          const { count } = await getCommentCount(photoId)
+          const countEl = document.querySelector(
+            `.comment-btn[data-photo-id="${photoId}"] .comment-count`
+          )
+          if (countEl) countEl.textContent = String(count)
+
+          const totalEl = document.getElementById('total-comments')!
+          totalEl.textContent = String(parseInt(totalEl.textContent || '0') + 1)
         }
 
-        // Clear form
-        usernameInput.value = ''
-        commentInput.value = ''
         submitBtn.disabled = false
-        submitBtn.textContent = '发送'
-
-        // Reload comments
-        await loadComments(photoId)
-
-        // Update comment count
-        const { count } = await getCommentCount(photoId)
-        const commentCountSpan = document.querySelector(
-          `.comment-btn[data-photo-id="${photoId}"] .comment-count`
-        ) as HTMLSpanElement
-        if (commentCountSpan) commentCountSpan.textContent = String(count)
+        submitBtn.classList.remove('loading')
       })
     })
   })
 
+  // ===== Load Comments =====
   async function loadComments(photoId: string) {
     const { data: comments } = await getComments(photoId)
-    const commentsList = document.querySelector(
+    const list = document.querySelector(
       `.comments-section[data-photo-id="${photoId}"] .comments-list`
     ) as HTMLElement
 
-    if (!commentsList) return
+    if (!list) return
 
     if (comments.length === 0) {
-      commentsList.innerHTML = '<div class="empty-comments">还没有评论，快来抢沙发吧！</div>'
+      list.innerHTML = '<div class="empty-comments">还没有评论，来抢沙发吧！ 🛋️</div>'
       return
     }
 
-    commentsList.innerHTML = comments
+    list.innerHTML = comments
       .map(
-        (comment: {
-          id: number
-          username: string
-          comment: string
-          created_at: string
-        }) => {
-          const date = new Date(comment.created_at)
-          const timeAgo = getTimeAgo(date)
-
-          return `
-          <div class="comment-item">
-            <div class="comment-author">${escapeHtml(comment.username)}</div>
-            <div class="comment-text">${escapeHtml(comment.comment)}</div>
-            <div class="comment-time">${timeAgo}</div>
-          </div>
-        `
-        }
+        (c: { username: string; comment: string; created_at: string }) => `
+        <div class="comment-item">
+          <div class="comment-author">${escapeHtml(c.username)}</div>
+          <div class="comment-text">${escapeHtml(c.comment)}</div>
+          <div class="comment-time">${getTimeAgo(new Date(c.created_at))}</div>
+        </div>
+      `
       )
       .join('')
   }
 
   function getTimeAgo(date: Date): string {
-    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000)
-
-    if (seconds < 60) return '刚刚'
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} 小时前`
-    if (seconds < 2592000) return `${Math.floor(seconds / 86400)} 天前`
+    const s = Math.floor((Date.now() - date.getTime()) / 1000)
+    if (s < 60) return '刚刚'
+    if (s < 3600) return `${Math.floor(s / 60)} 分钟前`
+    if (s < 86400) return `${Math.floor(s / 3600)} 小时前`
+    if (s < 2592000) return `${Math.floor(s / 86400)} 天前`
     return date.toLocaleDateString('zh-CN')
   }
 

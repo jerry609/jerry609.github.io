@@ -99,3 +99,80 @@ export async function getCommentCount(photoId: string) {
 
     return { count: count ?? 0, error }
 }
+
+// =====================================================
+// Batch Queries - Performance Optimization
+// =====================================================
+
+export interface PhotoStats {
+    likeCount: number
+    commentCount: number
+    userLiked: boolean
+}
+
+/**
+ * Batch fetch all photo stats in one call
+ * Reduces N+1 queries from 39 requests to just 2
+ */
+export async function getAllPhotosStats(photoIds: string[]): Promise<Map<string, PhotoStats>> {
+    const fingerprint = getBrowserFingerprint()
+    const statsMap = new Map<string, PhotoStats>()
+
+    // Initialize with defaults
+    photoIds.forEach(id => {
+        statsMap.set(id, { likeCount: 0, commentCount: 0, userLiked: false })
+    })
+
+    try {
+        // Batch query 1: Get all likes grouped by photo_id
+        const { data: likesData } = await supabase
+            .from('photo_likes')
+            .select('photo_id, user_fingerprint')
+            .in('photo_id', photoIds)
+
+        if (likesData) {
+            // Count likes and check user liked status
+            const likeCounts = new Map<string, number>()
+            const userLikes = new Set<string>()
+
+            likesData.forEach(like => {
+                likeCounts.set(like.photo_id, (likeCounts.get(like.photo_id) || 0) + 1)
+                if (like.user_fingerprint === fingerprint) {
+                    userLikes.add(like.photo_id)
+                }
+            })
+
+            likeCounts.forEach((count, photoId) => {
+                const stats = statsMap.get(photoId)
+                if (stats) {
+                    stats.likeCount = count
+                    stats.userLiked = userLikes.has(photoId)
+                }
+            })
+        }
+
+        // Batch query 2: Get all comment counts grouped by photo_id
+        const { data: commentsData } = await supabase
+            .from('photo_comments')
+            .select('photo_id')
+            .in('photo_id', photoIds)
+
+        if (commentsData) {
+            const commentCounts = new Map<string, number>()
+            commentsData.forEach(comment => {
+                commentCounts.set(comment.photo_id, (commentCounts.get(comment.photo_id) || 0) + 1)
+            })
+
+            commentCounts.forEach((count, photoId) => {
+                const stats = statsMap.get(photoId)
+                if (stats) {
+                    stats.commentCount = count
+                }
+            })
+        }
+    } catch (err) {
+        console.error('Error fetching batch photo stats:', err)
+    }
+
+    return statsMap
+}
