@@ -92,4 +92,53 @@ function getDifficultyColor(score: string | undefined) {
   }
 </style>
 
+<script>
+  import { getProblemProgress, updateProblemStatus } from '@/lib/supabaseClient'
+
+  // 页面加载时，从 Supabase 加载进度并更新 checkbox 状态
+  async function loadProgress() {
+    const progressMap = await getProblemProgress()
+    
+    // 更新所有 checkbox 的状态
+    const checkboxes = document.querySelectorAll<HTMLInputElement>('.prob-check')
+    checkboxes.forEach((checkbox) => {
+      const problemId = checkbox.dataset.id
+      if (problemId && progressMap.has(problemId)) {
+        checkbox.checked = progressMap.get(problemId) || false
+      }
+    })
+  }
+
+  // 当 checkbox 状态改变时，保存到 Supabase
+  function setupCheckboxListeners() {
+    const checkboxes = document.querySelectorAll<HTMLInputElement>('.prob-check')
+    
+    checkboxes.forEach((checkbox) => {
+      checkbox.addEventListener('change', async (event) => {
+        const target = event.target as HTMLInputElement
+        const problemId = target.dataset.id
+        
+        if (problemId) {
+          const completed = target.checked
+          const success = await updateProblemStatus(problemId, completed)
+          
+          if (!success) {
+            console.warn(`Failed to update status for problem ${problemId}`)
+            // 可选：回滚 checkbox 状态
+            // target.checked = !completed
+          } else {
+            // 触发自定义事件，通知 ProgressStats 组件更新
+            document.dispatchEvent(new CustomEvent('problem-status-changed'))
+          }
+        }
+      })
+    })
+  }
+
+  // 页面加载完成后初始化
+  document.addEventListener('DOMContentLoaded', async () => {
+    await loadProgress()
+    setupCheckboxListeners()
+  })
+</script>
 

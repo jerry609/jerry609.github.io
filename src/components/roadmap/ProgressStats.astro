@@ -1,0 +1,86 @@
+---
+// 此组件在客户端加载进度统计
+---
+
+<div id="progress-stats" class="mb-8 rounded-xl border border-border bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-950 dark:to-primary-900 p-6 shadow-lg">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-2xl font-bold text-primary-900 dark:text-primary-100">
+      刷题进度
+    </h2>
+    <div id="stats-badge" class="px-4 py-2 rounded-full bg-white dark:bg-gray-800 shadow-sm">
+      <span class="text-sm font-medium text-gray-600 dark:text-gray-400">加载中...</span>
+    </div>
+  </div>
+  
+  <!-- Progress Bar -->
+  <div class="relative w-full h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
+    <div 
+      id="progress-bar"
+      class="h-full bg-gradient-to-r from-primary-500 to-primary-600 transition-all duration-500 ease-out flex items-center justify-end pr-3"
+      style="width: 0%"
+    >
+      <span id="progress-text" class="text-sm font-bold text-white drop-shadow-sm"></span>
+    </div>
+  </div>
+  
+  <!-- Stats Details -->
+  <div class="mt-4 grid grid-cols-3 gap-4">
+    <div class="text-center">
+      <div class="text-2xl font-bold text-primary-700 dark:text-primary-300" id="completed-count">0</div>
+      <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">已完成</div>
+    </div>
+    <div class="text-center">
+      <div class="text-2xl font-bold text-gray-700 dark:text-gray-300" id="total-count">0</div>
+      <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">总题数</div>
+    </div>
+    <div class="text-center">
+      <div class="text-2xl font-bold text-primary-700 dark:text-primary-300" id="remaining-count">0</div>
+      <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">待完成</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { getProgressStats } from '@/lib/supabaseClient'
+
+  async function updateProgressDisplay() {
+    // 计算总题目数
+    const allProblems = document.querySelectorAll('.prob-check')
+    const totalProblems = allProblems.length
+
+    // 获取进度统计
+    const stats = await getProgressStats(totalProblems)
+
+    // 更新 UI
+    const progressBar = document.getElementById('progress-bar')
+    const progressText = document.getElementById('progress-text')
+    const statsBadge = document.getElementById('stats-badge')
+    const completedCount = document.getElementById('completed-count')
+    const totalCount = document.getElementById('total-count')
+    const remainingCount = document.getElementById('remaining-count')
+
+    if (progressBar && progressText && statsBadge && completedCount && totalCount && remainingCount) {
+      // 动画效果：延迟设置宽度
+      setTimeout(() => {
+        progressBar.style.width = `${stats.percentage}%`
+        progressText.textContent = `${stats.percentage}%`
+      }, 100)
+
+      statsBadge.innerHTML = `
+        <span class="text-sm font-bold text-primary-600 dark:text-primary-400">
+          ${stats.completed} / ${stats.total}
+        </span>
+      `
+
+      completedCount.textContent = stats.completed.toString()
+      totalCount.textContent = stats.total.toString()
+      remainingCount.textContent = (stats.total - stats.completed).toString()
+    }
+  }
+
+  // 页面加载时更新进度
+  document.addEventListener('DOMContentLoaded', updateProgressDisplay)
+
+  // 监听自定义事件，当题目状态改变时更新进度
+  document.addEventListener('problem-status-changed', updateProgressDisplay)
+</script>

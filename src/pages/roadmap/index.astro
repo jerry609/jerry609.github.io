@@ -2,6 +2,7 @@
 import PageLayout from '@/layouts/CommonPage.astro'
 import RoadmapDrawer from '@/components/roadmap/RoadmapDrawer.astro'
 import ActivityGraph from '@/components/roadmap/ActivityGraph.astro'
+import ProgressStats from '@/components/roadmap/ProgressStats.astro'
 
 type Topic = {
   title: string
@@ -8435,6 +8436,10 @@ const headings = [{ depth: 2, slug: 'roadmap', text: 'Algorithm Roadmap' }]
         导出进度
       </button>
     </div>
+    
+    <!-- Progress Stats -->
+    <ProgressStats />
+    
     <div class='border rounded-xl p-4 bg-card'>
       <ActivityGraph />
     </div>
