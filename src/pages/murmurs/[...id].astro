@@ -1,0 +1,81 @@
+---
+import { getCollection, render } from 'astro:content'
+import { Image } from 'astro:assets'
+import PageLayout from '@/layouts/CommonPage.astro'
+import { Button } from 'astro-pure/user'
+
+export async function getStaticPaths() {
+  const murmurs = await getCollection('murmurs')
+  return murmurs.map((entry) => ({
+    params: { id: entry.id },
+    props: { entry },
+  }))
+}
+
+const { entry } = Astro.props
+const { Content } = await render(entry)
+---
+
+<PageLayout title={entry.data.title || 'Murmur'} comment>
+  <div class='max-w-[800px] mx-auto px-4 py-8'>
+    <!-- Back Button -->
+    <div class='mb-8'>
+      <Button title='Back' href='/murmurs' variant='back' />
+    </div>
+
+    <!-- Article Header -->
+    <header class='mb-10 text-center'>
+      <div class='flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4'>
+        <time datetime={entry.data.publishDate.toISOString()}>
+          {entry.data.publishDate.toLocaleDateString('zh-CN', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long'
+          })}
+        </time>
+        {entry.data.tags.length > 0 && (
+          <>
+            <span>·</span>
+            <div class='flex gap-2'>
+              {entry.data.tags.map(tag => (
+                <span class='text-primary'>#{tag}</span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <h1 class='text-3xl md:text-4xl font-bold mb-6 leading-tight'>
+        {entry.data.title || '无题'}
+      </h1>
+
+      {entry.data.cover && (
+        <div class='relative aspect-video w-full overflow-hidden rounded-xl shadow-lg mb-8'>
+          <Image
+            src={entry.data.cover}
+            alt={entry.data.title || 'Cover'}
+            class='w-full h-full object-cover'
+            width={1200}
+            height={675}
+          />
+        </div>
+      )}
+    </header>
+
+    <!-- Content -->
+    <article class='prose dark:prose-invert max-w-none prose-lg prose-headings:font-bold prose-p:leading-relaxed prose-img:rounded-xl'>
+      <Content />
+    </article>
+
+    <!-- Footer -->
+    <div class='mt-12 pt-8 border-t border-border flex justify-between items-center text-muted-foreground'>
+      <div class='text-sm'>
+        Published by Jerry
+      </div>
+      <div class='text-sm'>
+        {entry.data.publishDate.toLocaleDateString('zh-CN')}
+      </div>
+    </div>
+  </div>
+</PageLayout>
