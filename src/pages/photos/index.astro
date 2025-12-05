@@ -24,13 +24,6 @@ const photoIds = photos.map(p => p.data.id)
         </div>
       </div>
       <div class='stat-card'>
-        <span class='stat-icon'>❤️</span>
-        <div class='stat-info'>
-          <span class='stat-value' id='total-likes'>-</span>
-          <span class='stat-label'>点赞</span>
-        </div>
-      </div>
-      <div class='stat-card'>
         <span class='stat-icon'>💬</span>
         <div class='stat-info'>
           <span class='stat-value' id='total-comments'>-</span>
@@ -87,17 +80,6 @@ const photoIds = photos.map(p => p.data.id)
 
             <!-- Interaction Bar -->
             <div class='interaction-bar'>
-              <button
-                class='action-btn like-btn'
-                data-photo-id={photo.data.id}
-                aria-label='点赞'
-              >
-                <span class='btn-icon'>❤️</span>
-                <span class='btn-count like-count'>
-                  <span class='count-skeleton' />
-                </span>
-              </button>
-
               <button
                 class='action-btn comment-btn'
                 data-photo-id={photo.data.id}
@@ -671,8 +653,6 @@ const photoIds = photos.map(p => p.data.id)
 <script>
   import mediumZoom from 'medium-zoom'
   import {
-    likePhoto,
-    unlikePhoto,
     getAllPhotosStats,
     addComment,
     getComments,
@@ -761,30 +741,22 @@ const photoIds = photos.map(p => p.data.id)
       createParticles(e.clientX, e.clientY)
     })
 
-    // ===== Load Stats (Batch Query - Only 2 requests!) =====
+    // ===== Load Stats (Batch Query) =====
     const statsMap = await getAllPhotosStats(photoIds)
     
-    let totalLikes = 0
     let totalComments = 0
 
     statsMap.forEach((stats, photoId) => {
-      totalLikes += stats.likeCount
       totalComments += stats.commentCount
 
       const card = document.querySelector(`[data-photo-id="${photoId}"]`) as HTMLElement
       if (!card) return
 
-      const likeBtn = card.querySelector('.like-btn') as HTMLButtonElement
-      const likeCount = likeBtn?.querySelector('.like-count')
       const commentCount = card.querySelector('.comment-count')
-
-      if (likeCount) likeCount.textContent = String(stats.likeCount)
       if (commentCount) commentCount.textContent = String(stats.commentCount)
-      if (stats.userLiked && likeBtn) likeBtn.classList.add('liked')
     })
 
     // Update header stats
-    document.getElementById('total-likes')!.textContent = String(totalLikes)
     document.getElementById('total-comments')!.textContent = String(totalComments)
 
     // ===== Username localStorage =====
@@ -794,46 +766,6 @@ const photoIds = photos.map(p => p.data.id)
     document.querySelectorAll('.comment-username').forEach((input) => {
       const el = input as HTMLInputElement
       el.value = savedUsername
-    })
-
-    // ===== Like Button Handler =====
-    const handleLike = debounce(async (button: HTMLButtonElement) => {
-      const photoId = button.dataset.photoId
-      if (!photoId) return
-
-      const isLiked = button.classList.contains('liked')
-      const countEl = button.querySelector('.like-count') as HTMLElement
-      const currentCount = parseInt(countEl.textContent || '0')
-
-      // Optimistic update
-      button.classList.toggle('liked')
-      countEl.textContent = String(isLiked ? currentCount - 1 : currentCount + 1)
-
-      const updateTotalLikes = (delta: number) => {
-        const el = document.getElementById('total-likes')!
-        el.textContent = String(parseInt(el.textContent || '0') + delta)
-      }
-
-      if (isLiked) {
-        await unlikePhoto(photoId)
-        updateTotalLikes(-1)
-      } else {
-        const result = await likePhoto(photoId)
-        if (result.alreadyLiked) {
-          // Revert optimistic update
-          button.classList.add('liked')
-          countEl.textContent = String(currentCount)
-        } else {
-          updateTotalLikes(1)
-        }
-      }
-    }, 300)
-
-    document.querySelectorAll('.like-btn').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        handleLike(e.currentTarget as HTMLButtonElement)
-      })
     })
 
     // ===== Comment Toggle =====
