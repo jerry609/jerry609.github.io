@@ -554,6 +554,69 @@ else:
 
 这样可以避免「命令行参数太长被系统拒绝」这种在生产环境中经常踩坑的问题。
 
+### 6.3 SDK 启动 CLI 时到底传了什么？
+
+从 `_internal/transport/subprocess_cli.py` 可以看到，SDK 启动子进程时其实做了两件事：
+
+1. **构建命令行参数**
+
+   一开始会有一个固定前缀：
+
+   ```python
+   cmd = [self._cli_path, "--output-format", "stream-json", "--verbose"]
+   ```
+
+   然后根据 `ClaudeAgentOptions` 把配置翻译成 CLI 的 `--xxx` 参数，例如：
+
+   - `--system-prompt`（系统提示词）
+   - `--tools` / `--allowedTools` / `--disallowedTools`（工具白/黑名单）
+   - `--model` / `--fallback-model`
+   - `--max-turns` / `--max-budget-usd`
+   - `--permission-mode`（权限模式）
+   - `--mcp-config`（MCP 服务器 JSON 配置）
+   - `--settings`（合并了你传入的 settings + sandbox 配置）
+   - `--agents` / `--add-dir` / `--plugin-dir` 等其他高级选项
+
+   最后，根据是否是流式输入决定：
+
+   - 流式模式：追加 `--input-format stream-json`，后面通过 stdin 持续写入 JSON；
+   - 非流式模式：追加 `--print -- <prompt>`，直接把当前 prompt 放在命令行结尾。
+
+2. **构建环境变量并传给子进程**
+
+   在 `connect()` 里，SDK 会显式构造一份 `env` 传给 `anyio.open_process`：
+
+   ```python
+   process_env = {
+       **os.environ,                  # 继承当前进程环境（包括 ANTHROPIC_API_KEY 等）
+       **self._options.env,           # 你通过 ClaudeAgentOptions.env 额外传入的变量
+       "CLAUDE_CODE_ENTRYPOINT": "sdk-py",
+       "CLAUDE_AGENT_SDK_VERSION": __version__,
+   }
+   ```
+
+   然后这样启动 CLI：
+
+   ```python
+   self._process = await anyio.open_process(
+       cmd,
+       stdin=PIPE,
+       stdout=PIPE,
+       stderr=stderr_dest,
+       cwd=self._cwd,
+       env=process_env,
+       user=self._options.user,
+   )
+   ```
+
+   这就回答了「CLI 怎么知道环境变量（比如 API Key）」这个问题：
+
+   - **系统级的环境变量**（例如 `ANTHROPIC_API_KEY`、`HTTP_PROXY`）——通过 `os.environ` 继承给子进程；
+   - **你在 Python 里额外指定的变量**（`ClaudeAgentOptions.env={...}`）——覆盖或补充在子进程上；
+   - **SDK 自己注入的标识**（entrypoint、SDK 版本）——方便 CLI 做一些埋点或兼容处理。
+
+   换句话说，只要你在启动 Python 进程前把 `ANTHROPIC_API_KEY` 设置好，或者通过 `ClaudeAgentOptions.env` 显式传进去，CLI 这边就能读取到，不需要你在代码里手动拼任何 `os.environ` 相关逻辑。
+
 ### 6.3 消息流：JSON Lines 协议
 
 `SubprocessCLITransport.read_messages()` 会从 CLI 的 stdout 中按行读取数据，每一行都是一条 JSON：
@@ -561,6 +624,18 @@ else:
 - 每一行代表一条事件（用户消息、助手消息、系统消息、控制响应等）；
 - 这一层只保证「字节流 → JSON dict」的转换，不关心具体语义；
 - 语义层的解析交给上层的 `message_parser.parse_message`。
+
+### 6.4 其他实现细节（补充）
+
+- CLI 查找顺序：优先 `ClaudeAgentOptions.cli_path` → 打包的 `_bundled/claude` → 系统 PATH（含多个常见路径），找不到抛 `CLINotFoundError`。
+- `system_prompt`：`None` 时传空字符串；若为 preset 且带 `append`，会用 `--append-system-prompt`。
+- 额外 flags：`--permission-prompt-tool`、`--continue`、`--resume <id>`、`--include-partial-messages`、`--fork-session`、`--setting-sources`（即便为空字符串也会传）。
+- MCP 配置：`mcp_servers` 为 dict 时会去掉 SDK 内置服务器配置里的 `instance` 再序列化成 `{"mcpServers": ...}` 传给 `--mcp-config`。
+- 插件与扩展：仅支持 `type="local"` 插件并用 `--plugin-dir`；`extra_args` 直接透传为 `--flag` 或 `--flag value`。
+- 输出格式：`output_format.type == "json_schema"` 时追加 `--json-schema <schema_json>`。
+- 命令行过长优化：只在包含 `--agents` 且长度超限时，把 agents JSON 写临时文件并改为 `--agents @/tmp/xxx.json`。
+- 版本检查：默认执行 `claude -v`，低于 `2.0.0` 仅警告，可通过 `CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK` 跳过。
+- stderr 处理：仅当有 `options.stderr` 回调或 `extra_args` 含 `debug-to-stderr` 才会 pipe；未提供回调但启用 debug 时写入 `debug_stderr`。
 
 ---
 
