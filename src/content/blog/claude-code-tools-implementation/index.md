@@ -4,7 +4,7 @@ description: '深入解析 Claude Code 的内置工具系统，包括 Bash、Gre
 publishDate: '2025-12-06'
 tags: ['Claude', 'Agent', '源码分析', 'Tools', 'Python']
 language: 'zh-CN'
-draft: true
+draft: false
 ---
 
 > Claude Code 作为 Anthropic 推出的 Agentic 编程工具，其核心能力在于一套精心设计的**内置工具系统**。本文会从协议层和实现层两个角度，剖析这些工具的设计理念与工程取舍。
