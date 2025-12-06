@@ -7,7 +7,15 @@ language: 'zh-CN'
 draft: true
 ---
 
-> Claude Code 作为 Anthropic 推出的 Agentic 编程工具，其核心能力在于一套精心设计的**内置工具系统**。本文将剖析这些工具的设计理念与实现细节。
+> Claude Code 作为 Anthropic 推出的 Agentic 编程工具，其核心能力在于一套精心设计的**内置工具系统**。本文会从协议层和实现层两个角度，剖析这些工具的设计理念与工程取舍。
+
+本文主要想回答三个问题：
+
+1. 从 LLM 视角看，*“调用工具”* 在协议层面到底长什么样？
+2. Claude Code 为什么要用一整套专用工具替代 `bash` 命令？
+3. 这些内置工具在实现上做了哪些「为 LLM 优化」的工程决策？
+
+---
 
 ## 一、工具系统概览
 
@@ -21,34 +29,38 @@ Claude Code 提供了一套专门为代码开发场景优化的内置工具，�
 
 这些工具的设计遵循一个核心原则：**用专用工具替代通用 Bash 命令**，以获得更好的性能、安全性和可控性。
 
-> 📚 系列相关文章：
+> 系列相关文章：
 > - 本文：**Claude Code 工具系统：内置工具的实现剖析**（工具设计与实现细节）
 > - 下一篇：**[用 Google ADK 复现 Claude Code 工具系统](/blog/adk-replicate-claude-code-tools/)**（用 ADK 从零实现一套类似工具）
 > - 延伸阅读：**[Claude Agent SDK vs Google ADK：两种 Agent 开发范式的深度对比](/blog/claude-sdk-vs-google-adk-1/)**（从 SDK 视角看两家生态）
 
 ---
 
-## 二、LLM 如何"调用"工具
+## 二、LLM 如何「调用」工具
 
-在深入具体工具之前，我们先搞清楚一个根本问题：**LLM 是如何接收参数并调用工具的？**
+在深入具体工具之前，先把核心协议说清楚：**LLM 不执行工具，它只生成结构化的调用描述，由客户端解析并执行。**
 
-**核心答案：LLM 本身不执行工具，它只是生成结构化的 JSON 输出，由客户端解析并执行。**
+从抽象上看，这就是一层 RPC over JSON：
+
+- 客户端：声明可用「方法」（tools + schema）
+- LLM：返回「要调用的方法名 + 参数」
+- 客户端：本地执行，再把结果作为新的消息回传
 
 ### 2.1 完整流程
 
 ```
 ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │   1. 发送请求     │ ──▶ │   2. LLM 生成     │ ──▶ │  3. 客户端执行    │
-│   (带工具定义)    │     │   (结构化JSON)    │     │   (真正调用)      │
+│   (带工具定义)    │     │   (结构化 JSON)   │     │  (真正调用工具)   │
 └──────────────────┘     └──────────────────┘     └──────────────────┘
 ```
 
 ### 2.2 客户端发送请求（带工具 Schema）
 
-客户端告诉 LLM："你可以用这些工具，参数格式是这样的"
+客户端告诉 LLM：「你可以用这些工具，参数格式是这样的。」
 
 ```typescript
-// 发送给 Anthropic API 的请求
+// 发送给 Anthropic API 的请求（简化）
 {
   "model": "claude-sonnet-4-20250514",
   "messages": [
@@ -72,9 +84,25 @@ Claude Code 提供了一套专门为代码开发场景优化的内置工具，�
 }
 ```
 
-### 2.3 LLM 生成结构化输出（不是执行！）
+如果抽掉细节，可以压缩成一个极简伪代码版：
 
-LLM 看到工具定义后，**决定要调用哪个工具**，然后**生成符合 schema 的 JSON**：
+```ts
+callLLM({
+  tools: [ ToolSchema... ],
+  messages: [...]
+})
+
+// LLM 返回：
+assistant: tool_use(name="GrepTool", input={...})
+
+// 客户端：
+result = GrepTool.call(input)
+sendToLLM(tool_result(result))
+```
+
+### 2.3 LLM 生成结构化输出（不是执行）
+
+LLM 看到工具定义后，**选择要调用的工具**，并**生成符合 schema 的 JSON 参数**：
 
 ```json
 {
@@ -82,7 +110,7 @@ LLM 看到工具定义后，**决定要调用哪个工具**，然后**生成符�
   "content": [
     {
       "type": "tool_use",              // ← 特殊的消息类型
-      "id": "toolu_01ABC123",          // ← 唯一ID（用于匹配结果）
+      "id": "toolu_01ABC123",          // ← 唯一 ID（用于匹配结果）
       "name": "GrepTool",              // ← LLM 选择的工具名
       "input": {                       // ← LLM 生成的参数（符合 schema）
         "pattern": "useState",
@@ -94,14 +122,14 @@ LLM 看到工具定义后，**决定要调用哪个工具**，然后**生成符�
 }
 ```
 
-**关键理解：LLM 只是"说"它想调用工具，并给出参数，但它没有能力真正执行任何代码！**
+这里最重要的一点是：**LLM 只是描述「我要调用什么 + 参数是什么」这件事，本身不触碰任何系统资源。**
 
 ### 2.4 客户端解析并执行
 
-客户端收到响应后，解析 `tool_use` 块，真正执行工具：
+客户端收到响应后，解析 `tool_use` 块，找到本地实现并真正调用：
 
 ```typescript
-// 处理逻辑
+// 处理逻辑（伪代码）
 for (const block of assistantMessage.content) {
   if (block.type === 'tool_use') {
     const toolName = block.name      // "GrepTool"
@@ -114,9 +142,9 @@ for (const block of assistantMessage.content) {
     // 2. 验证参数
     const isValid = tool.inputSchema.safeParse(toolInput)
     
-    // 3. 真正执行工具代码！
+    // 3. 真正执行工具代码
     for await (const result of tool.call(toolInput, context)) {
-      // GrepTool.call() 执行 ripgrep 搜索
+      // GrepTool.call() 内部可能是对 ripgrep 的一层封装
     }
     
     // 4. 把结果返回给 LLM
@@ -131,10 +159,10 @@ for (const block of assistantMessage.content) {
 
 ### 2.5 将结果返回给 LLM
 
-工具执行完成后，结果作为新消息发送给 LLM：
+工具执行完成后，结果作为新一轮请求的一部分发送给 LLM：
 
 ```typescript
-// 下一轮 API 请求
+// 下一轮 API 请求（简化）
 {
   "messages": [
     { "role": "user", "content": "查找包含 useState 的文件" },
@@ -145,7 +173,7 @@ for (const block of assistantMessage.content) {
       ]
     },
     { 
-      "role": "user",                  // ← tool_result 是 user 角色
+      "role": "user",                  // ← tool_result 在协议里是 user 角色
       "content": [
         {
           "type": "tool_result",
@@ -158,14 +186,14 @@ for (const block of assistantMessage.content) {
 }
 ```
 
-LLM 收到结果后，可以继续生成自然语言回复。
+LLM 收到 `tool_result` 后，再继续生成自然语言回复或下一轮 `tool_use`。
 
-### 2.6 小结
+### 2.6 小结：职责边界
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                                                                     │
-│   LLM 不能执行代码！它只能：                                          │
+│   LLM 的能力边界：                                                   │
 │                                                                     │
 │   1. 阅读工具定义（JSON Schema）                                     │
 │   2. 决定是否需要调用工具                                            │
@@ -175,7 +203,7 @@ LLM 收到结果后，可以继续生成自然语言回复。
 │                                                                     │
 │   ─────────────────────────────────────────────────────────────     │
 │                                                                     │
-│   真正执行工具的是客户端：                                            │
+│   客户端负责实际「执行」：                                           │
 │                                                                     │
 │   1. 解析 LLM 返回的 tool_use JSON                                   │
 │   2. 找到对应的工具实现                                              │
@@ -185,13 +213,166 @@ LLM 收到结果后，可以继续生成自然语言回复。
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**本质上，LLM 的"工具调用"就是一种特殊的结构化输出格式，让 LLM 能够表达"我需要这个工具，参数是这些"的意图。**
+本质上，工具调用就是：**让 LLM 用受约束的结构化格式，表达一类「RPC 调用」的意图**。
+
+### 2.7 完整实例：从用户输入到最终响应
+
+用一个具体例子走完整个关键路径：
+
+**场景**：用户输入「帮我找出所有包含 useState 的 React 文件」。
+
+#### Step 1: 用户输入 → CLI 构造请求
+
+```text
+用户在终端输入:
+> 帮我找出所有包含 useState 的 React 文件
+```
+
+CLI 将用户输入包装成 messages，并附上工具定义：
+
+```typescript
+// CLI 发送给 Anthropic API 的请求（简化）
+{
+  "model": "claude-sonnet-4-20250514",
+  "max_tokens": 16000,
+  "system": "You are Claude Code, an AI assistant...",
+  "messages": [
+    {
+      "role": "user",
+      "content": "帮我找出所有包含 useState 的 React 文件"
+    }
+  ],
+  "tools": [
+    {
+      "name": "GrepTool",
+      "description": "搜索文件内容...",
+      "input_schema": { /* JSON Schema */ }
+    },
+    // ... 更多工具
+  ],
+  "tool_choice": { "type": "auto" }
+}
+```
+
+#### Step 2: LLM 返回 tool_use
+
+```json
+{
+  "role": "assistant",
+  "content": [
+    { "type": "text", "text": "我来帮你搜索包含 useState 的 React 文件。" },
+    {
+      "type": "tool_use",
+      "id": "toolu_01XYZ",
+      "name": "GrepTool",
+      "input": {
+        "pattern": "useState",
+        "path": ".",
+        "include": "*.tsx,*.jsx"
+      }
+    }
+  ],
+  "stop_reason": "tool_use"
+}
+```
+
+#### Step 3: CLI 执行工具
+
+```typescript
+// CLI 内部处理（伪代码）
+const toolUse = response.content.find(b => b.type === 'tool_use');
+const tool = tools.find(t => t.name === toolUse.name);  // GrepTool
+
+// 执行工具（实际调用 ripgrep 的封装）
+const result = await tool.call(toolUse.input, context);
+// result.data = [
+//   { file: "src/App.tsx", line: 5, content: "useState(0)" },
+//   { file: "src/hooks/useAuth.tsx", line: 12, content: "useState(null)" },
+// ]
+```
+
+#### Step 4: CLI 发送 tool_result
+
+```typescript
+// CLI 发送的第二轮请求
+{
+  "messages": [
+    { "role": "user", "content": "帮我找出所有包含 useState 的 React 文件" },
+    { 
+      "role": "assistant", 
+      "content": [
+        { "type": "text", "text": "我来帮你搜索..." },
+        { "type": "tool_use", "id": "toolu_01XYZ", "name": "GrepTool", "input": {...} }
+      ]
+    },
+    { 
+      "role": "user",
+      "content": [{
+        "type": "tool_result",
+        "tool_use_id": "toolu_01XYZ",
+        "content": "Found 8 matches:\nsrc/App.tsx:5: useState(0)\nsrc/hooks/useAuth.tsx:12: useState(null)\n..."
+      }]
+    }
+  ]
+}
+```
+
+#### Step 5: LLM 生成最终回复
+
+```json
+{
+  "role": "assistant",
+  "content": [{
+    "type": "text",
+    "text": "找到了 8 个包含 useState 的 React 文件：\n\n1. **src/App.tsx** - 第 5 行\n2. **src/hooks/useAuth.tsx** - 第 12 行\n..."
+  }],
+  "stop_reason": "end_turn"
+}
+```
+
+#### 流程图
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│   用户: "帮我找出所有包含 useState 的 React 文件"                     │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│   CLI: 构造请求 { messages: [...], tools: [...] }                    │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │ HTTP POST
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│   LLM: 返回 { type: "tool_use", name: "GrepTool", input: {...} }    │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│   CLI: 执行 GrepTool → 调用 ripgrep → 得到结果                        │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│   CLI: 发送 { type: "tool_result", content: "Found 8 matches..." }  │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │ HTTP POST
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│   LLM: 返回 { type: "text", text: "找到了 8 个文件..." }             │
+└────────────────────────────┬────────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│   CLI: 显示给用户                                                    │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## 三、Tools → LLM API 数据流
 
-了解了工具调用原理后，我们来看完整的数据流：
+上面是协议层，这一节对齐到「代码分层」视角，看 Claude Code 工具系统从定义到调用的完整数据流。可以把它理解成一个典型的「Tool Registry + Query Engine」结构。
 
 ```
 ┌───────────────────┐
@@ -206,52 +387,44 @@ LLM 收到结果后，可以继续生成自然语言回复。
          ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │  2. Tool 聚合层                                                        │
-│  ─────────────────────────────────────────────────────────────────────│
-│  getAllTools() → 返回所有工具数组:                                      │
+│  getAllTools() → 返回所有工具数组                                      │
 │  [TaskTool, BashTool, FileReadTool, FileEditTool, GrepTool, ...]      │
 └────────┬──────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌───────────────────────────────────────────────────────────────────────┐
-│  3. 查询引擎                                                           │
-│  ─────────────────────────────────────────────────────────────────────│
-│  query(messages, systemPrompt, context, canUseTool)                   │
+│  3. 查询引擎（例如 query() / runConversation()）                       │
 │                                                                        │
-│  • 准备消息历史                                                         │
-│  • 格式化系统提示                                                       │
+│  • 维护消息历史                                                         │
+│  • 拼接系统提示                                                         │
+│  • 决定是否允许使用工具（canUseTool 回调）                              │
 │  • 调用 LLM API 发送请求                                                │
 └────────┬──────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌───────────────────────────────────────────────────────────────────────┐
-│  4. LLM 服务层                                                         │
-│  ─────────────────────────────────────────────────────────────────────│
-│  ┌─────────────────────────────────────────────────────────────────┐  │
-│  │ 🔧 Tool Schema 转换                                              │  │
-│  │ ────────────────────────────────────────────────────────────────│  │
-│  │ // Anthropic 格式                                               │  │
-│  │ const toolSchemas = tools.map(tool => ({                        │  │
-│  │   name: tool.name,                                              │  │
-│  │   description: getToolDescription(tool),                        │  │
-│  │   input_schema: zodToJsonSchema(tool.inputSchema)               │  │
-│  │ }))                                                             │  │
-│  └─────────────────────────────────────────────────────────────────┘  │
+│  4. LLM 服务层（封装 SDK 调用）                                        │
 │                                                                        │
-│  ┌─────────────────────────────────────────────────────────────────┐  │
-│  │ 📤 发送 API 请求                                                 │  │
-│  │ ────────────────────────────────────────────────────────────────│  │
-│  │ anthropic.messages.create({                                     │  │
-│  │   model, max_tokens, messages, system,                          │  │
-│  │   tools: toolSchemas,        ← 工具 schema                      │  │
-│  │   tool_choice: { type: 'auto' }                                 │  │
-│  │ })                                                              │  │
-│  └─────────────────────────────────────────────────────────────────┘  │
+│  🔧 Tool Schema 转换                                                    │
+│  // Anthropic 格式                                                     │
+│  const toolSchemas = tools.map(tool => ({                              │
+│    name: tool.name,                                                    │
+│    description: getToolDescription(tool),                              │
+│    input_schema: zodToJsonSchema(tool.inputSchema)                     │
+│  }))                                                                   │
+│                                                                        │
+│  📤 发送 API 请求                                                      │
+│  anthropic.messages.create({                                           │
+│    model, max_tokens, messages, system,                                │
+│    tools: toolSchemas,        ← 工具 schema                            │
+│    tool_choice: { type: 'auto' }                                       │
+│  })                                                                    │
 └────────┬──────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │  5. LLM 响应 → Tool 调用                                               │
-│  ─────────────────────────────────────────────────────────────────────│
+│                                                                        │
 │  LLM 返回 tool_use 块:                                                 │
 │  { type: 'tool_use', id: 'xxx', name: 'Bash', input: { command: '...' }}│
 │                                                                        │
@@ -265,7 +438,7 @@ LLM 收到结果后，可以继续生成自然语言回复。
          ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │  6. Tool 结果 → LLM (tool_result)                                      │
-│  ─────────────────────────────────────────────────────────────────────│
+│                                                                        │
 │  工具执行后，结果封装为 tool_result 消息:                                │
 │                                                                        │
 │  yield createUserMessage([{                                            │
@@ -279,24 +452,27 @@ LLM 收到结果后，可以继续生成自然语言回复。
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
+**可以看到：Claude Code 的工具系统，本质上是对 Anthropic Tool Calling 协议做了一层工程化包装和分层。**
+
 ### 核心转换点
 
 | 转换 | 说明 |
 |:-----|:-----|
 | **Zod → JSON Schema** | `zodToJsonSchema(tool.inputSchema)` 将 Zod 类型转为 API 可用的 JSON Schema |
-| **消息格式转换** | 不同 API（Anthropic/OpenAI）格式转换 |
-| **工具结果封装** | `{ type: 'tool_result', ... }` 将执行结果返回给 LLM |
+| **消息格式转换** | 封装 Anthropic/OpenAI 等不同 API 的消息格式差异 |
+| **工具结果封装** | `{ type: 'tool_result', ... }` 将执行结果返回给 LLM，统一放在 user 角色 |
 
 ---
 
 ## 四、文件读取类工具
 
+这些工具可以理解为：**对文件系统相关 CLI 的「结构化封装层」**，把原本非结构化的 stdout 变成稳定的 schema，方便 LLM 消化。
+
 ### 4.1 Glob —— 快速文件模式匹配
 
-**底层实现**：使用高性能的 glob 匹配库（类似 `fast-glob`）
+**角色：** 对 `fast-glob` / `node-glob` 一类库的薄封装，挂到统一 Tool 接口下。
 
 ```typescript
-// 工具 Schema（简化）
 const GlobTool = {
   name: "Glob",
   description: "基于 glob 模式快速查找文件",
@@ -316,22 +492,25 @@ const GlobTool = {
 
 **为什么不用 `find` 或 `ls -R`？**
 
-- ✅ **性能**：Glob 工具内置缓存和优化，比 `find` 快得多
-- ✅ **gitignore 感知**：自动跳过 `.git`、`node_modules` 等目录
-- ✅ **输出格式化**：返回结构化数据，模型更容易解析
-- ✅ **安全边界**：受权限系统控制，不会意外访问敏感目录
+- **性能**：长生命周期进程 + 内部缓存，避免频繁 fork CLI
+- **gitignore 感知**：自动跳过 `.git`、`node_modules` 等目录
+- **输出结构化**：返回列表/JSON，而不是一坨文本
+- **安全边界**：受权限系统控制，限制工作目录范围
 
-**典型用法**：
-```
+典型调用：
+
+```text
 Glob pattern="**/*.test.ts" path="src"
 → 返回所有测试文件列表
 ```
+
+可以把它看成「把文件系统暴露给 LLM 的一个受控视图」。
 
 ---
 
 ### 4.2 Grep —— 内容搜索
 
-**底层实现**：基于 **ripgrep (rg)**，一个用 Rust 编写的高性能搜索工具
+**角色：** ripgrep 的 JSON 包装器。
 
 ```typescript
 const GrepTool = {
@@ -354,19 +533,18 @@ const GrepTool = {
 }
 ```
 
-**关键实现细节**：
+实现上通常就是起一个 `rg` 子进程，打开 `--json` 输出，然后流式解析：
 
 ```typescript
 async function executeGrep(params: GrepParams): Promise<GrepResult> {
   const args = [
     params.pattern,
     params.path,
-    '--json',              // JSON 格式输出
-    '--max-count', '50',   // 限制每个文件的匹配数
+    '--json',               // JSON 格式输出
+    '--max-count', '50',    // 限制每个文件的匹配数
     '--max-filesize', '1M', // 跳过大文件
   ];
   
-  // 文件类型过滤
   if (params.include) {
     for (const glob of params.include) {
       args.push('--glob', glob);
@@ -378,7 +556,7 @@ async function executeGrep(params: GrepParams): Promise<GrepResult> {
 }
 ```
 
-**为什么选择 ripgrep？**
+**为什么选择 ripgrep？** 一个典型的工程取舍：
 
 | 特性 | ripgrep | 传统 grep |
 |:-----|:--------|:----------|
@@ -387,11 +565,13 @@ async function executeGrep(params: GrepParams): Promise<GrepResult> {
 | .gitignore | 自动遵守 | 不支持 |
 | 输出格式 | 支持 JSON | 仅文本 |
 
+换句话说：**用成熟 CLI 解决 I/O 和搜索问题，用 Tool 层解决「协议和结构化」问题。**
+
 ---
 
 ### 4.3 Read —— 文件内容读取
 
-**设计目标**：安全、可控地读取文件内容
+**设计目标：** 安全、可控地读取文件内容，并为 LLM 输出做过格式优化。
 
 ```typescript
 const ReadTool = {
@@ -416,46 +596,40 @@ const ReadTool = {
 }
 ```
 
-**关键实现细节**：
-
 ```typescript
 async function executeRead(params: ReadParams): Promise<string> {
-  // 1. 权限检查
-  await checkReadPermission(params.path);
+  await checkReadPermission(params.path);  // 权限检查
   
-  // 2. 文件大小检查
   const stats = await fs.stat(params.path);
   if (stats.size > MAX_FILE_SIZE) {
     throw new Error('文件过大，请使用 offset/limit 分段读取');
   }
   
-  // 3. 读取并格式化（带行号，类似 cat -n）
   const lines = await fs.readFile(params.path, 'utf-8');
   return formatWithLineNumbers(lines, params.offset, params.limit);
 }
 ```
 
-**输出格式**（类似 `cat -n`）：
-```
-     1	import { useState } from 'react';
-     2	
-     3	export function Counter() {
-     4	  const [count, setCount] = useState(0);
-     5	  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
-     6	}
+输出类似 `cat -n`：
+
+```text
+     1  import { useState } from 'react';
+     2  
+     3  export function Counter() {
+     4    const [count, setCount] = useState(0);
+     5    return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
+     6  }
 ```
 
-**为什么不用 `cat`、`head`、`tail`？**
+为什么不直接用 `cat` / `head` / `tail`？
 
-- ✅ **统一行号格式**：方便模型引用具体代码行
-- ✅ **大文件保护**：自动限制读取行数，避免 Token 爆炸
-- ✅ **权限控制**：受工具权限系统管理
+- 行号格式固定，方便后续引用「第 N 行」
+- 对大文件强制分页，避免一次性读爆上下文
+- 所有读取都走统一权限和审计链路
 
 ---
 
 ### 4.4 LS —— 目录列表
-
-**功能**：列出目录内容，返回结构化信息
 
 ```typescript
 const LSTool = {
@@ -475,19 +649,22 @@ const LSTool = {
 }
 ```
 
-**输出包含**：
+输出通常包含：
+
 - 文件/目录名
 - 类型（文件/目录/符号链接）
 - 文件大小
 - 最后修改时间
 
+和 `ls` 相比，它把「视图」抽象成了一个稳定的 JSON schema，更适合作为 LLM 的长期记忆基础。
+
 ---
 
 ## 五、文件写入类工具
 
-### 5.1 Write —— 文件写入
+这些工具把原本容易出错的 Shell 写入操作（重定向、heredoc、sed）抽象成**显式意图 + 明确 schema**，方便审计和回滚。
 
-**功能**：创建或覆盖文件
+### 5.1 Write —— 文件写入
 
 ```typescript
 const WriteTool = {
@@ -506,23 +683,23 @@ const WriteTool = {
 }
 ```
 
-**安全机制**：
+安全机制包括：
 
-1. **权限检查**：写入前必须通过 `can_use_tool` 回调
-2. **修改前读取**：如果修改已有文件，建议先用 `Read` 读取
-3. **目录自动创建**：如果父目录不存在，自动创建
+1. 写入前走 `can_use_tool` 等权限检查
+2. 建议配合 `Read` 做「读 → 改 → 写」的完整链路
+3. 用临时文件 + rename 做原子写入，避免半写入状态
 
 **为什么不用 `echo >` 或 heredoc？**
 
-- ✅ **转义处理**：避免 Shell 特殊字符问题
-- ✅ **权限审计**：所有写入都会被记录
-- ✅ **原子写入**：使用临时文件 + rename，避免写入中断导致数据丢失
+- 减少 Shell 转义相关的长尾 bug
+- 可以做集中审计和 diff
+- 行为可以稳定地在不同环境复现
 
 ---
 
 ### 5.2 Edit —— 精确编辑
 
-**功能**：修改文件的特定部分，而非整体覆盖
+**场景：** 不希望覆盖整个文件，而是修改某段上下文。
 
 ```typescript
 const EditTool = {
@@ -545,14 +722,10 @@ const EditTool = {
 }
 ```
 
-**实现逻辑**：
-
 ```typescript
 async function executeEdit(params: EditParams): Promise<EditResult> {
-  // 1. 读取原文件
   const content = await fs.readFile(params.path, 'utf-8');
   
-  // 2. 查找并替换
   const count = (content.match(new RegExp(escapeRegex(params.old_string), 'g')) || []).length;
   
   if (count === 0) {
@@ -562,7 +735,6 @@ async function executeEdit(params: EditParams): Promise<EditResult> {
     throw new Error(`找到 ${count} 处匹配，请提供更精确的上下文`);
   }
   
-  // 3. 执行替换并写入
   const newContent = content.replace(params.old_string, params.new_string);
   await fs.writeFile(params.path, newContent, 'utf-8');
   
@@ -570,17 +742,17 @@ async function executeEdit(params: EditParams): Promise<EditResult> {
 }
 ```
 
-**为什么不用 `sed`？**
+和 `sed` 相比，换了一组工程取舍：
 
-- ✅ **精确匹配**：要求完全匹配，避免误改
-- ✅ **唯一性检查**：如果有多处匹配会报错，要求提供更多上下文
-- ✅ **Diff 友好**：结果更容易生成 diff 供用户审核
+- 要求上下文完全匹配，牺牲灵活性换安全
+- 多处命中直接报错，强迫调用方提供更精确的 diff
+- 更容易和「审阅 diff → 批准执行」流整合
 
 ---
 
 ### 5.3 MultiEdit —— 批量编辑
 
-**功能**：在一次操作中对多个文件或同一文件的多处进行编辑
+在一次调用中，对多个文件或同一文件的多处同时修改：
 
 ```typescript
 const MultiEditTool = {
@@ -602,10 +774,13 @@ const MultiEditTool = {
 }
 ```
 
-**使用场景**：
-- 重命名一个函数在多个文件中的调用
-- 批量更新 import 语句
-- 修改接口定义及其所有实现
+典型用法：
+
+- 批量更新 import 路径
+- 重命名某个 hook 在多处的调用
+- 同步修改接口定义及其所有实现
+
+可以视作 Edit 的「事务化版」。
 
 ---
 
@@ -613,7 +788,7 @@ const MultiEditTool = {
 
 ### 6.1 Bash —— Shell 命令执行
 
-**功能**：在持久化的 Shell 会话中执行命令
+**角色定位：** 一个受控的「逃生阀」（escape hatch）：专用工具覆盖不到的长尾场景，交给 Bash 兜底。
 
 ```typescript
 const BashTool = {
@@ -638,37 +813,31 @@ const BashTool = {
 }
 ```
 
-**关键特性**：
+关键特性：
 
-1. **持久化会话**：`cd` 等命令的效果会保留
-2. **输出截断**：超长输出会被截断，避免 Token 爆炸
+1. **持久化会话**：`cd` 等命令的效果在会话内保留
+2. **输出截断**：对 stdout/stderr 做长度限制
 3. **后台执行**：支持长时间运行的命令
-4. **超时控制**：默认 30 秒超时，可自定义
-
-**安全限制**：
+4. **超时控制**：避免单次调用卡死会话
 
 ```typescript
 async function executeBash(params: BashParams): Promise<BashResult> {
-  // 1. 检查是否在黑名单中
   if (isBlockedCommand(params.command)) {
     throw new Error('该命令已被安全策略禁止');
   }
   
-  // 2. 权限检查
   await checkBashPermission(params.command);
   
-  // 3. 在沙箱中执行
   const result = await sandbox.exec(params.command, {
     timeout: params.timeout,
     background: params.background,
   });
   
-  // 4. 截断输出
   return truncateOutput(result, MAX_OUTPUT_SIZE);
 }
 ```
 
-**何时用 Bash vs 专用工具？**
+**何时用 Bash，何时用专用工具？**
 
 | 场景 | 推荐工具 |
 |:-----|:---------|
@@ -677,9 +846,11 @@ async function executeBash(params: BashParams): Promise<BashResult> {
 | 读取文件 | `Read`（而非 `bash: cat`） |
 | 写入文件 | `Write`（而非 `bash: echo >`） |
 | 编辑文件 | `Edit`（而非 `bash: sed`） |
-| 运行测试 | `Bash`（`npm test`） |
-| Git 操作 | `Bash`（`git commit`） |
-| 安装依赖 | `Bash`（`pip install`） |
+| 运行测试 | `Bash`（`npm test` 等） |
+| Git 操作 | `Bash`（`git status`, `git commit` 等） |
+| 安装依赖 | `Bash`（`pip install`, `npm install` 等） |
+
+从架构角度看：**Bash 用来处理不可预期的长尾；专用工具负责把高频路径标准化和结构化。**
 
 ---
 
@@ -687,35 +858,44 @@ async function executeBash(params: BashParams): Promise<BashResult> {
 
 ### 7.1 专用工具 > 通用命令
 
-Claude Code 的工具设计遵循一个核心原则：**为常见操作提供专用工具，而非让模型自己拼 Bash 命令**。
+Claude Code 的一个明显取舍是：**为常见操作提供专用工具，而不是完全依赖通用 Shell 命令。**
 
-好处：
-- **可控性**：每个工具有明确的输入/输出 Schema
-- **安全性**：专用工具更容易做权限管理
-- **效率**：输出格式优化，减少 Token 消耗
-- **可靠性**：避免 Shell 特殊字符、转义等问题
+这样做带来几件事：
+
+- 输入/输出 schema 明确，可验证、可演进
+- 安全策略可以精确到「某个工具 + 某类参数」
+- 输出可以围绕「token 成本」定制，而不是被 CLI 格式绑死
+- 避免转义、locale 等 Shell 细节造成的随机失败
+
+这和很多 Agent 框架里的做法类似：**常见能力抽象成一阶 API，Shell 退到二线兜底。**
 
 ### 7.2 权限分层
 
-所有工具都受权限系统管理：
+工具调用走一条完整的权限链：
 
-```
+```text
 用户配置 → PermissionMode → can_use_tool 回调 → 工具执行
            (全局档位)        (细粒度控制)
 ```
 
+- PermissionMode 决定大致「可操作范围」（只读 / 读写 / 允许 Bash）
+- `can_use_tool` 可以按工具名、路径、命令内容做更细粒度控制
+
 ### 7.3 输出优化
 
-每个工具都会对输出进行处理：
-- **结构化**：尽量返回 JSON 或带格式的文本
-- **截断**：超长输出自动截断，避免 Token 浪费
-- **行号**：文件内容带行号，方便引用
+每个工具都会对输出来一轮「LLM 视角」的精简：
+
+- 尽量返回结构化 JSON 或约定好的文本格式
+- 对大输出做截断和分页（Read/Grep/Bash 都有）
+- 文件内容带行号，方便后续引用和 diff
+
+这其实就是在「I/O 形状」上做了很多为 LLM 量身定制的工作。
 
 ---
 
 ## 八、扩展：自定义工具
 
-除了内置工具，Claude Code 还支持通过 **MCP（Model Context Protocol）** 或 **自定义脚本** 扩展工具：
+内置工具是一套「基础设施」，但 Claude Code 也支持通过 **MCP（Model Context Protocol）** 或自定义脚本扩展能力：
 
 ```typescript
 // 通过 MCP 添加自定义工具
@@ -729,23 +909,26 @@ const options = {
 };
 ```
 
-这使得你可以为 Claude Code 添加：
+可以用它来挂接：
+
 - 数据库查询工具
-- API 调用工具
-- 项目特定的构建/部署工具
+- 各种内部 HTTP API
+- 项目特定的构建 / 部署 / 运维命令
+
+从架构上看，内置工具 + MCP 工具，共同构成了 Claude Code 的「工具平面」（tooling plane）。
 
 ---
 
 ## 九、总结
 
-Claude Code 的工具系统体现了 Anthropic 在 Agent 设计上的核心思路：
+从实现和协议两个层面看，Claude Code 的工具系统体现了 Anthropic 在 Agent 设计上的几个核心取向：
 
-1. **专用化**：为常见操作提供优化的专用工具
-2. **安全性**：多层权限控制，所有操作可审计
-3. **效率**：输出格式优化，减少 Token 消耗
-4. **可扩展**：支持 MCP 和自定义脚本扩展
+1. **专用化**：为高频操作提供专用工具，抽象出稳定 API，而不是让 LLM 在 Bash 上裸奔。
+2. **安全性**：多层权限控制 + 明确的调用链，所有操作都有迹可循。
+3. **效率优化**：I/O 形状围绕 token 成本设计，比如行号、分页、截断、JSON 输出。
+4. **可扩展性**：通过 MCP / 自定义脚本，把项目私有能力也纳入同一套工具协议。
 
-下一篇，我们将深入 **MCP 协议**，看看如何为 Claude Code 扩展自定义能力。
+下一篇会沿着这个抽象继续往下看：**MCP 协议是怎么把「远程服务」变成 Claude Code 眼中的一个个工具的。**
 
 ---
 
