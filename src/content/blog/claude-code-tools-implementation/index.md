@@ -28,9 +28,270 @@ Claude Code 提供了一套专门为代码开发场景优化的内置工具，�
 
 ---
 
-## 二、文件读取类工具
+## 二、LLM 如何"调用"工具
 
-### 2.1 Glob —— 快速文件模式匹配
+在深入具体工具之前，我们先搞清楚一个根本问题：**LLM 是如何接收参数并调用工具的？**
+
+**核心答案：LLM 本身不执行工具，它只是生成结构化的 JSON 输出，由客户端解析并执行。**
+
+### 2.1 完整流程
+
+```
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│   1. 发送请求     │ ──▶ │   2. LLM 生成     │ ──▶ │  3. 客户端执行    │
+│   (带工具定义)    │     │   (结构化JSON)    │     │   (真正调用)      │
+└──────────────────┘     └──────────────────┘     └──────────────────┘
+```
+
+### 2.2 客户端发送请求（带工具 Schema）
+
+客户端告诉 LLM："你可以用这些工具，参数格式是这样的"
+
+```typescript
+// 发送给 Anthropic API 的请求
+{
+  "model": "claude-sonnet-4-20250514",
+  "messages": [
+    { "role": "user", "content": "查找包含 useState 的文件" }
+  ],
+  "tools": [                          // ← 工具定义（JSON Schema）
+    {
+      "name": "GrepTool",
+      "description": "搜索文件内容...",
+      "input_schema": {               // ← 告诉 LLM 参数格式
+        "type": "object",
+        "properties": {
+          "pattern": { "type": "string", "description": "正则表达式" },
+          "path": { "type": "string", "description": "搜索目录" },
+          "include": { "type": "string", "description": "文件过滤" }
+        },
+        "required": ["pattern"]
+      }
+    }
+  ]
+}
+```
+
+### 2.3 LLM 生成结构化输出（不是执行！）
+
+LLM 看到工具定义后，**决定要调用哪个工具**，然后**生成符合 schema 的 JSON**：
+
+```json
+{
+  "role": "assistant",
+  "content": [
+    {
+      "type": "tool_use",              // ← 特殊的消息类型
+      "id": "toolu_01ABC123",          // ← 唯一ID（用于匹配结果）
+      "name": "GrepTool",              // ← LLM 选择的工具名
+      "input": {                       // ← LLM 生成的参数（符合 schema）
+        "pattern": "useState",
+        "include": "*.tsx"
+      }
+    }
+  ],
+  "stop_reason": "tool_use"            // ← 表示需要工具结果才能继续
+}
+```
+
+**关键理解：LLM 只是"说"它想调用工具，并给出参数，但它没有能力真正执行任何代码！**
+
+### 2.4 客户端解析并执行
+
+客户端收到响应后，解析 `tool_use` 块，真正执行工具：
+
+```typescript
+// 处理逻辑
+for (const block of assistantMessage.content) {
+  if (block.type === 'tool_use') {
+    const toolName = block.name      // "GrepTool"
+    const toolInput = block.input    // { pattern: "useState", include: "*.tsx" }
+    const toolUseId = block.id       // "toolu_01ABC123"
+    
+    // 1. 查找对应的工具实现
+    const tool = tools.find(t => t.name === toolName)
+    
+    // 2. 验证参数
+    const isValid = tool.inputSchema.safeParse(toolInput)
+    
+    // 3. 真正执行工具代码！
+    for await (const result of tool.call(toolInput, context)) {
+      // GrepTool.call() 执行 ripgrep 搜索
+    }
+    
+    // 4. 把结果返回给 LLM
+    yield createUserMessage([{
+      type: 'tool_result',
+      tool_use_id: toolUseId,        // ← 匹配之前的 tool_use
+      content: "Found 15 files\n..."
+    }])
+  }
+}
+```
+
+### 2.5 将结果返回给 LLM
+
+工具执行完成后，结果作为新消息发送给 LLM：
+
+```typescript
+// 下一轮 API 请求
+{
+  "messages": [
+    { "role": "user", "content": "查找包含 useState 的文件" },
+    { 
+      "role": "assistant", 
+      "content": [
+        { "type": "tool_use", "id": "toolu_01ABC123", "name": "GrepTool", "input": {...} }
+      ]
+    },
+    { 
+      "role": "user",                  // ← tool_result 是 user 角色
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "toolu_01ABC123",
+          "content": "Found 15 files\nsrc/App.tsx\nsrc/hooks/useAuth.tsx\n..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+LLM 收到结果后，可以继续生成自然语言回复。
+
+### 2.6 小结
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│   LLM 不能执行代码！它只能：                                          │
+│                                                                     │
+│   1. 阅读工具定义（JSON Schema）                                     │
+│   2. 决定是否需要调用工具                                            │
+│   3. 生成符合 schema 的 JSON 参数                                    │
+│   4. 等待客户端返回 tool_result                                      │
+│   5. 根据结果继续生成回复                                            │
+│                                                                     │
+│   ─────────────────────────────────────────────────────────────     │
+│                                                                     │
+│   真正执行工具的是客户端：                                            │
+│                                                                     │
+│   1. 解析 LLM 返回的 tool_use JSON                                   │
+│   2. 找到对应的工具实现                                              │
+│   3. 调用 tool.call(input, context) 执行                            │
+│   4. 将结果封装为 tool_result 返回给 LLM                             │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**本质上，LLM 的"工具调用"就是一种特殊的结构化输出格式，让 LLM 能够表达"我需要这个工具，参数是这些"的意图。**
+
+---
+
+## 三、Tools → LLM API 数据流
+
+了解了工具调用原理后，我们来看完整的数据流：
+
+```
+┌───────────────────┐
+│  1. Tool 定义层    │
+│  src/tools/*      │
+└────────┬──────────┘
+         │ 每个工具包含:
+         │ • name: string
+         │ • description: string
+         │ • inputSchema: ZodSchema
+         │ • call(): AsyncGenerator
+         ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│  2. Tool 聚合层                                                        │
+│  ─────────────────────────────────────────────────────────────────────│
+│  getAllTools() → 返回所有工具数组:                                      │
+│  [TaskTool, BashTool, FileReadTool, FileEditTool, GrepTool, ...]      │
+└────────┬──────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│  3. 查询引擎                                                           │
+│  ─────────────────────────────────────────────────────────────────────│
+│  query(messages, systemPrompt, context, canUseTool)                   │
+│                                                                        │
+│  • 准备消息历史                                                         │
+│  • 格式化系统提示                                                       │
+│  • 调用 LLM API 发送请求                                                │
+└────────┬──────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│  4. LLM 服务层                                                         │
+│  ─────────────────────────────────────────────────────────────────────│
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │ 🔧 Tool Schema 转换                                              │  │
+│  │ ────────────────────────────────────────────────────────────────│  │
+│  │ // Anthropic 格式                                               │  │
+│  │ const toolSchemas = tools.map(tool => ({                        │  │
+│  │   name: tool.name,                                              │  │
+│  │   description: getToolDescription(tool),                        │  │
+│  │   input_schema: zodToJsonSchema(tool.inputSchema)               │  │
+│  │ }))                                                             │  │
+│  └─────────────────────────────────────────────────────────────────┘  │
+│                                                                        │
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │ 📤 发送 API 请求                                                 │  │
+│  │ ────────────────────────────────────────────────────────────────│  │
+│  │ anthropic.messages.create({                                     │  │
+│  │   model, max_tokens, messages, system,                          │  │
+│  │   tools: toolSchemas,        ← 工具 schema                      │  │
+│  │   tool_choice: { type: 'auto' }                                 │  │
+│  │ })                                                              │  │
+│  └─────────────────────────────────────────────────────────────────┘  │
+└────────┬──────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│  5. LLM 响应 → Tool 调用                                               │
+│  ─────────────────────────────────────────────────────────────────────│
+│  LLM 返回 tool_use 块:                                                 │
+│  { type: 'tool_use', id: 'xxx', name: 'Bash', input: { command: '...' }}│
+│                                                                        │
+│  查询引擎执行:                                                          │
+│  1. 查找工具: tool = tools.find(t => t.name === toolUse.name)          │
+│  2. 验证输入: tool.inputSchema.safeParse(input)                        │
+│  3. 检查权限: canUseTool(tool, input, context)                         │
+│  4. 执行工具: tool.call(input, context)                                │
+└────────┬──────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌───────────────────────────────────────────────────────────────────────┐
+│  6. Tool 结果 → LLM (tool_result)                                      │
+│  ─────────────────────────────────────────────────────────────────────│
+│  工具执行后，结果封装为 tool_result 消息:                                │
+│                                                                        │
+│  yield createUserMessage([{                                            │
+│    type: 'tool_result',                                                │
+│    content: result.resultForAssistant || String(result.data),          │
+│    tool_use_id: toolUseID,                                             │
+│    is_error?: boolean                                                  │
+│  }])                                                                   │
+│                                                                        │
+│  这个消息会被添加到消息历史，在下一轮查询时发送给 LLM                     │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+### 核心转换点
+
+| 转换 | 说明 |
+|:-----|:-----|
+| **Zod → JSON Schema** | `zodToJsonSchema(tool.inputSchema)` 将 Zod 类型转为 API 可用的 JSON Schema |
+| **消息格式转换** | 不同 API（Anthropic/OpenAI）格式转换 |
+| **工具结果封装** | `{ type: 'tool_result', ... }` 将执行结果返回给 LLM |
+
+---
+
+## 四、文件读取类工具
+
+### 4.1 Glob —— 快速文件模式匹配
 
 **底层实现**：使用高性能的 glob 匹配库（类似 `fast-glob`）
 
@@ -68,7 +329,7 @@ Glob pattern="**/*.test.ts" path="src"
 
 ---
 
-### 2.2 Grep —— 内容搜索
+### 4.2 Grep —— 内容搜索
 
 **底层实现**：基于 **ripgrep (rg)**，一个用 Rust 编写的高性能搜索工具
 
@@ -128,7 +389,7 @@ async function executeGrep(params: GrepParams): Promise<GrepResult> {
 
 ---
 
-### 2.3 Read —— 文件内容读取
+### 4.3 Read —— 文件内容读取
 
 **设计目标**：安全、可控地读取文件内容
 
@@ -192,7 +453,7 @@ async function executeRead(params: ReadParams): Promise<string> {
 
 ---
 
-### 2.4 LS —— 目录列表
+### 4.4 LS —— 目录列表
 
 **功能**：列出目录内容，返回结构化信息
 
@@ -222,9 +483,9 @@ const LSTool = {
 
 ---
 
-## 三、文件写入类工具
+## 五、文件写入类工具
 
-### 3.1 Write —— 文件写入
+### 5.1 Write —— 文件写入
 
 **功能**：创建或覆盖文件
 
@@ -259,7 +520,7 @@ const WriteTool = {
 
 ---
 
-### 3.2 Edit —— 精确编辑
+### 5.2 Edit —— 精确编辑
 
 **功能**：修改文件的特定部分，而非整体覆盖
 
@@ -317,7 +578,7 @@ async function executeEdit(params: EditParams): Promise<EditResult> {
 
 ---
 
-### 3.3 MultiEdit —— 批量编辑
+### 5.3 MultiEdit —— 批量编辑
 
 **功能**：在一次操作中对多个文件或同一文件的多处进行编辑
 
@@ -348,9 +609,9 @@ const MultiEditTool = {
 
 ---
 
-## 四、命令执行工具
+## 六、命令执行工具
 
-### 4.1 Bash —— Shell 命令执行
+### 6.1 Bash —— Shell 命令执行
 
 **功能**：在持久化的 Shell 会话中执行命令
 
@@ -422,9 +683,9 @@ async function executeBash(params: BashParams): Promise<BashResult> {
 
 ---
 
-## 五、工具系统的设计哲学
+## 七、工具系统的设计哲学
 
-### 5.1 专用工具 > 通用命令
+### 7.1 专用工具 > 通用命令
 
 Claude Code 的工具设计遵循一个核心原则：**为常见操作提供专用工具，而非让模型自己拼 Bash 命令**。
 
@@ -434,7 +695,7 @@ Claude Code 的工具设计遵循一个核心原则：**为常见操作提供专
 - **效率**：输出格式优化，减少 Token 消耗
 - **可靠性**：避免 Shell 特殊字符、转义等问题
 
-### 5.2 权限分层
+### 7.2 权限分层
 
 所有工具都受权限系统管理：
 
@@ -443,7 +704,7 @@ Claude Code 的工具设计遵循一个核心原则：**为常见操作提供专
            (全局档位)        (细粒度控制)
 ```
 
-### 5.3 输出优化
+### 7.3 输出优化
 
 每个工具都会对输出进行处理：
 - **结构化**：尽量返回 JSON 或带格式的文本
@@ -452,7 +713,7 @@ Claude Code 的工具设计遵循一个核心原则：**为常见操作提供专
 
 ---
 
-## 六、扩展：自定义工具
+## 八、扩展：自定义工具
 
 除了内置工具，Claude Code 还支持通过 **MCP（Model Context Protocol）** 或 **自定义脚本** 扩展工具：
 
@@ -475,7 +736,7 @@ const options = {
 
 ---
 
-## 七、总结
+## 九、总结
 
 Claude Code 的工具系统体现了 Anthropic 在 Agent 设计上的核心思路：
 
