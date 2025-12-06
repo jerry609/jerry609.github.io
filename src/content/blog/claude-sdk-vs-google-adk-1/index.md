@@ -14,6 +14,11 @@ draft: false
 
 本文将从源码层面，对比 `claude-agent-sdk-python` 和 `adk-python` 在**通信架构**与**代码执行沙箱**上的核心差异。
 
+> 📚 系列相关文章：
+> - Claude 工具链视角：**[Claude Code 工具系统：内置工具的实现剖析](/blog/claude-code-tools-implementation/)**
+> - ADK 实战视角：**[用 Google ADK 复现 Claude Code 工具系统](/blog/adk-replicate-claude-code-tools/)**
+> - SDK 源码导读：**[Claude Agent SDK 源码导读：子进程、IPC 与 Sandbox](/blog/claude-agent-sdk-1/)**
+
 ## 1. 通信架构：子进程代理 vs 直接 API 调用
 
 这是两者架构上最本质的区别。

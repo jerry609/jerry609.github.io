@@ -9,6 +9,11 @@ draft: true
 
 > 上一篇我们分析了 Claude Code 的内置工具系统。本文将使用 Google ADK 从零实现同样的工具集，直观展示两种框架在工具定义上的差异。
 
+> 📚 系列相关文章：
+> - 上一篇：**[Claude Code 工具系统：内置工具的实现剖析](/blog/claude-code-tools-implementation/)**（从 Claude 视角看 Glob/Grep/Read/Write/Bash 等内置工具）
+> - 本文：**用 Google ADK 复现 Claude Code 工具系统**（在 ADK 中实现一套相同能力的工具集）
+> - 延伸阅读：**[Claude Agent SDK vs Google ADK：两种 Agent 开发范式的深度对比](/blog/claude-sdk-vs-google-adk-1/)**（从更大尺度比较两家 SDK 的设计哲学）
+
 ## 一、ADK 工具定义基础
 
 在 Google ADK 中，工具就是普通的 Python 函数。ADK 会自动从函数签名和 docstring 提取 Schema：
@@ -35,6 +40,8 @@ agent = Agent(
     tools=[my_tool],  # 直接传函数
 )
 ```
+
+从源码角度看，`tools=[my_tool]` 底下会被包装成一个 `FunctionTool(my_tool)` 实例。ADK 会在 `function_tool.py` / `_automatic_function_calling_util.py` 里通过 `inspect` + `pydantic.create_model(...).model_json_schema()` 自动生成 JSON Schema，并转换成 Gemini 的 `FunctionDeclaration`，这一层机制让「函数即工具」真正可用。
 
 ---
 
@@ -118,9 +125,9 @@ def grep_search(
             for glob in include:
                 args.extend(["--glob", glob])
         
-        result = subprocess.run(args, capture_output=True, text=True)
-        # 解析 ripgrep JSON 输出...
-        return _parse_rg_output(result.stdout)
+    result = subprocess.run(args, capture_output=True, text=True)
+    # 解析 ripgrep JSON 输出（此处仅作示意，真实实现需要遍历每一行 JSON 事件并提取 match 信息）
+    return _parse_rg_output(result.stdout)  # 伪实现占位
     except FileNotFoundError:
         # 回退到 Python 实现
         return _python_grep(pattern, path, include, max_results)
@@ -529,7 +536,7 @@ def require_permission(permission: str):
     def decorator(func: Callable):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # 这里可以接入你的权限系统
+            # 这里可以接入你的权限系统（数据库 / 配置文件 / 内存表等），此处为示意实现
             if not check_permission(permission):
                 raise PermissionError(f"需要权限: {permission}")
             return func(*args, **kwargs)
@@ -560,6 +567,82 @@ ADK 的优势在于**完全可控**——你可以选择底层实现（ripgrep v
 
 代价是**需要自己造轮子**——Claude Code 的内置工具已经做了大量优化（性能、Token 效率、安全边界），而 ADK 需要你自己实现这些。
 
----
 
-*完整代码已上传至 GitHub，欢迎 Star 和 PR。*
+## 附录：Gemini CLI 的工具是怎么写的？
+
+本文主线是用 ADK 复刻 Claude Code 的工具，但如果你顺着仓库继续往下挖，会发现 **Gemini CLI 自己也内置了一套非常工程化的工具系统**。
+
+在 `gemini-cli/packages/core/src/tools/` 目录下，每个工具都是一个 TypeScript 类，继承自 `BaseDeclarativeTool`：
+
+```ts
+// 以 ReadFileTool 为例（简化）
+export class ReadFileTool extends BaseDeclarativeTool<ReadFileToolParams, ToolResult> {
+    static readonly Name = READ_FILE_TOOL_NAME;
+
+    constructor(private config: Config, messageBus?: MessageBus) {
+        super(
+            ReadFileTool.Name,
+            'ReadFile',
+            'Reads and returns the content of a specified file...',
+            Kind.Read,                    // 工具类型：读/写/执行
+            {
+                properties: {
+                    file_path: { type: 'string' },
+                    offset: { type: 'number' },
+                    limit: { type: 'number' },
+                },
+                required: ['file_path'],
+                type: 'object',
+            },
+            true,   // isOutputMarkdown
+            false,  // canUpdateOutput
+            messageBus,
+        );
+    }
+
+    protected override validateToolParamValues(params: ReadFileToolParams): string | null {
+        // 强制参数校验（路径必须在 workspace 内等）
+        // ... 详见 read-file.ts
+        return null;
+    }
+
+    protected createInvocation(params: ReadFileToolParams, messageBus?: MessageBus) {
+        return new ReadFileToolInvocation(this.config, params, messageBus);
+    }
+}
+```
+
+再比如 Shell 命令工具 `ShellTool`，会在 `shell.ts` 里：
+
+```ts
+export class ShellToolInvocation extends BaseToolInvocation<ShellToolParams, ToolResult> {
+    protected override async getConfirmationDetails(...): Promise<ToolCallConfirmationDetails | false> {
+        const command = stripShellWrapper(this.params.command);
+        const rootCommands = [...new Set(getCommandRoots(command))];
+
+        // 非交互模式下，如果命令不在 allowlist 里，直接报错而不是卡住等用户输入
+        if (!this.config.isInteractive() && this.config.getApprovalMode() !== ApprovalMode.YOLO) {
+            if (this.isInvocationAllowlisted(command)) {
+                return false;
+            }
+            throw new Error(`Command "${command}" is not in the list of allowed tools...`);
+        }
+
+        // 交给 MessageBus + UI 做确认
+        // ... 详见 shell.ts
+    }
+}
+```
+
+和 ADK 相比，Gemini CLI 的工具实现有几个明显特征：
+
+- **强类型 + 手写 Schema**：每个工具都显式给出参数 JSON Schema，而不是从函数签名自动生成
+- **验证与执行分离**：`BaseDeclarativeTool` 负责声明和参数校验，`*ToolInvocation` 负责真正的执行逻辑
+- **内建策略与确认系统**：通过 `MessageBus` + policy engine 决定工具是否需要用户确认，甚至可以动态更新「永远允许」策略
+
+如果把三者放在一起看：
+
+- Claude Code：**工具是内置产品能力**，你只能遥控
+- Gemini CLI：**工具是 CLI 的一等公民**，为本地开发体验做了大量工程优化
+- Google ADK：**工具是你写的函数**，框架帮你接到 LLM 上
+

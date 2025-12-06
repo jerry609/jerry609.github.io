@@ -21,6 +21,11 @@ Claude Code 提供了一套专门为代码开发场景优化的内置工具，�
 
 这些工具的设计遵循一个核心原则：**用专用工具替代通用 Bash 命令**，以获得更好的性能、安全性和可控性。
 
+> 📚 系列相关文章：
+> - 本文：**Claude Code 工具系统：内置工具的实现剖析**（工具设计与实现细节）
+> - 下一篇：**[用 Google ADK 复现 Claude Code 工具系统](/blog/adk-replicate-claude-code-tools/)**（用 ADK 从零实现一套类似工具）
+> - 延伸阅读：**[Claude Agent SDK vs Google ADK：两种 Agent 开发范式的深度对比](/blog/claude-sdk-vs-google-adk-1/)**（从 SDK 视角看两家生态）
+
 ---
 
 ## 二、文件读取类工具
