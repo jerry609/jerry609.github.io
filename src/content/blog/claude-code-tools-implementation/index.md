@@ -46,6 +46,10 @@ Claude Code 提供了一套专门为代码开发场景优化的内置工具，�
 - LLM：返回「要调用的方法名 + 参数」
 - 客户端：本地执行，再把结果作为新的消息回传
 
+![Claude Code Tool Calling Architecture Diagram](/src/content/blog/claude-code-tools-implementation/Claude%20Code%20Tool%20Calling%20Architecture%20Diagram.png)
+
+> 上图是整个工具调用的数据流：从用户到 CLI，再到 Claude LLM，以及最终落到文件系统 / Bash / 外部工具的执行路径，一眼能看到各层的职责边界。
+
 ### 2.1 完整流程
 
 ```
@@ -372,6 +376,10 @@ const result = await tool.call(toolUse.input, context);
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+![Claude Code Tool Calling Sequence Diagram](/src/content/blog/claude-code-tools-implementation/Claude%20Code%20Tool%20Calling%20Sequence%20Diagram.png)
+
+> 这张时序图把上面的 5 个步骤拉直成一条线，突出两次 HTTP 往返：第一次 LLM 决定调用工具，第二次在拿到 `tool_result` 之后生成最终回复。
+
 ---
 
 ## 三、Tools → LLM API 数据流
@@ -456,6 +464,10 @@ const result = await tool.call(toolUse.input, context);
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
+![Claude Code Tool System Layered Architecture](/src/content/blog/claude-code-tools-implementation/Claude%20Code%20Tool%20System%20Layered%20Architecture.png)
+
+> 这张分层图对应的就是上面的 ASCII 图：从 Tool 定义、聚合，到查询引擎、LLM 封装，再到底层的文件系统与 Shell，把「工具系统」放回到整个 Claude Code 架构里的位置。
+
 **可以看到：Claude Code 的工具系统，本质上是对 Anthropic Tool Calling 协议做了一层工程化包装和分层。**
 
 ### 核心转换点
@@ -471,6 +483,10 @@ const result = await tool.call(toolUse.input, context);
 ## 四、文件读取类工具
 
 这些工具可以理解为：**对文件系统相关 CLI 的「结构化封装层」**，把原本非结构化的 stdout 变成稳定的 schema，方便 LLM 消化。
+
+![Claude Code Tools vs Shell Commands Comparison](/src/content/blog/claude-code-tools-implementation/Claude%20Code%20Tools%20vs%20Shell%20Commands%20Comparison.png)
+
+> 这张对照图把 Glob/Grep/Read/LS/Write/Edit/MultiEdit/Bash 分成三大类，并列出它们各自试图替代的传统 Shell 命令，以及这样做带来的好处。
 
 ### 4.1 Glob —— 快速文件模式匹配
 
@@ -881,6 +897,10 @@ Claude Code 的一个明显取舍是：**为常见操作提供专用工具，而
 用户配置 → PermissionMode → can_use_tool 回调 → 工具执行
            (全局档位)        (细粒度控制)
 ```
+
+![Claude Code Permission Control Flow](/src/content/blog/claude-code-tools-implementation/Claude%20Code%20Permission%20Control%20Flow.png)
+
+> 权限流转图把三道「闸门」画清楚了：全局 PermissionMode、`can_use_tool` 的策略判断，以及必要时的用户确认，对应你在 CLI 设置、安全策略和交互确认三个层面可以做的约束。
 
 - PermissionMode 决定大致「可操作范围」（只读 / 读写 / 允许 Bash）
 - `can_use_tool` 可以按工具名、路径、命令内容做更细粒度控制
