@@ -3,6 +3,7 @@ export interface TodoItem {
     type: 'blog' | 'concept' | 'other'
     status: 'todo' | 'done' | 'in-progress'
     link?: string
+    tags?: string[]
 }
 
 export interface DailyPlan {
@@ -18,13 +19,15 @@ export const plans: DailyPlan[] = [
                 title: '搭建 Claude Code 生态项目博客',
                 type: 'blog',
                 status: 'done',
-                link: '/blog/claude-code-ecosystem'
+                link: '/blog/claude-code-ecosystem',
+                tags: ['Claude', 'Blog', 'Setup']
             },
             {
                 title: '创建 Murmurs 页面',
                 type: 'other',
                 status: 'done',
-                link: '/murmurs'
+                link: '/murmurs',
+                tags: ['Feature', 'Astro']
             }
         ]
     }

@@ -1,32 +1,47 @@
 ---
 import PageLayout from '@/layouts/CommonPage.astro'
+import DashboardControls from '@/components/plan/DashboardControls.astro'
 import { plans } from '@/data/plans'
 import { readings } from '@/data/readings'
 
 const inboxItems = readings.filter((i) => i.status === 'inbox')
 const readingItems = readings.filter((i) => i.status === 'reading')
+
+// Collect all unique tags for the filter bar
+const allTags = Array.from(new Set([
+  ...readings.flatMap(i => i.tags || []),
+  ...plans.flatMap(p => p.items.flatMap(i => i.tags || []))
+])).sort()
 ---
 
 <PageLayout title="Focus">
-  <div class="max-w-6xl mx-auto mt-8">
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+  <div class="max-w-6xl mx-auto mt-4">
+    
+    <DashboardControls tags={allTags} />
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12" id="dashboard-grid">
       
-      {/* Left Column: Input Stream (Reading) - 4 cols */}
-      <div class="lg:col-span-4 space-y-8">
+      {/* Left Column: Input Stream (Reading) */}
+      <div class="lg:col-span-4 space-y-8 dashboard-col">
         <div>
           <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
             Input Stream
-            <span class="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+            <span class="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full" id="inbox-count">
               {inboxItems.length}
             </span>
           </h2>
           
-          {/* Active Reading - Featured */}
+          {/* Active Reading */}
           {readingItems.length > 0 && (
             <div class="mb-6 space-y-3">
               <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active</h3>
               {readingItems.map((item) => (
-                <div class="p-4 rounded-xl border bg-card/50 backdrop-blur-sm shadow-sm">
+                <div 
+                  class="dashboard-item p-4 rounded-xl border bg-card/50 backdrop-blur-sm shadow-sm"
+                  data-search={`${item.title} ${item.note || ''} ${item.tags?.join(' ') || ''}`.toLowerCase()}
+                  data-tags={item.tags?.join(',')}
+                  data-date={item.date}
+                >
                   <a 
                     href={item.url}
                     target="_blank" 
@@ -50,37 +65,44 @@ const readingItems = readings.filter((i) => i.status === 'reading')
           <div class="space-y-3">
             <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inbox</h3>
             {inboxItems.map((item) => (
-              <a 
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="block group p-3 rounded-lg border bg-card hover:border-primary/50 transition-all hover:shadow-sm"
+              <div 
+                class="dashboard-item block group p-3 rounded-lg border bg-card hover:border-primary/50 transition-all hover:shadow-sm"
+                data-search={`${item.title} ${item.tags?.join(' ') || ''}`.toLowerCase()}
+                data-tags={item.tags?.join(',')}
+                data-date={item.date}
               >
-                <div class="text-sm font-medium group-hover:text-primary transition-colors line-clamp-2">
-                  {item.title}
-                </div>
-                <div class="flex items-center justify-between mt-2">
-                   <div class="flex gap-1 overflow-hidden">
-                     {item.tags?.slice(0, 2).map(tag => (
-                       <span class="text-[10px] text-muted-foreground/70 bg-muted/50 px-1 rounded">
-                         #{tag}
-                       </span>
-                     ))}
-                   </div>
-                   <span class="text-[10px] text-muted-foreground/40 font-mono">{item.date}</span>
-                </div>
-              </a>
+                <a 
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="block"
+                >
+                  <div class="text-sm font-medium group-hover:text-primary transition-colors line-clamp-2">
+                    {item.title}
+                  </div>
+                  <div class="flex items-center justify-between mt-2">
+                     <div class="flex gap-1 overflow-hidden">
+                       {item.tags?.slice(0, 2).map(tag => (
+                         <span class="text-[10px] text-muted-foreground/70 bg-muted/50 px-1 rounded">
+                           #{tag}
+                         </span>
+                       ))}
+                     </div>
+                     <span class="text-[10px] text-muted-foreground/40 font-mono">{item.date}</span>
+                  </div>
+                </a>
+              </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Right Column: Output Log (Plans) - 8 cols */}
-      <div class="lg:col-span-8">
+      {/* Right Column: Execution Log (Plans) */}
+      <div class="lg:col-span-8 dashboard-col">
          <h2 class="text-xl font-bold mb-6">Execution Log</h2>
          <div class="space-y-12">
           {plans.map((plan) => (
-            <div class="relative pl-8 before:absolute before:left-[7px] before:top-2 before:h-full before:w-[2px] before:bg-border last:before:hidden">
+            <div class="day-block relative pl-8 before:absolute before:left-[7px] before:top-2 before:h-full before:w-[2px] before:bg-border last:before:hidden">
               <div class="absolute left-0 top-2 h-4 w-4 rounded-full bg-primary border-4 border-background"></div>
               <h3 class="text-xl font-bold mb-6 flex items-center gap-2">
                 {plan.date}
@@ -90,7 +112,12 @@ const readingItems = readings.filter((i) => i.status === 'reading')
               </h3>
               <div class="space-y-4">
                 {plan.items.map((item) => (
-                  <div class="flex items-center gap-4 p-4 rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent/50 group">
+                  <div 
+                    class="dashboard-item flex items-center gap-4 p-4 rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent/50 group"
+                    data-search={`${item.title} ${item.type} ${item.tags?.join(' ') || ''}`.toLowerCase()}
+                    data-tags={item.tags?.join(',')}
+                    data-date={plan.date}
+                  >
                     <div class={`w-3 h-3 rounded-full shrink-0 ${
                       item.status === 'done' ? 'bg-green-500' :
                       item.status === 'in-progress' ? 'bg-yellow-500' :
@@ -110,6 +137,13 @@ const readingItems = readings.filter((i) => i.status === 'reading')
                           {item.type}
                         </span>
                       </div>
+                      {item.tags && item.tags.length > 0 && (
+                        <div class="flex gap-1.5 mt-1">
+                          {item.tags.map(tag => (
+                            <span class="text-[10px] text-muted-foreground/60">#{tag}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     {item.link && (
@@ -128,3 +162,72 @@ const readingItems = readings.filter((i) => i.status === 'reading')
     </div>
   </div>
 </PageLayout>
+
+<script is:inline>
+  // Client-side filtering logic
+  const searchInput = document.getElementById('search-input');
+  const dateFilter = document.getElementById('date-filter');
+  const tagButtons = document.querySelectorAll('.tag-filter');
+  const items = document.querySelectorAll('.dashboard-item');
+  const dayBlocks = document.querySelectorAll('.day-block');
+
+  let currentSearch = '';
+  let currentDate = '';
+  let currentTag = 'all';
+
+  function filterItems() {
+    items.forEach(item => {
+      const searchMatch = !currentSearch || (item.dataset.search || '').includes(currentSearch);
+      const dateMatch = !currentDate || item.dataset.date === currentDate;
+      
+      const itemTags = (item.dataset.tags || '').split(',');
+      const tagMatch = currentTag === 'all' || itemTags.includes(currentTag);
+
+      if (searchMatch && dateMatch && tagMatch) {
+         item.style.display = '';
+         item.classList.remove('hidden');
+         // We need to restore original display.
+         // Simpler: use classList toggling hidden class. 
+         // Assuming Tailwind 'hidden' class works.
+      } else {
+         item.classList.add('hidden');
+      }
+    });
+
+    // Check day blocks visibility
+    dayBlocks.forEach(block => {
+      const visibleItems = block.querySelectorAll('.dashboard-item:not(.hidden)');
+      if (visibleItems.length === 0) {
+        block.classList.add('hidden');
+      } else {
+        block.classList.remove('hidden');
+      }
+    });
+  }
+
+  // Event Listeners
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      currentSearch = e.target.value.toLowerCase();
+      filterItems();
+    });
+  }
+
+  if (dateFilter) {
+    dateFilter.addEventListener('change', (e) => {
+      currentDate = e.target.value;
+      filterItems();
+    });
+  }
+
+  tagButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Toggle active class
+      tagButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      currentTag = btn.dataset.tag;
+      filterItems();
+    });
+  });
+</script>
