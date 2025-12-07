@@ -51,6 +51,7 @@ export const theme: ThemeUserConfig = {
     menu: [
       { title: 'Blog', link: '/blog' },
 
+      { title: 'Concepts', link: '/concepts' },
       { title: 'Roadmap', link: '/roadmap' },
       { title: 'Murmurs', link: '/murmurs' },
       { title: 'Plan', link: '/plan' },

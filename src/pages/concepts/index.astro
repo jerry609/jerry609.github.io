@@ -1,0 +1,125 @@
+---
+import PageLayout from '@/layouts/CommonPage.astro'
+import DashboardControls from '@/components/plan/DashboardControls.astro'
+import { concepts } from '@/data/concepts'
+
+const allTags = Array.from(new Set(concepts.flatMap(c => c.tags))).sort()
+---
+
+<PageLayout title="Concepts">
+  <div class="max-w-7xl mx-auto mt-4 px-4 sm:px-6 lg:px-8">
+    
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold tracking-tight mb-2">Digital Garden</h1>
+      <p class="text-muted-foreground">A collection of mental models, definitions, and technical concepts.</p>
+    </div>
+
+    <DashboardControls tags={allTags} />
+
+    <div class="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6" id="concept-grid">
+      {concepts.map((concept) => (
+        <article 
+          class="concept-card break-inside-avoid relative p-6 bg-card rounded-xl border border-border shadow-sm hover:shadow-lg transition-all duration-300 group"
+          data-search={`${concept.term} ${concept.definition} ${concept.details || ''} ${concept.tags.join(' ')}`.toLowerCase()}
+          data-tags={concept.tags.join(',')}
+          data-date={concept.date}
+        >
+          <div class="flex items-start justify-between mb-4">
+            <h2 class="text-xl font-bold font-mono tracking-tight text-primary group-hover:text-accent transition-colors">
+              {concept.term}
+            </h2>
+            <div class="flex gap-1 flex-wrap justify-end max-w-[40%]">
+              {concept.tags.map(tag => (
+                <span class="px-2 py-0.5 text-[10px] uppercase font-bold tracking-wider rounded-md bg-muted text-muted-foreground">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+          
+          <div class="prose prose-sm dark:prose-invert">
+            <p class="font-medium text-foreground mb-2">{concept.definition}</p>
+            {concept.details && (
+              <p class="text-muted-foreground text-xs leading-relaxed border-l-2 border-border pl-3 mt-3">
+                {concept.details}
+              </p>
+            )}
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground font-mono opacity-60">
+            <span>Collected on {concept.date}</span>
+            <span class="opacity-0 group-hover:opacity-100 transition-opacity">#{concept.term.replace(/\s+/g, '')}</span>
+          </div>
+        </article>
+      ))}
+    </div>
+
+    {concepts.length === 0 && (
+      <div class="text-center py-20 text-muted-foreground">
+        No concepts found. Time to plant some seeds.
+      </div>
+    )}
+  </div>
+</PageLayout>
+
+<script is:inline>
+  // Reuse filtering logic
+  const searchInput = document.getElementById('search-input');
+  const dateFilter = document.getElementById('date-filter');
+  const tagButtons = document.querySelectorAll('.tag-filter');
+  const items = document.querySelectorAll('.concept-card');
+
+  let currentSearch = '';
+  let currentDate = '';
+  let currentTag = 'all';
+
+  function filterItems() {
+    items.forEach(item => {
+      const searchMatch = !currentSearch || (item.dataset.search || '').includes(currentSearch);
+      const dateMatch = !currentDate || item.dataset.date === currentDate;
+      
+      const itemTags = (item.dataset.tags || '').split(',');
+      const tagMatch = currentTag === 'all' || itemTags.includes(currentTag);
+
+      if (searchMatch && dateMatch && tagMatch) {
+         item.style.display = '';
+         item.classList.remove('hidden');
+         // Add fade-in animation
+         item.style.animation = 'fade-in 0.3s ease-out forwards';
+      } else {
+         item.classList.add('hidden');
+      }
+    });
+  }
+
+  // Event Listeners
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      currentSearch = e.target.value.toLowerCase();
+      filterItems();
+    });
+  }
+
+  if (dateFilter) {
+    dateFilter.addEventListener('change', (e) => {
+      currentDate = e.target.value;
+      filterItems();
+    });
+  }
+
+  tagButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tagButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTag = btn.dataset.tag;
+      filterItems();
+    });
+  });
+</script>
+
+<style>
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
