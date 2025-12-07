@@ -6,11 +6,11 @@ interface Props {
 const { tags } = Astro.props
 ---
 
-<div class="sticky top-0 z-30 mb-8 -mx-4 px-4 py-4 backdrop-blur-md bg-background/95 border-b border-border shadow-sm transition-all">
-  <div class="max-w-6xl mx-auto flex flex-col md:flex-row gap-4 items-center justify-between">
+<div class="sticky top-4 z-30 mb-8 rounded-xl border bg-card/80 backdrop-blur-md shadow-sm transition-all p-4">
+  <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
     
     {/* Global Search */}
-    <div class="relative w-full md:w-96 group">
+    <div class="relative w-full md:w-80 group">
       <div class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
       </div>
