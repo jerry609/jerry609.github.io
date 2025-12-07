@@ -16,6 +16,27 @@ export const readings: ReadingItem[] = [
         tags: ['AI', 'Architecture'],
         date: '2025-12-07'
     },
+    {
+        title: 'Running Claude Code in a loop',
+        url: 'https://anandchowdhary.com/blog/2025/running-claude-code-in-a-loop',
+        status: 'inbox',
+        tags: ['Claude', 'Agent'],
+        date: '2025-12-07'
+    },
+    {
+        title: 'RFD 0576: Oxide Computer',
+        url: 'https://rfd.shared.oxide.computer/rfd/0576',
+        status: 'inbox',
+        tags: ['Engineering', 'RFD'],
+        date: '2025-12-07'
+    },
+    {
+        title: 'The unexpected effectiveness of one-shot decompilation with Claude',
+        url: 'https://blog.chrislewis.au/the-unexpected-effectiveness-of-one-shot-decompilation-with-claude/',
+        status: 'inbox',
+        tags: ['Claude', 'Reverse Engineering'],
+        date: '2025-12-07'
+    },
     // Example Reading item
     {
         title: 'Understanding React Server Components',

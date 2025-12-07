@@ -1,70 +1,130 @@
 ---
 import PageLayout from '@/layouts/CommonPage.astro'
+import { plans } from '@/data/plans'
+import { readings } from '@/data/readings'
 
-interface TodoItem {
-  title: string
-  type: 'blog' | 'concept' | 'other'
-  status: 'todo' | 'done' | 'in-progress'
-  link?: string
-}
-
-interface DailyPlan {
-  date: string
-  items: TodoItem[]
-}
-
-const plans: DailyPlan[] = [
-  {
-    date: '2025-11-30',
-    items: [
-      { title: '搭建 Claude Code 生态项目博客', type: 'blog', status: 'done', link: '/blog/claude-code-ecosystem' },
-      { title: '创建 Murmurs 页面', type: 'other', status: 'done', link: '/murmurs' }
-    ]
-  }
-]
+const inboxItems = readings.filter((i) => i.status === 'inbox')
+const readingItems = readings.filter((i) => i.status === 'reading')
 ---
 
-<PageLayout title="Plan">
-  <div class="max-w-3xl mx-auto mt-8">
-    <div class="space-y-12">
-      {plans.map((plan) => (
-        <div class="relative pl-8 before:absolute before:left-[7px] before:top-2 before:h-full before:w-[2px] before:bg-border last:before:hidden">
-          <div class="absolute left-0 top-2 h-4 w-4 rounded-full bg-primary border-4 border-background"></div>
-          <h3 class="text-xl font-bold mb-6">{plan.date}</h3>
-          <div class="space-y-4">
-            {plan.items.map((item) => (
-              <div class="flex items-center gap-4 p-4 rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent/50">
-                <div class={`w-3 h-3 rounded-full shrink-0 ${
-                  item.status === 'done' ? 'bg-green-500' :
-                  item.status === 'in-progress' ? 'bg-yellow-500' :
-                  'bg-gray-300 dark:bg-gray-600'
-                }`} title={item.status} />
-                
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-3 mb-1">
-                    <span class={`font-medium truncate ${item.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
-                      {item.title}
-                    </span>
-                    <span class={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold ${
-                      item.type === 'blog' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
-                      item.type === 'concept' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' :
-                      'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                    }`}>
-                      {item.type}
-                    </span>
+<PageLayout title="Focus">
+  <div class="max-w-6xl mx-auto mt-8">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+      
+      {/* Left Column: Input Stream (Reading) - 4 cols */}
+      <div class="lg:col-span-4 space-y-8">
+        <div>
+          <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
+            Input Stream
+            <span class="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              {inboxItems.length}
+            </span>
+          </h2>
+          
+          {/* Active Reading - Featured */}
+          {readingItems.length > 0 && (
+            <div class="mb-6 space-y-3">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active</h3>
+              {readingItems.map((item) => (
+                <div class="p-4 rounded-xl border bg-card/50 backdrop-blur-sm shadow-sm">
+                  <a 
+                    href={item.url}
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    class="font-medium hover:text-primary transition-colors block mb-2"
+                  >
+                    {item.title}
+                  </a>
+                  {item.note && <div class="text-xs text-muted-foreground border-l-2 pl-2 mb-2">{item.note}</div>}
+                  <div class="flex gap-2">
+                    {item.tags?.map(tag => (
+                      <span class="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">{tag}</span>
+                    ))}
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
 
-                {item.link && (
-                  <a href={item.link} class="shrink-0 p-2 rounded-full hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" title="Go to link">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                  </a>
-                )}
-              </div>
+          {/* Inbox List */}
+          <div class="space-y-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inbox</h3>
+            {inboxItems.map((item) => (
+              <a 
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="block group p-3 rounded-lg border bg-card hover:border-primary/50 transition-all hover:shadow-sm"
+              >
+                <div class="text-sm font-medium group-hover:text-primary transition-colors line-clamp-2">
+                  {item.title}
+                </div>
+                <div class="flex items-center justify-between mt-2">
+                   <div class="flex gap-1 overflow-hidden">
+                     {item.tags?.slice(0, 2).map(tag => (
+                       <span class="text-[10px] text-muted-foreground/70 bg-muted/50 px-1 rounded">
+                         #{tag}
+                       </span>
+                     ))}
+                   </div>
+                   <span class="text-[10px] text-muted-foreground/40 font-mono">{item.date}</span>
+                </div>
+              </a>
             ))}
           </div>
         </div>
-      ))}
+      </div>
+
+      {/* Right Column: Output Log (Plans) - 8 cols */}
+      <div class="lg:col-span-8">
+         <h2 class="text-xl font-bold mb-6">Execution Log</h2>
+         <div class="space-y-12">
+          {plans.map((plan) => (
+            <div class="relative pl-8 before:absolute before:left-[7px] before:top-2 before:h-full before:w-[2px] before:bg-border last:before:hidden">
+              <div class="absolute left-0 top-2 h-4 w-4 rounded-full bg-primary border-4 border-background"></div>
+              <h3 class="text-xl font-bold mb-6 flex items-center gap-2">
+                {plan.date}
+                <span class="text-sm font-normal text-muted-foreground font-mono opacity-50">
+                   {new Date(plan.date).toLocaleDateString('en-US', { weekday: 'long' })}
+                </span>
+              </h3>
+              <div class="space-y-4">
+                {plan.items.map((item) => (
+                  <div class="flex items-center gap-4 p-4 rounded-xl border bg-card text-card-foreground shadow-sm transition-colors hover:bg-accent/50 group">
+                    <div class={`w-3 h-3 rounded-full shrink-0 ${
+                      item.status === 'done' ? 'bg-green-500' :
+                      item.status === 'in-progress' ? 'bg-yellow-500' :
+                      'bg-gray-300 dark:bg-gray-600'
+                    }`} title={item.status} />
+                    
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-3 mb-1">
+                        <span class={`font-medium truncate ${item.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
+                          {item.title}
+                        </span>
+                        <span class={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold ${
+                          item.type === 'blog' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                          item.type === 'concept' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' :
+                          'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                        }`}>
+                          {item.type}
+                        </span>
+                      </div>
+                    </div>
+
+                    {item.link && (
+                      <a href={item.link} class="shrink-0 p-2 rounded-full hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100" title="Go to link">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   </div>
 </PageLayout>
