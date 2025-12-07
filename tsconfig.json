@@ -51,6 +51,9 @@
       ],
       "@/site-config": [
         "src/site.config.ts"
+      ],
+      "@/data/*": [
+        "src/data/*"
       ]
     }
   },
