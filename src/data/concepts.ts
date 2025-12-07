@@ -153,5 +153,40 @@ export const concepts: Concept[] = [
         details: 'Manus 团队最大的技术飞跃来自"移除不必要的技巧并更多地信任模型"。少即是多。',
         tags: ['Anti-Pattern', 'Philosophy', 'Simplicity'],
         date: '2025-12-07'
+    },
+    {
+        term: 'KV Cache',
+        definition: 'Transformer 推理中存储已计算的 Key 和 Value 向量矩阵，避免对相同前缀重复计算。',
+        details: '注意力机制需要回顾所有历史 Token。KV Cache 将长 Prompt 的中间状态存储在显存中，新请求只需计算新增部分。',
+        tags: ['LLM', 'Inference', 'Optimization'],
+        date: '2025-12-07'
+    },
+    {
+        term: 'Cache Hit',
+        definition: 'LLM API 识别出请求的静态部分之前已处理过，直接复用 KV Cache 而非重新计算。',
+        details: '带来速度提升（TTFT 缩短）和成本降低（缓存命中的 Token 价格通常是未命中的 1/10）。',
+        tags: ['LLM', 'API', 'Cost'],
+        date: '2025-12-07'
+    },
+    {
+        term: 'Radix Attention',
+        definition: '使用基数树（Radix Tree）管理 Token 序列，实现高效的前缀匹配和 KV Cache 复用。',
+        details: '树的节点代表 Token 序列。请求的 Prompt 前缀匹配到节点后，该节点之前的 KV Cache 可直接复用。',
+        tags: ['LLM', 'Algorithm', 'Inference'],
+        date: '2025-12-07'
+    },
+    {
+        term: 'PagedAttention',
+        definition: '类似操作系统虚拟内存的 KV Cache 管理技术，将缓存分块存储在非连续显存中。',
+        details: '通过 Page Table 将逻辑 Token 序列映射到物理显存块。vLLM 等推理引擎的核心技术。',
+        tags: ['LLM', 'Inference', 'vLLM'],
+        date: '2025-12-07'
+    },
+    {
+        term: 'TTFT',
+        definition: 'Time To First Token，首字生成时间，衡量 LLM 响应延迟的关键指标。',
+        details: 'KV Cache 命中可大幅缩短 TTFT，因为跳过了处理长文档的时间。',
+        tags: ['LLM', 'Metric', 'Performance'],
+        date: '2025-12-07'
     }
 ]
