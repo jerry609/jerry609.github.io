@@ -30,6 +30,34 @@ draft: false
 
 **适合**：简单的“流水线”式生产者-消费者。
 
+**示例：C 语言匿名管道（父写子读）**
+
+```c
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
+int main(void) {
+  int fds[2];
+  pipe(fds);
+
+  if (fork() == 0) {            // child
+    close(fds[1]);
+    char buf[64] = {0};
+    read(fds[0], buf, sizeof(buf));
+    printf("child got: %s\n", buf);
+    _exit(0);
+  }
+
+  close(fds[0]);
+  const char *msg = "hello from parent";
+  write(fds[1], msg, strlen(msg) + 1);
+  close(fds[1]);
+  wait(NULL);
+}
+```
+
 ---
 
 ### 2. 消息队列（Message Queue）
@@ -45,6 +73,37 @@ draft: false
 
 **适合**：多生产者-多消费者、逻辑清晰、需要按消息处理的场景。
 
+**示例：System V 消息队列（C 语言）**
+
+```c
+#include <stdio.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <string.h>
+
+struct msgbuf {
+  long mtype;
+  char text[64];
+};
+
+int main(void) {
+  key_t key = ftok(".", 'q');
+  int mqid = msgget(key, IPC_CREAT | 0666);
+
+  if (fork() == 0) {             // consumer
+    struct msgbuf msg;
+    msgrcv(mqid, &msg, sizeof(msg.text), 1, 0);
+    printf("worker: %s\n", msg.text);
+  } else {
+    struct msgbuf msg = {.mtype = 1};
+    strcpy(msg.text, "build finished");
+    msgsnd(mqid, &msg, sizeof(msg.text), 0);
+    wait(NULL);
+    msgctl(mqid, IPC_RMID, NULL);
+  }
+}
+```
+
 ---
 
 ### 3. 共享内存（Shared Memory）
@@ -58,6 +117,34 @@ draft: false
 
 **适合**：数据量很大、频繁读写、性能敏感的场景（例如多进程共享缓存）。
 
+**示例：POSIX 共享内存 + memcpy**
+
+```c
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string.h>
+
+int main(void) {
+  const char *name = "/ipc_shm";
+  int fd = shm_open(name, O_CREAT | O_RDWR, 0666);
+  ftruncate(fd, 4096);
+
+  void *addr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if (fork() == 0) {
+    char buf[32];
+    memcpy(buf, addr, sizeof(buf));
+    printf("child read: %s\n", buf);
+  } else {
+    memcpy(addr, "shared data", 12);
+    wait(NULL);
+    munmap(addr, 4096);
+    shm_unlink(name);
+  }
+}
+```
+
 ---
 
 ### 4. 信号量（Semaphore）& 互斥锁（Mutex）
@@ -68,6 +155,31 @@ draft: false
 - **互斥锁**：信号量的一种特殊情况（最大值 = 1），保证同一时间只有一个执行者。
 
 通常搭配共享内存，做“数据共享 + 同步保护”。
+
+**示例：POSIX 命名信号量保护临界区**
+
+```c
+#include <fcntl.h>
+#include <semaphore.h>
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void) {
+  sem_t *sem = sem_open("/ipc_sem", O_CREAT, 0644, 1);
+
+  if (fork() == 0) {
+    sem_wait(sem);
+    puts("child enters critical section");
+    sem_post(sem);
+  } else {
+    sem_wait(sem);
+    puts("parent enters critical section");
+    sem_post(sem);
+    wait(NULL);
+    sem_unlink("/ipc_sem");
+  }
+}
+```
 
 ---
 
@@ -80,6 +192,25 @@ draft: false
 - **适合**：
   - 通知进程“发生了某件事”（如 SIGINT、SIGTERM、SIGCHLD 等）；
   - 不适合传输大数据，只传一点状态/编号。
+
+**示例：Python 信号通知**
+
+```python
+import os
+import signal
+import time
+
+def handle(sig, frame):
+  print(f"parent got signal {sig}")
+
+signal.signal(signal.SIGUSR1, handle)
+
+if os.fork() == 0:
+  time.sleep(1)
+  os.kill(os.getppid(), signal.SIGUSR1)
+else:
+  signal.pause()  # 阻塞等待信号
+```
 
 ---
 
@@ -95,6 +226,34 @@ draft: false
 - 多进程服务器（例如 Nginx、PostgreSQL 的进程间通信）；
 - 希望以后方便迁移到分布式（跨机器）的场景。
 
+**示例：Python Unix Domain Socket echo**
+
+```python
+import os
+import socket
+import threading
+
+SOCK_PATH = "/tmp/ipc.sock"
+
+def serve():
+  if os.path.exists(SOCK_PATH):
+    os.remove(SOCK_PATH)
+  with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+    server.bind(SOCK_PATH)
+    server.listen()
+    conn, _ = server.accept()
+    with conn:
+      data = conn.recv(1024)
+      conn.sendall(data.upper())
+
+threading.Thread(target=serve, daemon=True).start()
+
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+  client.connect(SOCK_PATH)
+  client.sendall(b"ping from client")
+  print(client.recv(1024))
+```
+
 ---
 
 ### 7. RPC / gRPC / D-Bus 等“高级 IPC”
@@ -108,6 +267,24 @@ draft: false
 - 本质：**函数调用的体验 + IPC 的实现**。
 
 Linux 桌面上的 D-Bus、Android 的 Binder 都是典型的“增强型 IPC 框架”。
+
+**示例：Python XML-RPC（RPC 的轻量形态）**
+
+```python
+from xmlrpc.server import SimpleXMLRPCServer
+import threading
+import xmlrpc.client
+
+def add(x, y):
+  return x + y
+
+server = SimpleXMLRPCServer(("127.0.0.1", 9000), logRequests=False)
+server.register_function(add, "add")
+threading.Thread(target=server.serve_forever, daemon=True).start()
+
+proxy = xmlrpc.client.ServerProxy("http://127.0.0.1:9000")
+print("result:", proxy.add(40, 2))
+```
 
 ---
 
@@ -267,6 +444,26 @@ Claude Agent SDK 的核心设计之一，就是：
      - 方便和 shell / 日志 / 其他语言集成；
      - 对于主要是控制类消息，性能足够。
 
+   **对应源码（`claude_agent_sdk/_internal/transport/subprocess_cli.py`）**
+
+   ```python
+   self._process = await anyio.open_process(
+       cmd,
+       stdin=PIPE,
+       stdout=PIPE,
+       stderr=stderr_dest,
+       cwd=self._cwd,
+       env=process_env,
+       user=self._options.user,
+   )
+
+   if self._process.stdout:
+       self._stdout_stream = TextReceiveStream(self._process.stdout)
+
+   if self._is_streaming and self._process.stdin:
+       self._stdin_stream = TextSendStream(self._process.stdin)
+   ```
+
 2. **如何保证同步和一致性？**
 
    - 协议层定义好：
@@ -275,11 +472,63 @@ Claude Agent SDK 的核心设计之一，就是：
    - 通过“请求-响应匹配 + 心跳 / 超时重试”保证一致性；
    - 流式输出通过 JSON Lines 的一行一事件来表达。
 
+   **对应源码片段**
+
+   ```python
+   async def write(self, data: str) -> None:
+     async with self._write_lock:
+       if not self._ready or not self._stdin_stream:
+         raise CLIConnectionError("ProcessTransport is not ready for writing")
+       await self._stdin_stream.send(data)
+
+   async for line in self._stdout_stream:
+     line_str = line.strip()
+     if not line_str:
+       continue
+     for json_line in line_str.split("\n"):
+       json_buffer += json_line.strip()
+       if len(json_buffer) > self._max_buffer_size:
+         raise SDKJSONDecodeError(
+           f"JSON message exceeded maximum buffer size of {self._max_buffer_size} bytes",
+           ValueError(
+             f"Buffer size {len(json_buffer)} exceeds limit {self._max_buffer_size}"
+           ),
+         )
+       try:
+         data = json.loads(json_buffer)
+         json_buffer = ""
+         yield data
+       except json.JSONDecodeError:
+         continue
+   ```
+
 3. **如何标识对方并路由消息？**
 
    - 内核层用文件描述符来标识管道两端；
    - 协议层用 `request_id` / `tool_call_id` 等字段路由到正确的 handler；
    - 多个工具、多种事件类型通过 type + id 组合区分。
+
+   ```python
+   # claude_agent_sdk/_internal/query.py
+   async for message in self.transport.read_messages():
+     msg_type = message.get("type")
+
+     if msg_type == "control_response":
+       response = message.get("response", {})
+       request_id = response.get("request_id")
+       if request_id in self.pending_control_responses:
+         event = self.pending_control_responses[request_id]
+         if response.get("subtype") == "error":
+           self.pending_control_results[request_id] = Exception(
+             response.get("error", "Unknown error")
+           )
+         else:
+           self.pending_control_results[request_id] = response
+         event.set()
+       continue
+
+     await self._message_send.send(message)
+   ```
 
 这样你可以把 Claude Agent SDK 看成一个“基于 IPC 的本地代理”：
 
