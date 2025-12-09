@@ -226,6 +226,40 @@ else:
 - 多进程服务器（例如 Nginx、PostgreSQL 的进程间通信）；
 - 希望以后方便迁移到分布式（跨机器）的场景。
 
+**真实案例：Nginx worker 进程通信**
+
+Nginx 使用 Unix Socket 作为 FastCGI / uWSGI 后端的通信方式：
+
+```nginx
+# nginx.conf - 通过 Unix Socket 连接 PHP-FPM
+upstream php_backend {
+    # 使用 Unix Socket 而不是 TCP，性能更高
+    server unix:/var/run/php/php8.1-fpm.sock;
+}
+
+server {
+    location ~ \.php$ {
+        fastcgi_pass php_backend;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+```
+
+对应的 PHP-FPM 配置：
+
+```ini
+; /etc/php/8.1/fpm/pool.d/www.conf
+[www]
+; 监听 Unix Socket 而不是 TCP 端口
+listen = /var/run/php/php8.1-fpm.sock
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+```
+
+> **为什么用 Unix Socket？** 同一台机器上，Unix Socket 比 TCP 127.0.0.1:9000 快 ~10-30%，因为跳过了 TCP/IP 协议栈。
+
 **示例：Python Unix Domain Socket echo**
 
 ```python
@@ -267,6 +301,55 @@ with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
 - 本质：**函数调用的体验 + IPC 的实现**。
 
 Linux 桌面上的 D-Bus、Android 的 Binder 都是典型的“增强型 IPC 框架”。
+
+**真实案例：D-Bus 系统服务调用**
+
+D-Bus 是 Linux 桌面的标准 IPC 机制，底层用 Unix Socket 实现：
+
+```python
+# Python 调用系统 D-Bus 服务（查询网络状态）
+import dbus
+
+# 连接到系统总线（/var/run/dbus/system_bus_socket）
+bus = dbus.SystemBus()
+
+# 获取 NetworkManager 服务的代理对象
+nm = bus.get_object(
+    'org.freedesktop.NetworkManager',           # 服务名（类似 IP 地址）
+    '/org/freedesktop/NetworkManager'           # 对象路径（类似端口）
+)
+
+# 获取接口并调用方法
+props = dbus.Interface(nm, 'org.freedesktop.DBus.Properties')
+state = props.Get('org.freedesktop.NetworkManager', 'State')
+print(f"NetworkManager state: {state}")  # 70 = connected
+
+# D-Bus 底层：
+# 1. 序列化方法调用为 D-Bus 消息格式
+# 2. 通过 Unix Socket 发送到 dbus-daemon
+# 3. dbus-daemon 路由到 NetworkManager 进程
+# 4. 返回结果通过相同路径返回
+```
+
+**Android Binder 的简化示意**
+
+```java
+// Android 跨进程调用示例（AIDL 生成的代码简化版）
+// 客户端进程
+IMyService service = IMyService.Stub.asInterface(
+    ServiceManager.getService("my_service")  // 通过 Binder 驱动查找服务
+);
+
+// 这行代码实际会：
+// 1. 序列化参数到 Parcel
+// 2. 通过 /dev/binder 设备文件发送到内核
+// 3. 内核将数据拷贝到服务端进程
+// 4. 服务端反序列化并执行
+// 5. 结果原路返回
+String result = service.doSomething("hello");  // 看起来像本地调用
+```
+
+> **Binder vs 传统 IPC**：Binder 只需要一次数据拷贝（通过 mmap），而传统 Socket 需要两次（用户态→内核→用户态）。
 
 **示例：Python XML-RPC（RPC 的轻量形态）**
 
@@ -362,6 +445,40 @@ print("result:", proxy.add(40, 2))
 - 单机内：组件之间用 Unix Socket 或共享内存；
 - 跨机：再暴露一层 HTTP/gRPC API。
 
+**真实案例：Redis 的本地 vs 远程通信**
+
+```python
+import redis
+
+# 方式 1：本地 Unix Socket（同一台机器，更快）
+local_client = redis.Redis(unix_socket_path='/var/run/redis/redis.sock')
+local_client.set('key', 'value')  # 通过 Unix Socket
+
+# 方式 2：TCP 连接（可跨机器）
+remote_client = redis.Redis(host='redis.example.com', port=6379)
+remote_client.set('key', 'value')  # 通过 TCP/IP
+
+# 同样的 API，底层 IPC 方式不同
+# 性能差异：Unix Socket 延迟约 0.05ms，TCP loopback 约 0.1ms
+```
+
+**Docker 的 Socket 通信模式**
+
+```bash
+# Docker CLI 默认通过 Unix Socket 和 dockerd 通信
+$ ls -la /var/run/docker.sock
+srw-rw---- 1 root docker 0 Dec  9 10:00 /var/run/docker.sock
+
+# docker 命令实际是 HTTP over Unix Socket
+$ curl --unix-socket /var/run/docker.sock http://localhost/containers/json
+[{"Id":"abc123...","Names":["/my-container"],...}]
+
+# 远程访问时切换为 TCP
+$ docker -H tcp://remote-host:2375 ps
+```
+
+> **设计模式**：很多系统（Docker、MySQL、PostgreSQL、Redis）都支持 Unix Socket 和 TCP 两种模式，让用户根据部署场景选择。
+
 ---
 
 ### 3. 各种 IPC 方式之间的对比（速查表）
@@ -414,123 +531,344 @@ print("result:", proxy.add(40, 2))
 
 ---
 
-## 延伸阅读：Claude Agent SDK 的 IPC 使用
+## 延伸阅读：Claude Agent SDK 的 IPC 实战解析
 
-如果你对「IPC 在真实框架里怎么用」感兴趣，可以结合这篇文章一起看我之前写的 Claude SDK 源码分析：
+如果你对「IPC 在真实框架里怎么用」感兴趣，可以结合我之前写的 Claude SDK 源码分析一起看：
 
 - **[Claude Agent SDK 源码导读：子进程、IPC 与 Sandbox](/blog/claude-agent-sdk-1/)**
 
-Claude Agent SDK 的核心设计之一，就是：
+### 架构总览
 
-- Python SDK **不直接调用 HTTP API**，而是：
-  - 在本地启动一个 `claude` CLI 子进程；
-  - 通过标准输入/输出（stdin/stdout）以 **JSON Lines** 格式交换消息；
-- 从 IPC 角度看，它就是：
-  - 用 **管道（pipe）+ 文本协议** 做了一层“远程控制接口”；
-  - SDK 负责序列化/反序列化、重试、流式读取等；
-  - CLI 进程再去调用远端的 Anthropic API，并管理工具系统 / 沙箱环境。
+Claude Agent SDK 的核心设计：**Python SDK 不直接调用 HTTP API**，而是：
 
-从前面总结的三个问题看，这套设计分别是：
+```
+┌─────────────────────┐      stdin (JSON Lines)     ┌──────────────────────┐      HTTPS
+│  你的 Python 应用    │ ─────────────────────────► │  claude CLI 子进程    │ ────────────► Anthropic API
+│  (SDK 用户代码)      │ ◄───────────────────────── │  (Node.js 二进制)     │ ◄────────────
+└─────────────────────┘      stdout (JSON Lines)    └──────────────────────┘
+         │                                                    │
+         └───── 匿名管道 (Anonymous Pipe) ────────────────────┘
+```
 
-1. **数据怎么从 A 的地址空间跑到 B？**
+从 IPC 角度看，这是一个典型的 **管道 + 文本协议** 方案：
 
-   - 用标准输入 / 输出背后的**匿名管道**，做“拷贝型”传输：
-     - Python 进程写 JSONL 到 stdout（用户态缓冲区 → 内核缓冲区）；
-     - CLI 子进程从 stdin 读出来（内核缓冲区 → 另一进程用户态缓冲区）。
-   - 为什么用 JSON Lines 而不是二进制 protocol buffer？
-     - 文本可读、易调试；
-     - 方便和 shell / 日志 / 其他语言集成；
-     - 对于主要是控制类消息，性能足够。
+- **传输层**：匿名管道（stdin/stdout）
+- **协议层**：JSON Lines（一行一条消息）
+- **语义层**：定义了 `tool_use`、`tool_result`、`control_request` 等消息类型
 
-   **对应源码（`claude_agent_sdk/_internal/transport/subprocess_cli.py`）**
+---
 
-   ```python
-   self._process = await anyio.open_process(
-       cmd,
-       stdin=PIPE,
-       stdout=PIPE,
-       stderr=stderr_dest,
-       cwd=self._cwd,
-       env=process_env,
-       user=self._options.user,
-   )
+### 1. 数据传输：子进程启动与管道建立
 
-   if self._process.stdout:
-       self._stdout_stream = TextReceiveStream(self._process.stdout)
+**核心问题**：数据怎么从 Python 进程跑到 CLI 进程？
 
-   if self._is_streaming and self._process.stdin:
-       self._stdin_stream = TextSendStream(self._process.stdin)
-   ```
+SDK 使用 `anyio.open_process` 启动子进程，并通过 `stdin`/`stdout` 参数设置管道：
 
-2. **如何保证同步和一致性？**
+**源码：`subprocess_cli.py` - `SubprocessCLITransport` 类**
 
-   - 协议层定义好：
-     - 每条消息有 type（tool_use / tool_result / event 等）；
-     - 带上 id / conversation id / sequence；
-   - 通过“请求-响应匹配 + 心跳 / 超时重试”保证一致性；
-   - 流式输出通过 JSON Lines 的一行一事件来表达。
+```python
+class SubprocessCLITransport(Transport):
+    """
+    基于子进程的传输层实现。
+    核心思路：启动 claude CLI 作为子进程，通过 stdin/stdout 管道通信。
+    """
 
-   **对应源码片段**
+    async def connect(self) -> None:
+        """建立与 CLI 子进程的连接"""
 
-   ```python
-   async def write(self, data: str) -> None:
-     async with self._write_lock:
-       if not self._ready or not self._stdin_stream:
-         raise CLIConnectionError("ProcessTransport is not ready for writing")
-       await self._stdin_stream.send(data)
+        # 1. 构建完整的命令行参数
+        cmd = self._build_command()
 
-   async for line in self._stdout_stream:
-     line_str = line.strip()
-     if not line_str:
-       continue
-     for json_line in line_str.split("\n"):
-       json_buffer += json_line.strip()
-       if len(json_buffer) > self._max_buffer_size:
-         raise SDKJSONDecodeError(
-           f"JSON message exceeded maximum buffer size of {self._max_buffer_size} bytes",
-           ValueError(
-             f"Buffer size {len(json_buffer)} exceeds limit {self._max_buffer_size}"
-           ),
-         )
-       try:
-         data = json.loads(json_buffer)
-         json_buffer = ""
-         yield data
-       except json.JSONDecodeError:
-         continue
-   ```
+        # 2. 准备进程环境变量（继承当前环境 + SDK 特定变量）
+        process_env = {**os.environ}
+        if self._options.api_key:
+            process_env["ANTHROPIC_API_KEY"] = self._options.api_key
 
-3. **如何标识对方并路由消息？**
+        # 3. 启动子进程，关键在于 stdin=PIPE, stdout=PIPE
+        #    这会让内核创建两个匿名管道：
+        #    - 一个用于父进程写 → 子进程读（stdin）
+        #    - 一个用于子进程写 → 父进程读（stdout）
+        self._process = await anyio.open_process(
+            cmd,
+            stdin=PIPE,       # ← 创建 stdin 管道
+            stdout=PIPE,      # ← 创建 stdout 管道
+            stderr=stderr_dest,
+            cwd=self._cwd,
+            env=process_env,
+            user=self._options.user,
+        )
 
-   - 内核层用文件描述符来标识管道两端；
-   - 协议层用 `request_id` / `tool_call_id` 等字段路由到正确的 handler；
-   - 多个工具、多种事件类型通过 type + id 组合区分。
+        # 4. 包装管道为异步文本流
+        #    TextReceiveStream / TextSendStream 处理字节到文本的转换
+        if self._process.stdout:
+            self._stdout_stream = TextReceiveStream(self._process.stdout)
 
-   ```python
-   # claude_agent_sdk/_internal/query.py
-   async for message in self.transport.read_messages():
-     msg_type = message.get("type")
+        if self._is_streaming and self._process.stdin:
+            self._stdin_stream = TextSendStream(self._process.stdin)
 
-     if msg_type == "control_response":
-       response = message.get("response", {})
-       request_id = response.get("request_id")
-       if request_id in self.pending_control_responses:
-         event = self.pending_control_responses[request_id]
-         if response.get("subtype") == "error":
-           self.pending_control_results[request_id] = Exception(
-             response.get("error", "Unknown error")
-           )
-         else:
-           self.pending_control_results[request_id] = response
-         event.set()
-       continue
+        self._ready = True
+```
 
-     await self._message_send.send(message)
-   ```
+> **IPC 知识点**：`anyio.open_process` 底层调用 `os.pipe()` 创建管道，然后 `fork()` + `exec()` 启动子进程。管道的文件描述符会被重定向到子进程的 stdin/stdout。
 
-这样你可以把 Claude Agent SDK 看成一个“基于 IPC 的本地代理”：
+---
 
-- 上层代码以“函数调用 / 事件回调”的方式使用；
-- SDK 内部通过 IPC 管道和 CLI 子进程通信；
-- CLI 再通过 HTTP / TLS 等和远端模型服务打交道。
+### 2. 消息写入：序列化与发送
 
+**核心问题**：如何把 Python 对象发送给 CLI？
+
+SDK 将消息序列化为 JSON，通过管道写入：
+
+**源码：写入逻辑**
+
+```python
+async def write(self, data: str) -> None:
+    """
+    向 CLI 子进程发送一条消息。
+    
+    Args:
+        data: 已序列化的 JSON 字符串（不含换行符）
+    
+    注意事项：
+        - 使用锁保证多个协程不会同时写入（避免消息交错）
+        - JSON Lines 格式：每条消息占一行，以 \n 结尾
+    """
+    async with self._write_lock:  # ← 互斥锁，防止并发写入导致消息混乱
+        if not self._ready or not self._stdin_stream:
+            raise CLIConnectionError("ProcessTransport is not ready for writing")
+
+        # 发送消息，TextSendStream 会自动添加换行符
+        await self._stdin_stream.send(data)
+
+# 调用示例：发送工具调用结果
+async def send_tool_result(self, tool_call_id: str, result: dict) -> None:
+    """发送工具执行结果给 CLI"""
+    message = {
+        "type": "tool_result",
+        "tool_call_id": tool_call_id,
+        "content": result,
+        "timestamp": time.time(),
+    }
+    await self.write(json.dumps(message))  # ← 序列化为 JSON 字符串
+```
+
+> **为什么用 JSON Lines 而不是 Protocol Buffer？**
+> - 文本可读、易调试（直接 `cat` 管道内容就能看）
+> - 无需预编译 schema
+> - 对于控制类消息，性能足够
+
+---
+
+### 3. 消息读取：流式解析与事件分发
+
+**核心问题**：如何从管道读取并解析消息流？
+
+这是最复杂的部分，需要处理：
+- 流式读取（消息可能跨多次 read 调用）
+- JSON 边界检测（一行一条消息）
+- 缓冲区溢出保护
+
+**源码：读取逻辑**
+
+```python
+async def read_messages(self) -> AsyncGenerator[dict, None]:
+    """
+    从 CLI 子进程读取消息流。
+    
+    Yields:
+        解析后的消息字典
+    
+    实现细节：
+        - 按行读取（JSON Lines 格式）
+        - 累积不完整的 JSON 直到可以解析
+        - 防止恶意/错误输出撑爆内存
+    """
+    json_buffer = ""  # 累积缓冲区，处理跨行的 JSON
+
+    async for line in self._stdout_stream:
+        line_str = line.strip()
+        if not line_str:
+            continue  # 跳过空行
+
+        # 一行可能包含多条 JSON（虽然不常见）
+        for json_line in line_str.split("\n"):
+            json_buffer += json_line.strip()
+
+            # 安全检查：防止缓冲区无限增长
+            if len(json_buffer) > self._max_buffer_size:
+                raise SDKJSONDecodeError(
+                    f"JSON message exceeded maximum buffer size of {self._max_buffer_size} bytes",
+                    ValueError(f"Buffer size {len(json_buffer)} exceeds limit"),
+                )
+
+            # 尝试解析 JSON
+            try:
+                data = json.loads(json_buffer)
+                json_buffer = ""  # 成功解析，清空缓冲区
+                yield data        # 返回解析后的消息
+            except json.JSONDecodeError:
+                # 不完整的 JSON，继续累积
+                continue
+```
+
+> **IPC 知识点**：管道是字节流，没有消息边界。JSON Lines 协议通过换行符 `\n` 来标记消息边界，但一次 `read()` 可能返回多条消息或者半条消息，所以需要缓冲区处理。
+
+---
+
+### 4. 消息路由：请求-响应匹配
+
+**核心问题**：如何把响应路由到正确的请求？
+
+SDK 使用 `request_id` 机制实现请求-响应匹配：
+
+**源码：`query.py` - 消息分发逻辑**
+
+```python
+class QuerySession:
+    """管理一次完整的对话会话"""
+
+    def __init__(self):
+        # 待处理的控制请求：request_id -> Event
+        self.pending_control_responses: dict[str, anyio.Event] = {}
+        # 控制请求的结果：request_id -> response
+        self.pending_control_results: dict[str, Any] = {}
+
+    async def process_messages(self) -> None:
+        """
+        消息处理主循环。
+        
+        消息类型：
+        - control_response: SDK 发出的控制请求的响应（如权限请求）
+        - tool_use: CLI 请求调用某个工具
+        - assistant_message: 模型生成的文本
+        - error: 错误消息
+        """
+        async for message in self.transport.read_messages():
+            msg_type = message.get("type")
+
+            # 1. 控制响应：匹配到等待中的请求
+            if msg_type == "control_response":
+                response = message.get("response", {})
+                request_id = response.get("request_id")
+
+                if request_id in self.pending_control_responses:
+                    # 找到对应的等待事件
+                    event = self.pending_control_responses[request_id]
+
+                    # 存储结果（可能是成功或错误）
+                    if response.get("subtype") == "error":
+                        self.pending_control_results[request_id] = Exception(
+                            response.get("error", "Unknown error")
+                        )
+                    else:
+                        self.pending_control_results[request_id] = response
+
+                    event.set()  # ← 唤醒等待的协程
+                continue
+
+            # 2. 工具调用请求
+            if msg_type == "tool_use":
+                tool_call_id = message.get("id")
+                tool_name = message.get("name")
+                tool_input = message.get("input", {})
+
+                # 执行工具并发送结果
+                result = await self._execute_tool(tool_name, tool_input)
+                await self.transport.send_tool_result(tool_call_id, result)
+                continue
+
+            # 3. 其他消息：发送到消息通道供上层消费
+            await self._message_send.send(message)
+
+    async def send_control_request(self, request: dict) -> dict:
+        """
+        发送控制请求并等待响应（同步语义）。
+        
+        实现：
+        1. 生成唯一 request_id
+        2. 注册等待事件
+        3. 发送请求
+        4. 等待响应
+        """
+        request_id = str(uuid.uuid4())
+        request["request_id"] = request_id
+
+        # 创建等待事件
+        event = anyio.Event()
+        self.pending_control_responses[request_id] = event
+
+        # 发送请求
+        await self.transport.write(json.dumps(request))
+
+        # 等待响应（带超时）
+        with anyio.fail_after(self._timeout):
+            await event.wait()
+
+        # 获取结果
+        result = self.pending_control_results.pop(request_id)
+        del self.pending_control_responses[request_id]
+
+        if isinstance(result, Exception):
+            raise result
+
+        return result
+```
+
+> **设计模式**：这是典型的 **异步请求-响应匹配** 模式，常见于 RPC 框架。通过 `request_id` 将请求和响应关联起来，允许多个请求并发进行。
+
+---
+
+### 5. 完整消息流示例
+
+下面是一次工具调用的完整消息流：
+
+```
+Python SDK                          CLI 子进程                         Anthropic API
+    │                                   │                                   │
+    │──── stdin ────────────────────────│                                   │
+    │  {"type": "user_message",         │                                   │
+    │   "content": "查看当前目录"}       │                                   │
+    │                                   │──── HTTPS ────────────────────────│
+    │                                   │  POST /v1/messages                │
+    │                                   │  {...}                            │
+    │                                   │                                   │
+    │                                   │◄─── HTTPS ────────────────────────│
+    │                                   │  {"type": "tool_use",             │
+    │                                   │   "name": "bash", ...}            │
+    │◄─── stdout ───────────────────────│                                   │
+    │  {"type": "tool_use",             │                                   │
+    │   "id": "call_123",               │                                   │
+    │   "name": "bash",                 │                                   │
+    │   "input": {"command": "ls"}}     │                                   │
+    │                                   │                                   │
+    │  [SDK 执行 bash 命令]             │                                   │
+    │                                   │                                   │
+    │──── stdin ────────────────────────│                                   │
+    │  {"type": "tool_result",          │                                   │
+    │   "tool_call_id": "call_123",     │──── HTTPS ────────────────────────│
+    │   "content": "file1.txt\n..."}    │  POST /v1/messages (继续)         │
+    │                                   │                                   │
+```
+
+---
+
+### SDK 架构小结
+
+从 IPC 视角看，Claude Agent SDK 是一个教科书级的 **管道 + 文本协议** 实现：
+
+| IPC 三大问题 | Claude SDK 的解法 |
+| :--- | :--- |
+| **数据怎么传？** | 匿名管道（stdin/stdout），JSON Lines 格式 |
+| **如何同步？** | 写锁 + 请求-响应匹配（request_id） |
+| **如何路由？** | 消息类型（type） + 调用 ID（tool_call_id） |
+
+这种设计的优势：
+
+- **进程隔离**：CLI 崩溃不会拖垮 Python 进程
+- **能力复用**：CLI 已有完整的权限管理、MCP 支持、工具系统
+- **版本独立**：升级 CLI 不需要更新 SDK
+
+代价：
+
+- **依赖 CLI**：必须安装 `@anthropic-ai/claude-code`
+- **调试复杂**：问题可能在 SDK、CLI 或 API 任何一层
