@@ -13,6 +13,7 @@ import {
   addCopyButton,
   addLanguage,
   addTitle,
+  transformerCollapse,
   transformerNotationDiff,
   transformerNotationHighlight,
   updateStyle
@@ -92,7 +93,8 @@ export default defineConfig({
         updateStyle(),
         addTitle(),
         addLanguage(),
-        addCopyButton(2000)
+        addCopyButton(2000),
+        transformerCollapse()
       ]
     }
   },

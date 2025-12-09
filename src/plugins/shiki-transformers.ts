@@ -142,3 +142,66 @@ export const addCopyButton = (timeout?: number): ShikiTransformer => {
     }
   }
 }
+
+// Add a collapse button to the code block
+export const transformerCollapse = (): ShikiTransformer => {
+  return {
+    name: 'shiki-transformer-collapse',
+    pre(node) {
+      const rawMeta = this.options.meta?.__raw
+      if (!rawMeta?.includes('collapsed')) return
+
+      // Change div to details
+      node.tagName = 'details'
+      // Add group class for styling
+      if (!node.properties) node.properties = {}
+      const existingClass = (node.properties.class as string) || ''
+      node.properties.class = existingClass + ' group rounded-lg overflow-hidden'
+
+      // Find if there is a title
+      const titleNodeIdx = node.children.findIndex(
+        (n) => n.type === 'element' && n.properties?.class?.toString().includes('title')
+      )
+
+      let summaryContent: any[] = ['View Code']
+
+      if (titleNodeIdx > -1) {
+        const titleNode = node.children[titleNodeIdx] as any
+        // Remove the original title node
+        node.children.splice(titleNodeIdx, 1)
+        // Use its children (text)
+        summaryContent = titleNode.children
+      }
+
+      const summary = h(
+        'summary',
+        {
+          class:
+            'text-sm text-foreground px-3 py-2 bg-muted/50 rounded-t-lg border-b cursor-pointer hover:bg-muted/80 transition-colors select-none font-medium flex items-center gap-2'
+        },
+        [
+          h(
+            'svg',
+            {
+              class: 'size-5 transition-transform duration-200 group-open:rotate-90',
+              fill: 'none',
+              viewBox: '0 0 24 24',
+              stroke: 'currentColor'
+            },
+            [
+              h('path', {
+                'stroke-linecap': 'round',
+                'stroke-linejoin': 'round',
+                'stroke-width': '2',
+                d: 'M9 5l7 7-7 7'
+              })
+            ]
+          ),
+          ...summaryContent
+        ]
+      )
+
+      node.children.unshift(summary)
+    }
+  }
+}

@@ -230,7 +230,7 @@ else:
 
 Nginx 使用 Unix Socket 作为 FastCGI / uWSGI 后端的通信方式：
 
-```nginx
+```nginx title="nginx.conf" collapsed
 # nginx.conf - 通过 Unix Socket 连接 PHP-FPM
 upstream php_backend {
     # 使用 Unix Socket 而不是 TCP，性能更高
