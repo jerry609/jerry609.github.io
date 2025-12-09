@@ -43,48 +43,29 @@ const renderedMurmurs = await Promise.all(sortedMurmurs.map(async (entry) => {
                 width={600}
                 height={400}
               />
-              
-              <!-- Tags Overlay -->
-              {entry.data.tags.length > 0 && (
-                <div class='absolute top-3 left-3 flex flex-wrap gap-2'>
-                  {entry.data.tags.map(tag => (
-                    <span class='px-2 py-1 text-xs font-medium bg-black/50 text-white backdrop-blur-sm rounded-md'>
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
           <!-- Content -->
           <div class='flex flex-col flex-1 p-5'>
-            <div class='flex items-center gap-2 text-xs text-muted-foreground mb-3'>
-              <span>人间游记</span>
-              {entry.data.tags.length > 0 && <span>·</span>}
-              {entry.data.tags.length > 0 && <span class='text-primary'>#{entry.data.tags[0]}</span>}
-            </div>
-
-            <h2 class='text-xl font-bold mb-3 line-clamp-2 group-hover:text-primary transition-colors'>
-              {entry.data.title || entry.data.publishDate.toLocaleDateString('zh-CN')}
-            </h2>
-
-            <p class='text-sm text-muted-foreground line-clamp-3 mb-4 flex-1 leading-relaxed'>
-              {summary}
-            </p>
-
-            <!-- Footer -->
-            <div class='flex items-center justify-between pt-4 border-t border-border/50 mt-auto'>
-              <div class='flex items-center gap-2'>
-                <div class='w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs text-primary font-bold'>
-                  J
-                </div>
-                <span class='text-xs text-muted-foreground font-medium'>Jerry</span>
-              </div>
-              <time class='text-xs text-muted-foreground'>
+            <div class='flex items-center justify-between text-xs mb-3'>
+              <time datetime={entry.data.publishDate.toISOString()} class='text-muted-foreground/60 font-mono'>
                 {entry.data.publishDate.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}
               </time>
+              {entry.data.tags.length > 0 && (
+                <span class='text-primary/80 bg-primary/5 px-2 py-0.5 rounded text-[11px] font-medium'>
+                  #{entry.data.tags[0]}
+                </span>
+              )}
             </div>
+
+            <h2 class='text-lg font-bold mb-3 leading-snug group-hover:text-primary transition-colors line-clamp-2'>
+              {entry.data.title || '无题'}
+            </h2>
+
+            <p class='text-sm text-muted-foreground line-clamp-3 leading-relaxed'>
+              {summary}
+            </p>
           </div>
         </a>
       ))}
