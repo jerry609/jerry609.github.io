@@ -1,5 +1,5 @@
 ---
-title: "一文看懂 IPC：进程间通信详解"
+title: "IPC：进程间通信详解"
 description: "从管道、消息队列到共享内存、Socket 与 RPC，系统性梳理进程间通信（IPC）的核心实现方式、原理与选型。"
 publishDate: "2025-12-09"
 tags: ["IPC", "Linux", "System Programming", "OS"]
