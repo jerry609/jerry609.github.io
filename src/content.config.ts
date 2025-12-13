@@ -66,6 +66,7 @@ const murmurs = defineCollection({
       tags: z.array(z.string()).default([]),
       title: z.string().optional(),
       cover: image().optional(),
+      link: z.string().optional(), // Custom link override (Easter egg support)
       draft: z.boolean().default(false)
     })
 })
