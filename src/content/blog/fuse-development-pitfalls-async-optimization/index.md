@@ -7,7 +7,7 @@ language: "zh-CN"
 draft: false
 ---
 
-> 本文对 Dicfuse × Antares 在高并发构建场景下的“空挂载、sled 锁、端口占用、同步 I/O、卸载可靠性”进行深度复盘。强调可执行的决策、权衡与代码侧证据。
+> 本文对 Dicfuse × Antares 在高并发构建场景下的“空挂载、sled 锁、端口占用、同步 I/O、卸载可靠性”进行深度复盘。强调可执行的决策、权衡与代码侧证据，并补充真实挂载现状（挂载后目录为空、挂载随进程退出消失、fetch_dir 日志未出现）的观察与操作建议。
 
 ## 目录
 0. [背景：架构与目标](#0-背景架构与目标)  
@@ -84,12 +84,34 @@ draft: false
 - sudo 未传 PATH/HOME，cargo 不可用或写权限异常。
 - 异步链路混入同步 I/O，缺少超时保护。
 
-## 8. 复现 / 操作要点
-- 停服清理：`sudo pkill -f "antares -- serve"`；`sudo rm -rf /tmp/megadir_fresh /tmp/megadir`
-- 启动 serve：`sudo -E env PATH="~/.cargo/bin:$PATH" HOME=~ RUST_LOG=info cargo run --release --bin antares -- serve --bind 0.0.0.0:2726`
-- 挂载/卸载（本地 manager）：`cargo run --release --bin antares -- mount <job_id>`；`cargo run --release --bin antares -- umount <job_id>`
-- 清挂载：`fusermount -uz <mountpoint>`
-- 检查：锁 `sudo fuser /tmp/megadir_fresh/store/path.db/db`；端口 `lsof -i :2726`
+## 8. 复现 / 操作要点（新增：针对“挂载空/挂载消失/无 fetch_dir 日志”的操作指南）
+**守护模式（推荐）**  
+1) 清理：`sudo pkill -f "antares -- serve"`；`sudo rm -rf /tmp/megadir_fresh /tmp/megadir`  
+2) 启动常驻：
+```
+sudo -E env PATH="~/.cargo/bin:$PATH" HOME=~ RUST_LOG=debug \
+  /home/master1/.cargo/bin/cargo run --release --bin antares -- serve --bind 0.0.0.0:2726
+```
+   - keep 前台运行，观察日志；若端口占用，先 pkill 或换端口。 
+3) 另开终端挂载：
+```
+cd /home/master1/mega/scorpio
+sudo -E env PATH="~/.cargo/bin:$PATH" HOME=~ \
+  /home/master1/.cargo/bin/cargo run --release --bin antares -- mount demo_job
+```
+4) 立即查看挂载内容：
+```
+sudo ls -lah /tmp/megadir/antares/mnt/demo_job
+sudo find /tmp/megadir/antares/mnt/demo_job | head
+```
+5) 如需日志验证，等待 10~30 秒，确认有无 `[fetch_dir]` 输出；无输出可能是尚未访问触发拉取，可在挂载点执行 `ls -R` 促发。
+
+**CLI 挂载保持存活（权宜之计）**  
+- 可在 CLI 挂载后增加 sleep（例如 `sleep 20`），防止进程立即退出导致 FUSE 卸载；正式方案还是建议守护模式。
+
+**可见性与卸载**  
+- 挂载完成后若 5 秒内消失，多半是 CLI 进程退出带走 Tokio runtime；需使用常驻进程或显式 keep-alive。  
+- 卸载：`cargo run --release --bin antares -- umount demo_job`，或 `fusermount -uz <mountpoint>`。
 
 ## 9. 方法论对齐
 - 现象驱动：定义失败模式、重现路径、规律性。
@@ -105,40 +127,24 @@ draft: false
 - 资源清理要彻底：失败路径同样需要清理，避免下次踩锁/端口。
 
 ## 11. 源码侧证据（节选）
-- 挂载等待 ready + 超时：`AntaresFuse::mount` 先 `wait_for_ready()`，超时警告后继续挂载。
-```81:125:scorpio/src/antares/fuse.rs
-info!("Waiting for Dicfuse to initialize...");
-match tokio::time::timeout(init_timeout, self.dic.store.wait_for_ready()).await {
-    Ok(_) => info!("Dicfuse initialized successfully"),
-    Err(_) => warn!("init timed out..., mounting anyway"),
-}
-```
-- store 就绪信号：`DictionaryStore::wait_for_ready` 仅等待 `Notify`，不做阻塞 I/O。
-- 空库判定与后台加载：`import_arc` 发现 root 无子节点则继续网络加载，完毕后通知 ready。
-```1001:169:scorpio/src/dicfuse/store.rs
-let has_data = matches!(store.persistent_path_store.get_item(1), Ok(root) if !root.get_children().is_empty());
-if has_data { store.init_notify.notify_waiters(); ...; return; }
-tokio::spawn(async move { load_dir_depth(...).await; store_for_notify.init_notify.notify_waiters(); });
-```
-- 网络超时：`reqwest` client 设置 10s，总超时防无限等待。
-```183:187:scorpio/src/dicfuse/store.rs
-Client::builder()
-    .timeout(Duration::from_secs(10))
-    .build()
-```
-- 测试异步化与超时：`test_antares_mount` 统一 tokio I/O，整体 60s timeout，覆盖写/读/建目录/Copy-Up。
-- 卸载可靠性：`unmount` 使用 `fusermount -uz` + 5s 等待超时，防卡死。
+- 挂载等待 ready + 超时：`AntaresFuse::mount` 先 `wait_for_ready()`，超时警告后继续挂载。  
+- store 就绪信号：`DictionaryStore::wait_for_ready` 仅等待 `Notify`，不做阻塞 I/O。  
+- 空库判定与后台加载：`import_arc` 发现 root 无子节点则继续网络加载，完毕后通知 ready。  
+- 网络超时：`reqwest` client 设置 10s，总超时防无限等待。  
+- 测试异步化与超时：`test_antares_mount` 统一 tokio I/O，整体 60s timeout，覆盖写/读/建目录/Copy-Up。  
+- 卸载可靠性：`unmount` 使用 `fusermount -uz` + 5s 等待超时，防卡死。  
+（详代码见仓库：`scorpio/src/antares/fuse.rs`, `scorpio/src/dicfuse/store.rs` 等）
 
 ## 12. 未来改进方向
-- 正式 CLI→daemon 协议：支持“监听+挂载分进程”，daemon 内统一 Dicfuse 单例。
-- 启动自检：端口/锁占用预检，给出友好提示或退避策略。
-- 挂载后可见性/超时探针，利于 CI 自动验收。
-- 权限与路径一致性治理：避免 root/普通用户混写导致锁/权限问题。
-- 进度与可观测性：加载进度、重试统计、慢查询日志。
+- 正式 CLI→daemon 协议：支持“监听+挂载分进程”，daemon 内统一 Dicfuse 单例。  
+- 启动自检：端口/锁占用预检，给出友好提示或退避策略。  
+- 挂载后可见性/超时探针，利于 CI 自动验收。  
+- 权限与路径一致性治理：避免 root/普通用户混写导致锁/权限问题。  
+- 进度与可观测性：加载进度、重试统计、慢查询日志。  
 
 ## 13. 参考资源
-- FUSE 官方文档；Tokio 异步编程指南；Rust 异步最佳实践
-- 深度复盘：FUSE 文件系统开发中的阻塞陷阱与异步优化[^ref]
+- FUSE 官方文档；Tokio 异步编程指南；Rust 异步最佳实践  
+- 深度复盘：FUSE 文件系统开发中的阻塞陷阱与异步优化[^ref]  
 
 ---
 
