@@ -1,7 +1,7 @@
 ---
 title: "深度复盘：FUSE 文件系统开发中的阻塞陷阱与异步优化"
 description: "深入分析 Dicfuse × Antares 在高并发构建下的挂载、锁、端口与异步问题，提炼可落地的最佳实践与调试方法论。"
-publishDate: "2025-12-14"
+publishDate: "2025-12-15"
 tags: ["复盘", "FUSE", "Rust", "异步编程", "文件系统", "Antares", "Dicfuse", "调试", "性能优化"]
 language: "zh-CN"
 draft: false
@@ -84,7 +84,7 @@ draft: false
 - sudo 未传 PATH/HOME，cargo 不可用或写权限异常。
 - 异步链路混入同步 I/O，缺少超时保护。
 
-## 8. 复现 / 操作要点（新增：针对“挂载空/挂载消失/无 fetch_dir 日志”的操作指南）
+## 8. 复现 / 操作要点
 **守护模式（推荐）**  
 1) 清理：`sudo pkill -f "antares -- serve"`；`sudo rm -rf /tmp/megadir_fresh /tmp/megadir`  
 2) 启动常驻：
