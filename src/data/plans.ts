@@ -13,6 +13,13 @@ export interface DailyPlan {
 
 export const plans: DailyPlan[] = [
     {
+        date: '2025-12-01',
+        items: [
+            { title: '完成之前项目的收尾', type: 'other', status: 'todo', tags: ['Project'] },
+            { title: '更新 Rock 的 PR', type: 'other', status: 'todo', tags: ['Git'] }
+        ]
+    },
+    {
         date: '2025-11-30',
         items: [
             {
