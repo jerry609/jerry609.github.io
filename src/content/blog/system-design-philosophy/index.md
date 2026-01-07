@@ -5,6 +5,85 @@ publishDate: '2026-01-06'
 tags: ['system-design', 'architecture', 'engineering']
 ---
 
+```
++--------------------------------------------------------------------------------------------------+
+|                                   System Design "Constitution"                                   |
+|                         (Stable Core + Extensible Edge + Evolution Mechanism)                    |
++--------------------------------------------------------------------------------------------------+
+
+  Users/Clients                        Contract Layer (API = Constitution)
++-----------------+            +----------------------------------------------+
+| CLI / UI / SDK  |  CRUD Req  |  API Gateway / API Server                    |
+| (kubectl-like)  +----------->|  - AuthN/AuthZ/Audit                         |
++-----------------+            |  - Validation/Defaulting/Schema/Versioning   |
+                               |  - Admission/Policy Hooks (optional)         |
+                               +-------------------+--------------------------+
+                                                   |
+                                                   |  SYNC COMMIT POINT
+                                                   |  (Accepted/Committed)
+                                                   v
+                               +----------------------------------------------+
+                               |          Single Source of Truth (SoT)        |
+                               |   - Strongly consistent metadata/state       |
+                               |   - Concurrency control (etag/version)       |
+                               +-------------------+--------------------------+
+                                                   |
+                                  watch/events      |  state changes
+                                 (pub/sub-ish)      |
+                                                   v
+                     ASYNC CONVERGENCE (Closed-loop control / Reconcile)
+                               +----------------------------------------------+
+                               |               Control Plane                  |
+                               |  Controllers / Schedulers / Reconciler(s)    |
+                               |  - Observe -> Diff -> Act -> Repeat          |
+                               |  - Writes desired bindings/updates to SoT    |
+                               +-------------------+--------------------------+
+                                                   |
+                                                   |  desired actions/specs
+                                                   v
+                               +----------------------------------------------+
+                               |                 Execution Plane              |
+                               |  Agents / Workers (kubelet-like)             |
+                               |  - Idempotent apply                          |
+                               |  - Retries/backoff/timeouts                  |
+                               +-------------------+--------------------------+
+                                                   |
+                                                   |  plugin/adapters (change lives here)
+                         +-------------------------+--------------------------+
+                         |                         |                          |
+                         v                         v                          v
+                 +---------------+         +---------------+          +---------------+
+                 | Runtime Plug  |         | Network Plug  |          | Storage Plug  |
+                 | (CRI-like)    |         | (CNI-like)    |          | (CSI-like)    |
+                 +-------+-------+         +-------+-------+          +-------+-------+
+                         \                     /                           /
+                          \                   /                           /
+                           v                 v                           v
+                        +-----------------------------------------------------+
+                        |                 Real World / Infrastructure         |
+                        |   nodes, containers, net, disks, cloud providers     |
+                        +-------------------+---------------------------------+
+                                            |
+                                            | status/telemetry (feedback)
+                                            v
+                               +----------------------------------------------+
+                               |           Feedback to SoT (STATUS)           |
+                               |  - node/pod/job status, heartbeats, etc.     |
+                               +----------------------------------------------+
+
+   Side Planes (must exist):
+   +----------------------+        +----------------------+        +----------------------+
+   | Observability        |        | Evolution Mechanism  |        | Governance           |
+   | metrics/logs/trace   |        | skew/feature gates   |        | RFC/KEP/review/owner |
+   | queue lag, converge  |        | migration/rollback   |        | deprecation policy   |
+   +----------------------+        +----------------------+        +----------------------+
+
+   Where algorithms/data structures live:
+   - Control plane: queues, priority, scheduling scores, dedup (heaps/maps)
+   - SoT & query: indexes, pagination strategy, caching (B-tree/LSM-like ideas)
+   - Execution: idempotency keys, rate limiters, backpressure, retry state machines
+   (Never leak these as external API promises unless you intend to freeze them.)
+```
 
 ---
 
