@@ -24,6 +24,7 @@ draft: false
 - [第 1 讲：为什么需要 Attention](/blog/attention-01-why-attention/)
 - [第 2 讲：Q / K / V 直觉](/blog/attention-02-qkv-intuition/)
 - [第 3 讲：单头注意力的完整计算流程](/blog/attention-03-single-head-math/)
+- [第 4 讲：为什么 QKᵀ 表示词与词的关系](/blog/attention-04-qkt-meaning/)
 
 ---
 

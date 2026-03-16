@@ -1,0 +1,1110 @@
+---
+title: "Attention 04：为什么 QKᵀ 表示词与词的关系"
+description: "点积的几何意义、为什么不能用 XXᵀ、以及 Attention 学到的'关系'到底是什么。"
+publishDate: "2026-03-16"
+tags: ["LLM", "Transformer", "Attention", "专题"]
+language: "zh-CN"
+draft: false
+---
+
+<style>{`
+  .attn-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .attn-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .attn-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .attn-demo-info {
+    text-align: center; font-size: 0.8rem;
+    color: hsl(var(--muted-foreground)); margin-top: 0.5rem;
+  }
+  .attn-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .attn-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .attn-btn-primary:hover { opacity: 0.85; }
+  .attn-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .attn-btn-secondary:hover { opacity: 0.85; }
+  .attn-btn:disabled { opacity: 0.4; cursor: default; }
+  .attn-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .matrix-table {
+    border-collapse: collapse; margin: 0 auto;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+  }
+  .matrix-table td, .matrix-table th {
+    padding: 0.35rem 0.6rem; text-align: center;
+    border: 1px solid hsl(var(--border));
+  }
+  .matrix-table th {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    font-weight: 600; font-size: 0.75rem;
+  }
+`}</style>
+
+[返回专题总目录](/blog/attention-series-outline/) · [上一讲：单头注意力完整计算](/blog/attention-03-single-head-math/)
+
+`01 > 02 > 03 > [04] > 05 > 06 | 07 > 08 > 09 > 10 > 11 > 12`
+
+> *"$QK^\top$ 不是语言学家定义的'关系'，而是模型自己学出来的：位置 $i$ 当前需要什么信息，位置 $j$ 能不能提供。"*
+
+---
+
+## 这一讲要回答什么
+
+上一讲我们手推了完整的 Attention 计算流程，知道 $QK^\top$ 会产生一个 $(n, n)$ 的分数矩阵。
+
+但一个根本性的问题还没回答：
+
+> **为什么两个向量做点积，就能表示"词与词的关系"？为什么偏偏是 $QK^\top$，而不是别的形式？**
+
+这一讲拆开讲三件事：
+
+1. 点积的几何意义——它到底在衡量什么
+2. 为什么不能用 $XX^\top$ 代替 $QK^\top$——"提问"和"被匹配"必须分开
+3. Attention 学到的"关系"到底是什么——不是语法标签，而是动态的信息需求匹配
+
+---
+
+## 点积的几何意义
+
+两个向量的点积：
+
+$$
+\mathbf{a} \cdot \mathbf{b} = \|\mathbf{a}\| \|\mathbf{b}\| \cos\theta
+$$
+
+其中 $\theta$ 是两个向量的夹角。这个公式告诉我们三件事：
+
+1. **方向相同**（$\theta \approx 0°$）→ 点积大且为正
+2. **方向正交**（$\theta = 90°$）→ 点积为 0
+3. **方向相反**（$\theta \approx 180°$）→ 点积大且为负
+
+所以点积本质上在衡量**两个向量方向上的一致程度**。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：拖动向量，观察点积变化</div>
+  <span class="attn-demo-subtitle">拖动蓝色向量（a）的端点，观察它与橙色向量（b）的点积、夹角和投影长度如何变化</span>
+  <svg id="dot-svg" viewBox="0 0 700 340" style="width: 100%; max-height: 340px;"></svg>
+  <div id="dot-info" class="attn-step-info"></div>
+</div>
+
+点积还有另一个等价的理解：**投影**。$\mathbf{a} \cdot \mathbf{b}$ 等于 $\mathbf{a}$ 在 $\mathbf{b}$ 方向上的投影长度，再乘以 $\|\mathbf{b}\|$。投影越长，说明 $\mathbf{a}$ 在 $\mathbf{b}$ 的方向上"分量"越大。
+
+把这个概念搬到 Attention 里：
+
+$$
+S_{ij} = \mathbf{q}_i \cdot \mathbf{k}_j
+$$
+
+$S_{ij}$ 大 ⟹ Query $i$ 和 Key $j$ 的方向接近 ⟹ **位置 $i$ 的"信息需求"和位置 $j$ 的"可提供线索"匹配度高**。
+
+---
+
+## 为什么不能用 $XX^\top$
+
+一个自然的疑问：既然 $Q = XW^Q$，$K = XW^K$，那能不能跳过投影，直接算 $XX^\top$？
+
+$$
+XX^\top \quad \text{vs} \quad QK^\top = (XW^Q)(XW^K)^\top
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互对比：XX<sup>T</sup> vs QK<sup>T</sup></div>
+  <span class="attn-demo-subtitle">左边是 XX<sup>T</sup>（无投影），右边是 QK<sup>T</sup>（有投影）——注意对称性和分数分布的差异</span>
+  <div style="display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem; align-items: flex-start;">
+    <div id="xxt-table"></div>
+    <div style="display: flex; align-items: center; font-size: 1.2rem; color: hsl(var(--muted-foreground)); font-weight: 700;">vs</div>
+    <div id="qkt-table"></div>
+  </div>
+  <div id="vs-info" class="attn-step-info"></div>
+</div>
+
+$XX^\top$ 有三个致命缺陷：
+
+### 缺陷 1：对称性
+
+$$
+XX^\top \text{ 是对称矩阵：} (XX^\top)_{ij} = (XX^\top)_{ji}
+$$
+
+这意味着"猫对地毯的关注"和"地毯对猫的关注"必须一样大。但在真实语言中这种对称几乎不存在——"猫"想找的是"在哪里"，而"地毯"想找的是"谁在上面"，两者的信息需求完全不同。
+
+$QK^\top$ **不是对称矩阵**（因为 $W^Q \neq W^K$），所以位置 $i$ 对 $j$ 的关注可以和 $j$ 对 $i$ 完全不同。
+
+### 缺陷 2：角色绑定
+
+用 $XX^\top$ 意味着同一个向量 $\mathbf{x}_i$ 既当 Query 又当 Key。但上一讲已经说过：
+
+- **Query**：我**想找**什么 → "提问的方式"
+- **Key**：我**能匹配**什么 → "被搜索的方式"
+
+一个词被别人搜索时应该强调的特征，和它自己去搜索别人时应该强调的特征，不是同一回事。
+
+比如"加州"：
+- 当**别人搜它**时（Key 角色），应该突出"这是一个地名"
+- 当**它搜别人**时（Query 角色），可能在问"谁在这里做了什么"
+
+$W^Q$ 和 $W^K$ 是两组不同的参数，让模型有能力分别学习"怎么提问"和"怎么被匹配"。
+
+### 缺陷 3：表达瓶颈
+
+$XX^\top$ 的每个元素是原始嵌入的点积，表达能力受限于嵌入空间本身。而 $QK^\top = XW^Q(W^K)^\top X^\top$ 中间多了一个 $W^Q(W^K)^\top$ ——这是一个可学习的**双线性变换**，能捕获嵌入空间中更复杂的关系模式。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：投影如何改变"谁和谁相关"</div>
+  <span class="attn-demo-subtitle">同样 3 个词，点击不同的投影模式，看关系矩阵如何变化</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <button id="proj-mode-0" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">无投影 (XX<sup>T</sup>)</button>
+    <button id="proj-mode-1" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">投影 A：语义相似</button>
+    <button id="proj-mode-2" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">投影 B：句法依赖</button>
+    <button id="proj-mode-3" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">投影 C：位置关系</button>
+  </div>
+  <svg id="proj-compare-svg" viewBox="0 0 700 300" style="width: 100%; max-height: 300px;"></svg>
+  <div id="proj-compare-info" class="attn-step-info"></div>
+</div>
+
+这就是为什么多头注意力中，**不同的头学到不同的 $W^Q, W^K$，就能在同一个输入上发现完全不同类型的关系**——后面第 9 讲会详细展开。
+
+---
+
+## "关系"到底是什么
+
+说到这里，我们需要纠正一个常见误解：$QK^\top$ 的分数**不是**在标注语言学关系（主谓、定语、指代...）。
+
+它衡量的是一个更底层的东西：**当前位置的信息需求，和候选位置的信息供给，匹配程度有多高。**
+
+这个"匹配"可以是语义上的，也可以是句法上的、位置上的、甚至是纯粹统计上的。模型不在乎"这是什么关系"——它只在乎"从这个位置取信息，对我接下来要做的预测有没有帮助"。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：同一个词在不同上下文中的注意力模式</div>
+  <span class="attn-demo-subtitle">点击不同的句子，看"bank"（或其他多义词）的 Query 会关注完全不同的位置</span>
+  <div id="context-btns" style="text-align: center; margin: 1rem 0;"></div>
+  <svg id="context-svg" viewBox="0 0 700 260" style="width: 100%; max-height: 260px;"></svg>
+  <div id="context-info" class="attn-step-info"></div>
+</div>
+
+这个演示说明了一个关键事实：**"关系"不是词的固有属性，而是上下文决定的。** 同一个词在不同句子中，它的 Query 向量不同（因为 $\mathbf{q}_i = \mathbf{x}_i W^Q$，而 $\mathbf{x}_i$ 受 position embedding 和上下文影响），所以它关注的位置也不同。
+
+---
+
+## 点积 vs 其他相似度函数
+
+Attention 论文（Vaswani et al., 2017）为什么选了点积而不是别的？其实 Bahdanau (2015) 最初用的是加法注意力：
+
+$$
+e_{ij} = \mathbf{v}^\top \tanh(W_1 \mathbf{q}_i + W_2 \mathbf{k}_j) \quad \text{(加法注意力)}
+$$
+
+$$
+e_{ij} = \mathbf{q}_i \cdot \mathbf{k}_j \quad \text{(点积注意力)}
+$$
+
+$$
+e_{ij} = \frac{\mathbf{q}_i \cdot \mathbf{k}_j}{\sqrt{d_k}} \quad \text{(缩放点积注意力)}
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互对比：三种注意力分数函数</div>
+  <span class="attn-demo-subtitle">点击切换，看不同计算方式产生的分数分布差异</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <button id="score-additive" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">加法注意力</button>
+    <button id="score-dot" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">点积</button>
+    <button id="score-scaled" class="attn-btn attn-btn-primary" style="margin: 0.2rem;">缩放点积 ✓</button>
+  </div>
+  <svg id="score-svg" viewBox="0 0 700 240" style="width: 100%; max-height: 240px;"></svg>
+  <div id="score-info" class="attn-step-info"></div>
+</div>
+
+Transformer 选择缩放点积的原因很直接：
+
+| | 加法注意力 | 点积注意力 | 缩放点积 |
+| --- | --- | --- | --- |
+| 计算方式 | $\mathbf{v}^\top \tanh(W_1\mathbf{q} + W_2\mathbf{k})$ | $\mathbf{q} \cdot \mathbf{k}$ | $\frac{\mathbf{q} \cdot \mathbf{k}}{\sqrt{d_k}}$ |
+| 参数量 | 额外需要 $W_1, W_2, \mathbf{v}$ | 无额外参数 | 无额外参数 |
+| 计算效率 | 慢（需要非线性） | **快（纯矩阵乘法）** | **快** |
+| 数值稳定性 | tanh 限制范围 | $d_k$ 大时不稳定 | **稳定** |
+| 表达能力 | 理论上更强 | 实践中差不多 | 实践中差不多 |
+
+结论：**当 $d_k$ 不大时，点积和加法注意力效果差不多。但点积能用高度优化的矩阵乘法硬件加速，工程上完胜。**
+
+---
+
+## $QK^\top$ 的对角线：自相关
+
+分数矩阵的对角线 $S_{ii} = \mathbf{q}_i \cdot \mathbf{k}_i$，表示位置 $i$ 对自己的关注程度。
+
+一个常见的直觉是"自己和自己一定最相关"——但**这不一定成立**。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：对角线一定最大吗？</div>
+  <span class="attn-demo-subtitle">点击矩阵中的行，看该位置是否最关注自己</span>
+  <div style="display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem; align-items: flex-start;">
+    <div id="diag-matrix"></div>
+    <div id="diag-bar" style="min-width: 280px;"></div>
+  </div>
+  <div id="diag-info" class="attn-step-info"></div>
+</div>
+
+$S_{ii}$ 不一定最大，因为 $\mathbf{q}_i$ 和 $\mathbf{k}_i$ 是通过**不同的权重矩阵**从同一个 $\mathbf{x}_i$ 得来的。$W^Q$ 和 $W^K$ 把输入投影到了不同的空间——同一个输入在 Query 空间和 Key 空间的方向可能完全不同。
+
+什么时候自关注会低？
+
+- 功能词（"的"、"在"、"了"）：自身携带的语义很少，Query 更倾向于关注内容词
+- 上下文强依赖的词：比如代词"他"，必须去找先行词才能确定含义
+- 深层网络中：经过多层 Attention 后，每个位置已经融合了大量上下文，自关注的相对重要性下降
+
+---
+
+## 一个完整的例子：从嵌入到关系
+
+拿 `[猫, 坐, 垫子]` 做一个完整的追踪：
+
+<div class="attn-demo">
+  <div class="attn-demo-title">步进演示：从词嵌入到关系矩阵的完整路径</div>
+  <span class="attn-demo-subtitle">逐步观察 x → q,k → 点积 → 关系分数 → softmax 权重（支持键盘 ←→）</span>
+  <svg id="trace-svg" viewBox="0 0 720 380" style="width: 100%; max-height: 380px;"></svg>
+  <div style="text-align: center; margin-top: 0.75rem;">
+    <button id="trace-prev" class="attn-btn attn-btn-secondary">◀ 上一步</button>
+    <span id="trace-disp" style="margin: 0 1rem; font-size: 0.85rem; font-weight: 600; color: hsl(var(--foreground));">0 / 5</span>
+    <button id="trace-next" class="attn-btn attn-btn-primary">下一步 ▶</button>
+  </div>
+  <div id="trace-info" class="attn-step-info"></div>
+</div>
+
+文字版总结这个路径：
+
+1. **嵌入层**给每个词一个静态向量 $\mathbf{x}_i$
+2. $W^Q$ 把 $\mathbf{x}_i$ 投影到 **Query 空间**："位置 $i$ 想了解什么"
+3. $W^K$ 把 $\mathbf{x}_j$ 投影到 **Key 空间**："位置 $j$ 能提供什么线索"
+4. 两个空间中的**向量点积**衡量匹配度
+5. 匹配度经过 softmax 变成**注意力权重**——这就是"词与词的关系"
+
+关键洞见：**"关系"不存在于原始词嵌入中，而是通过 $W^Q$ 和 $W^K$ 的投影被"提取"出来的。** 不同的 $W^Q, W^K$（不同的头）会提取出不同类型的关系。
+
+---
+
+## 对应的 PyTorch 实验
+
+用代码验证本讲的核心观点：
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+d_model, d_k = 4, 3
+X = torch.tensor([
+    [1.0, 0.5, -0.2, 0.8],   # 猫
+    [0.3, -0.6, 1.2, 0.1],   # 坐
+    [0.7, 0.9, 0.4, -0.5],   # 垫子
+])
+
+# ---- 实验 1：XX^T 是对称的 ----
+XXT = X @ X.T
+print("XX^T:")
+print(XXT)
+print(f"对称？ {torch.allclose(XXT, XXT.T)}")  # True
+
+# ---- 实验 2：QK^T 通常不对称 ----
+W_Q = nn.Linear(d_model, d_k, bias=False)
+W_K = nn.Linear(d_model, d_k, bias=False)
+
+Q = W_Q(X)
+K = W_K(X)
+QKT = Q @ K.T
+print("\nQK^T:")
+print(QKT)
+print(f"对称？ {torch.allclose(QKT, QKT.T)}")  # 几乎总是 False
+
+# ---- 实验 3：对角线不一定最大 ----
+attn = F.softmax(QKT / math.sqrt(d_k), dim=-1)
+print("\n注意力权重:")
+print(attn)
+for i in range(3):
+    max_j = attn[i].argmax().item()
+    words = ['猫', '坐', '垫子']
+    self_attn = attn[i, i].item()
+    max_attn = attn[i, max_j].item()
+    print(f"  {words[i]}: 自关注={self_attn:.3f}, "
+          f"最关注={words[max_j]}({max_attn:.3f})")
+
+# ---- 实验 4：不同 W^Q, W^K → 不同关系 ----
+print("\n不同的投影 → 不同的关系矩阵:")
+for head in range(3):
+    W_Q_h = nn.Linear(d_model, d_k, bias=False)
+    W_K_h = nn.Linear(d_model, d_k, bias=False)
+    Q_h = W_Q_h(X)
+    K_h = W_K_h(X)
+    attn_h = F.softmax(Q_h @ K_h.T / math.sqrt(d_k), dim=-1)
+    print(f"  Head {head}: {attn_h.detach().numpy().round(2)}")
+```
+
+运行后你会观察到：
+- $XX^\top$ 严格对称，$QK^\top$ 不对称
+- 对角线不总是最大
+- 每次随机初始化 $W^Q, W^K$，得到的关系矩阵完全不同
+
+---
+
+## 这一讲的三个核心结论
+
+1. **点积衡量方向一致性**。$\mathbf{q}_i \cdot \mathbf{k}_j$ 越大，说明位置 $i$ 的信息需求和位置 $j$ 的可提供线索在方向上越匹配。
+
+2. **$QK^\top$ 比 $XX^\top$ 强在角色分离**。$W^Q$ 和 $W^K$ 让模型分别学习"怎么提问"和"怎么被匹配"，打破了 $XX^\top$ 的对称约束和角色绑定。
+
+3. **"关系"是动态的、学出来的**。同一个词在不同上下文中 Query 不同，关注的位置也不同。这不是语言学标签，而是对下游任务有用的信息流动模式。
+
+---
+
+## 试着想一想
+
+1. 如果强制 $W^Q = W^K$，$QK^\top$ 会变成对称矩阵吗？为什么？
+2. 点积可以为负数。在 Attention 中负分数意味着什么？softmax 之后这些位置的权重会变成什么？
+3. 在 Cross-Attention 中（Decoder 的 Q 查 Encoder 的 K），$QK^\top$ 的形状是什么？还是 $(n, n)$ 吗？
+4. 如果把 $QK^\top$ 换成 cosine similarity $\frac{\mathbf{q} \cdot \mathbf{k}}{\|\mathbf{q}\|\|\mathbf{k}\|}$，有什么好处和坏处？
+5. 真实模型中，浅层和深层的注意力矩阵通常有什么不同？（提示：浅层更关注局部/位置，深层更关注语义。）
+
+---
+
+## 下一讲
+
+我们已经知道 $QK^\top$ 产生分数，softmax 把分数变成权重。但下一讲要更深地钻进 softmax：
+
+> 为什么 softmax 正好满足"注意力权重"的所有要求？它和 hardmax、sparsemax 有什么区别？
+
+---
+
+<script>{`
+(function() {
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+  function C() {
+    var d = isDark();
+    return {
+      text: d ? '#e2e8f0' : '#334155',
+      muted: d ? '#94a3b8' : '#64748b',
+      primary: d ? '#7dd3fc' : '#3b82f6',
+      pStrong: '#3b82f6',
+      pLight: d ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981', sLight: d ? '#064e3b' : '#d1fae5',
+      warning: '#f59e0b', wLight: d ? '#78350f' : '#fef3c7',
+      danger: '#ef4444', dLight: d ? '#7f1d1d' : '#fee2e2',
+      purple: '#8b5cf6', purpleLight: d ? '#4c1d95' : '#ede9fe',
+      border: d ? '#334155' : '#e2e8f0',
+      node: d ? '#1e293b' : '#ffffff',
+      nodeStroke: d ? '#475569' : '#cbd5e1',
+      bg: d ? '#0f172a' : '#f8fafc',
+    };
+  }
+  function onTheme(fn) {
+    new MutationObserver(fn).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+  function softmaxRow(row) {
+    var mx = Math.max.apply(null, row);
+    var exps = row.map(function(v) { return Math.exp(v - mx); });
+    var s = exps.reduce(function(a, b) { return a + b; });
+    return exps.map(function(e) { return e / s; });
+  }
+
+  // ============ 1. Dot Product Geometry ============
+  function initDotProduct() {
+    var svg = document.getElementById('dot-svg');
+    var info = document.getElementById('dot-info');
+    if (!svg) return;
+
+    var ax = 2.5, ay = 1.0;  // vector a
+    var bx = 1.0, by = 2.5;  // vector b (fixed)
+    var dragging = false;
+    var ox = 350, oy = 200, scale = 60;
+
+    function draw() {
+      var c = C();
+      var dotP = ax * bx + ay * by;
+      var magA = Math.sqrt(ax*ax + ay*ay);
+      var magB = Math.sqrt(bx*bx + by*by);
+      var cosT = dotP / (magA * magB + 1e-8);
+      var angle = Math.acos(Math.max(-1, Math.min(1, cosT))) * 180 / Math.PI;
+
+      // Projection of a onto b
+      var projLen = dotP / (magB + 1e-8);
+      var bNormX = bx / (magB + 1e-8), bNormY = by / (magB + 1e-8);
+      var projX = projLen * bNormX, projY = projLen * bNormY;
+
+      var h = '';
+      // Grid
+      for (var gx = -4; gx <= 4; gx++) {
+        var lx = ox + gx * scale;
+        h += '<line x1="'+lx+'" y1="30" x2="'+lx+'" y2="310" stroke="'+c.border+'" stroke-width="0.5"/>';
+      }
+      for (var gy = -2; gy <= 3; gy++) {
+        var ly = oy - gy * scale;
+        h += '<line x1="110" y1="'+ly+'" x2="590" y2="'+ly+'" stroke="'+c.border+'" stroke-width="0.5"/>';
+      }
+      // Axes
+      h += '<line x1="110" y1="'+oy+'" x2="590" y2="'+oy+'" stroke="'+c.muted+'" stroke-width="1"/>';
+      h += '<line x1="'+ox+'" y1="30" x2="'+ox+'" y2="310" stroke="'+c.muted+'" stroke-width="1"/>';
+
+      // Projection dashed line
+      h += '<line x1="'+(ox+projX*scale)+'" y1="'+(oy-projY*scale)+'" x2="'+(ox+ax*scale)+'" y2="'+(oy-ay*scale)+'" stroke="'+c.muted+'" stroke-width="1" stroke-dasharray="4,3"/>';
+      // Projection vector
+      h += '<line x1="'+ox+'" y1="'+oy+'" x2="'+(ox+projX*scale)+'" y2="'+(oy-projY*scale)+'" stroke="'+c.purple+'" stroke-width="2.5" stroke-dasharray="6,3"/>';
+      h += '<circle cx="'+(ox+projX*scale)+'" cy="'+(oy-projY*scale)+'" r="3" fill="'+c.purple+'"/>';
+
+      // Angle arc
+      var arcR = 35;
+      var angA = Math.atan2(-ay, ax), angB = Math.atan2(-by, bx);
+      var startA = Math.min(angA, angB), endA = Math.max(angA, angB);
+      var sx1 = ox + arcR * Math.cos(startA), sy1 = oy + arcR * Math.sin(startA);
+      var sx2 = ox + arcR * Math.cos(endA), sy2 = oy + arcR * Math.sin(endA);
+      var large = endA - startA > Math.PI ? 1 : 0;
+      h += '<path d="M'+sx1+' '+sy1+' A'+arcR+' '+arcR+' 0 '+large+' 1 '+sx2+' '+sy2+'" fill="none" stroke="'+c.warning+'" stroke-width="2"/>';
+      var midAng = (startA + endA) / 2;
+      h += '<text x="'+(ox+(arcR+12)*Math.cos(midAng))+'" y="'+(oy+(arcR+12)*Math.sin(midAng))+'" text-anchor="middle" fill="'+c.warning+'" font-size="11" font-weight="600">'+angle.toFixed(0)+'°</text>';
+
+      // Vector b (fixed, orange)
+      h += '<line x1="'+ox+'" y1="'+oy+'" x2="'+(ox+bx*scale)+'" y2="'+(oy-by*scale)+'" stroke="'+c.warning+'" stroke-width="3"/>';
+      h += '<circle cx="'+(ox+bx*scale)+'" cy="'+(oy-by*scale)+'" r="5" fill="'+c.warning+'"/>';
+      h += '<text x="'+(ox+bx*scale+12)+'" y="'+(oy-by*scale-5)+'" fill="'+c.warning+'" font-size="12" font-weight="700">b (Key)</text>';
+
+      // Vector a (draggable, blue)
+      h += '<line x1="'+ox+'" y1="'+oy+'" x2="'+(ox+ax*scale)+'" y2="'+(oy-ay*scale)+'" stroke="'+c.pStrong+'" stroke-width="3"/>';
+      h += '<circle cx="'+(ox+ax*scale)+'" cy="'+(oy-ay*scale)+'" r="8" fill="'+c.pStrong+'" style="cursor:grab;" id="dot-handle"/>';
+      h += '<text x="'+(ox+ax*scale+12)+'" y="'+(oy-ay*scale-5)+'" fill="'+c.pStrong+'" font-size="12" font-weight="700">a (Query)</text>';
+
+      // Projection label
+      h += '<text x="'+(ox+projX*scale/2-10)+'" y="'+(oy-projY*scale/2+16)+'" fill="'+c.purple+'" font-size="10" font-weight="600">投影</text>';
+
+      // Stats panel (right side)
+      var px = 620, py = 60;
+      h += '<text x="'+px+'" y="'+py+'" text-anchor="end" fill="'+c.text+'" font-size="12" font-weight="700">a · b = '+dotP.toFixed(2)+'</text>';
+      h += '<text x="'+px+'" y="'+(py+22)+'" text-anchor="end" fill="'+c.muted+'" font-size="10">|a| = '+magA.toFixed(2)+'</text>';
+      h += '<text x="'+px+'" y="'+(py+40)+'" text-anchor="end" fill="'+c.muted+'" font-size="10">|b| = '+magB.toFixed(2)+'</text>';
+      h += '<text x="'+px+'" y="'+(py+58)+'" text-anchor="end" fill="'+c.muted+'" font-size="10">cos θ = '+cosT.toFixed(3)+'</text>';
+
+      // Color-coded dot product indicator
+      var dpColor = dotP > 0.5 ? c.success : (dotP < -0.5 ? c.danger : c.warning);
+      h += '<rect x="540" y="'+(py+68)+'" width="80" height="24" rx="6" fill="'+dpColor+'" opacity="0.2"/>';
+      h += '<text x="580" y="'+(py+84)+'" text-anchor="middle" fill="'+dpColor+'" font-size="10" font-weight="700">'+(dotP > 0.5 ? '高匹配' : dotP < -0.5 ? '反向' : '弱匹配')+'</text>';
+
+      svg.innerHTML = h;
+
+      // Info text
+      if (angle < 30) {
+        info.innerHTML = '夹角 <strong>'+angle.toFixed(0)+'°</strong>，方向非常接近 → 点积 <strong>'+dotP.toFixed(2)+'</strong>（大正值）。在 Attention 中，这意味着 Query 和 Key 高度匹配，该位置会获得高权重。';
+      } else if (angle < 80) {
+        info.innerHTML = '夹角 <strong>'+angle.toFixed(0)+'°</strong>，有一定相关性 → 点积 <strong>'+dotP.toFixed(2)+'</strong>（正值但不大）。这个位置会有一些注意力权重，但不是最高的。';
+      } else if (angle < 100) {
+        info.innerHTML = '夹角 <strong>'+angle.toFixed(0)+'°</strong>，接近正交 → 点积 <strong>'+dotP.toFixed(2)+'</strong>（接近 0）。Query 和 Key 几乎无关，softmax 后权重很小。';
+      } else {
+        info.innerHTML = '夹角 <strong>'+angle.toFixed(0)+'°</strong>，方向相反 → 点积 <strong>'+dotP.toFixed(2)+'</strong>（负值）。softmax 会把负分数压到接近 0——这个位置几乎不会被关注。';
+      }
+
+      // Drag handler
+      var handle = document.getElementById('dot-handle');
+      if (handle) {
+        handle.addEventListener('mousedown', function(e) { dragging = true; e.preventDefault(); });
+        handle.addEventListener('touchstart', function(e) { dragging = true; e.preventDefault(); }, { passive: false });
+      }
+    }
+
+    function getPos(e) {
+      var rect = svg.getBoundingClientRect();
+      var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      var svgX = (clientX - rect.left) / rect.width * 700;
+      var svgY = (clientY - rect.top) / rect.height * 340;
+      return { x: svgX, y: svgY };
+    }
+
+    function onMove(e) {
+      if (!dragging) return;
+      e.preventDefault();
+      var p = getPos(e);
+      ax = (p.x - ox) / scale;
+      ay = -(p.y - oy) / scale;
+      // Clamp
+      ax = Math.max(-3.5, Math.min(3.5, ax));
+      ay = Math.max(-2.5, Math.min(3.5, ay));
+      draw();
+    }
+
+    function onUp() { dragging = false; }
+
+    svg.addEventListener('mousemove', onMove);
+    svg.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchend', onUp);
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 2. XX^T vs QK^T ============
+  function initVsCompare() {
+    var xxtEl = document.getElementById('xxt-table');
+    var qktEl = document.getElementById('qkt-table');
+    var infoEl = document.getElementById('vs-info');
+    if (!xxtEl) return;
+
+    var X = [[1.0,0.5,-0.2,0.8],[0.3,-0.6,1.2,0.1],[0.7,0.9,0.4,-0.5]];
+    var WQ = [[0.2,0.1,0.4],[0.5,-0.3,0.1],[0.1,0.6,-0.2],[-0.3,0.2,0.7]];
+    var WK = [[0.3,-0.1,0.2],[0.1,0.5,0.3],[-0.4,0.2,0.1],[0.6,0.3,-0.5]];
+    var words = ['猫','坐','垫子'];
+
+    function matmul(A, B) {
+      var out = [];
+      for (var i = 0; i < A.length; i++) {
+        out[i] = [];
+        for (var j = 0; j < B[0].length; j++) {
+          var s = 0;
+          for (var k = 0; k < B.length; k++) s += A[i][k] * B[k][j];
+          out[i][j] = s;
+        }
+      }
+      return out;
+    }
+    function transpose(M) {
+      var out = [];
+      for (var j = 0; j < M[0].length; j++) { out[j] = []; for (var i = 0; i < M.length; i++) out[j][i] = M[i][j]; }
+      return out;
+    }
+
+    var XXT = matmul(X, transpose(X));
+    var Q = matmul(X, WQ);
+    var K = matmul(X, WK);
+    var QKT = matmul(Q, transpose(K));
+
+    function draw() {
+      var c = C();
+      function makeTable(title, data, color, checkSym) {
+        var html = '<div style="text-align:center;font-weight:700;font-size:0.85rem;color:'+color+';margin-bottom:0.5rem;">'+title+'</div>';
+        html += '<table class="matrix-table"><tr><th style="background:'+color+';color:white;"></th>';
+        words.forEach(function(w) { html += '<th>'+w+'</th>'; });
+        html += '</tr>';
+        for (var i = 0; i < 3; i++) {
+          html += '<tr><th>'+words[i]+'</th>';
+          for (var j = 0; j < 3; j++) {
+            var v = data[i][j];
+            var bg = v > 0 ? 'rgba(59,130,246,'+Math.min(Math.abs(v)*0.2,0.4)+')' : 'rgba(239,68,68,'+Math.min(Math.abs(v)*0.2,0.4)+')';
+            var isDiag = i === j;
+            html += '<td style="background:'+bg+';'+(isDiag?'font-weight:700;':'')+'">'+v.toFixed(2)+'</td>';
+          }
+          html += '</tr>';
+        }
+        html += '</table>';
+        if (checkSym) {
+          var sym = true;
+          for (var i2 = 0; i2 < 3; i2++) for (var j2 = 0; j2 < 3; j2++) {
+            if (Math.abs(data[i2][j2] - data[j2][i2]) > 0.001) sym = false;
+          }
+          html += '<div style="text-align:center;font-size:0.75rem;margin-top:0.3rem;color:'+(sym?c.danger:c.success)+';">'+(sym?'✗ 对称（角色绑死）':'✓ 不对称（角色分离）')+'</div>';
+        }
+        return html;
+      }
+
+      xxtEl.innerHTML = makeTable('XX<sup>T</sup>（无投影）', XXT, '#ef4444', true);
+      qktEl.innerHTML = makeTable('QK<sup>T</sup>（有投影）', QKT, '#3b82f6', true);
+
+      infoEl.innerHTML = '<strong>XX<sup>T</sup></strong> 严格对称：猫→垫子 = 垫子→猫 = '+XXT[0][2].toFixed(2)+'。<strong>QK<sup>T</sup></strong> 不对称：猫→垫子 = '+QKT[0][2].toFixed(2)+'，垫子→猫 = '+QKT[2][0].toFixed(2)+'。这意味着"谁更关注谁"可以不同。';
+    }
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 3. Projection Mode Compare ============
+  function initProjCompare() {
+    var svg = document.getElementById('proj-compare-svg');
+    var infoEl = document.getElementById('proj-compare-info');
+    if (!svg) return;
+
+    var words = ['猫','坐','垫子'];
+    // Simulated attention patterns for different "heads"
+    var patterns = [
+      { name: '无投影', weights: [[0.42,0.25,0.33],[0.25,0.38,0.37],[0.33,0.37,0.30]], desc: 'XX^T → softmax：分数分布比较均匀，对称，模型没有自由度去区分不同的关系类型。' },
+      { name: '语义相似', weights: [[0.50,0.15,0.35],[0.15,0.20,0.65],[0.30,0.55,0.15]], desc: '这组 W^Q, W^K 学到了"语义相近的词互相关注"：坐↔垫子（动作与承载物），猫↔垫子（在垫子上的猫）。' },
+      { name: '句法依赖', weights: [[0.10,0.75,0.15],[0.55,0.10,0.35],[0.20,0.60,0.20]], desc: '这组 W^Q, W^K 学到了"句法上的依赖"：猫→坐（主语找谓语），垫子→坐（宾语找谓语），坐→猫（谓语找主语）。' },
+      { name: '位置关系', weights: [[0.55,0.35,0.10],[0.30,0.40,0.30],[0.10,0.35,0.55]], desc: '这组 W^Q, W^K 学到了"关注邻近位置"：每个词最关注自己和紧邻的词，远距离的权重衰减。' },
+    ];
+
+    var current = 0;
+
+    function draw() {
+      var c = C();
+      var p = patterns[current];
+      var w = p.weights;
+      var cellSize = 70, sx = 180, sy = 50;
+
+      var h = '';
+      // Title
+      h += '<text x="350" y="30" text-anchor="middle" fill="'+c.text+'" font-size="14" font-weight="700">'+p.name+'</text>';
+
+      // Column labels (Key)
+      h += '<text x="'+(sx+1.5*cellSize)+'" y="'+(sy-25)+'" text-anchor="middle" fill="'+c.warning+'" font-size="11" font-weight="600">← Key →</text>';
+      words.forEach(function(wd, j) {
+        h += '<text x="'+(sx+j*cellSize+cellSize/2)+'" y="'+(sy-8)+'" text-anchor="middle" fill="'+c.muted+'" font-size="11">'+wd+'</text>';
+      });
+
+      // Row labels (Query)
+      h += '<text x="'+(sx-45)+'" y="'+(sy+1.5*cellSize)+'" text-anchor="middle" fill="'+c.pStrong+'" font-size="11" font-weight="600" transform="rotate(-90,'+(sx-45)+','+(sy+1.5*cellSize)+')">← Query →</text>';
+
+      // Matrix cells
+      for (var i = 0; i < 3; i++) {
+        h += '<text x="'+(sx-12)+'" y="'+(sy+i*cellSize+cellSize/2+4)+'" text-anchor="end" fill="'+c.muted+'" font-size="11">'+words[i]+'</text>';
+        for (var j = 0; j < 3; j++) {
+          var v = w[i][j];
+          var maxInRow = Math.max.apply(null, w[i]);
+          var isMax = v === maxInRow;
+          var x = sx + j * cellSize;
+          var y = sy + i * cellSize;
+
+          var intensity = v;
+          var fill = 'rgba(59,130,246,' + (0.1 + intensity * 0.7) + ')';
+          h += '<rect x="'+x+'" y="'+y+'" width="'+cellSize+'" height="'+cellSize+'" fill="'+fill+'" stroke="'+(isMax ? c.pStrong : c.border)+'" stroke-width="'+(isMax ? 2.5 : 1)+'"/>';
+          h += '<text x="'+(x+cellSize/2)+'" y="'+(y+cellSize/2+5)+'" text-anchor="middle" fill="'+(isMax ? 'white' : c.text)+'" font-size="13" font-weight="'+(isMax ? '700' : '400')+'">'+(v*100).toFixed(0)+'%</text>';
+
+          // Arrow for max
+          if (isMax) {
+            h += '<text x="'+(x+cellSize/2)+'" y="'+(y+cellSize/2+20)+'" text-anchor="middle" fill="white" font-size="9">★</text>';
+          }
+        }
+      }
+
+      // Legend: flow arrows on the right
+      var lx = sx + 3*cellSize + 40;
+      h += '<text x="'+lx+'" y="'+(sy+20)+'" fill="'+c.text+'" font-size="11" font-weight="600">关注方向</text>';
+      for (var i2 = 0; i2 < 3; i2++) {
+        var maxJ = w[i2].indexOf(Math.max.apply(null, w[i2]));
+        h += '<text x="'+lx+'" y="'+(sy+45+i2*25)+'" fill="'+c.text+'" font-size="11">'+words[i2]+' → '+words[maxJ]+'</text>';
+        h += '<text x="'+(lx+80)+'" y="'+(sy+45+i2*25)+'" fill="'+c.pStrong+'" font-size="11" font-weight="700">'+(Math.max.apply(null, w[i2])*100).toFixed(0)+'%</text>';
+      }
+
+      svg.innerHTML = h;
+      infoEl.innerHTML = p.desc;
+    }
+
+    // Button handlers
+    [0,1,2,3].forEach(function(idx) {
+      var btn = document.getElementById('proj-mode-'+idx);
+      if (btn) btn.addEventListener('click', function() {
+        current = idx;
+        document.querySelectorAll('[id^="proj-mode-"]').forEach(function(b) { b.className = 'attn-btn attn-btn-secondary'; });
+        btn.className = 'attn-btn attn-btn-primary';
+        draw();
+      });
+    });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 4. Context Changes Relationships ============
+  function initContext() {
+    var btns = document.getElementById('context-btns');
+    var svg = document.getElementById('context-svg');
+    var infoEl = document.getElementById('context-info');
+    if (!svg || !btns) return;
+
+    var sentences = [
+      {
+        text: ['I','sat','by','the','river','bank'],
+        target: 4, targetWord: 'bank',
+        weights: [0.03, 0.05, 0.08, 0.04, 0.12, 0.02, 0.52, 0.14],
+        // simplified: bank → river most
+        attn: [0.05, 0.08, 0.12, 0.05, 0.50, 0.20],
+        desc: '"bank" 在河边 → Query 关注 "river"(50%)，获取地理信息。这里 bank = 河岸。'
+      },
+      {
+        text: ['I','went','to','the','bank','vault'],
+        target: 4, targetWord: 'bank',
+        attn: [0.04, 0.08, 0.05, 0.03, 0.25, 0.55],
+        desc: '"bank" 后面是 "vault" → Query 关注 "vault"(55%)，获取金融信息。这里 bank = 银行。'
+      },
+      {
+        text: ['She','saw','the','bank','collapse'],
+        target: 3, targetWord: 'bank',
+        attn: [0.15, 0.10, 0.05, 0.20, 0.50],
+        desc: '"bank" 后面是 "collapse" → 两种理解都可能（河岸崩塌/银行倒闭），注意力更分散。"collapse" 获得最高权重(50%)。'
+      },
+    ];
+
+    sentences.forEach(function(s, idx) {
+      var btn = document.createElement('button');
+      btn.className = 'attn-btn attn-btn-secondary';
+      btn.style.margin = '0.2rem';
+      btn.textContent = s.text.join(' ');
+      btn.addEventListener('click', function() {
+        showSentence(idx);
+        btns.querySelectorAll('button').forEach(function(b) { b.className = 'attn-btn attn-btn-secondary'; });
+        btn.className = 'attn-btn attn-btn-primary';
+      });
+      btns.appendChild(btn);
+    });
+
+    function showSentence(idx) {
+      var c = C();
+      var s = sentences[idx];
+      var n = s.text.length;
+      var gap = Math.min(100, 600 / n);
+      var sx = (700 - (n - 1) * gap) / 2;
+      var wordY = 60, barBase = 200, barMax = 110;
+      var maxW = Math.max.apply(null, s.attn);
+
+      var h = '';
+      // Target word label
+      h += '<text x="350" y="25" text-anchor="middle" fill="'+c.pStrong+'" font-size="12" font-weight="700">"'+s.targetWord+'" (Query) 的注意力分布</text>';
+
+      s.text.forEach(function(w, i) {
+        var x = sx + i * gap;
+        var a = s.attn[i];
+        var isTarget = i === s.target;
+        var isMax = a === maxW;
+
+        // Word node
+        var nodeColor = isTarget ? c.pStrong : (isMax ? c.success : c.nodeStroke);
+        var nodeFill = isTarget ? c.pLight : (isMax ? c.sLight : c.node);
+        h += '<rect x="'+(x-28)+'" y="'+(wordY-14)+'" width="56" height="28" rx="6" fill="'+nodeFill+'" stroke="'+nodeColor+'" stroke-width="'+(isTarget || isMax ? 2.5 : 1.5)+'"/>';
+        h += '<text x="'+x+'" y="'+(wordY+4)+'" text-anchor="middle" fill="'+c.text+'" font-size="11" font-weight="'+(isTarget?'700':'400')+'">'+w+'</text>';
+        if (isTarget) h += '<text x="'+x+'" y="'+(wordY-20)+'" text-anchor="middle" fill="'+c.pStrong+'" font-size="9" font-weight="600">Query ↓</text>';
+
+        // Attention bar
+        var barH = (a / maxW) * barMax;
+        var barColor = isMax ? c.success : (a > 0.15 ? c.pStrong : c.muted);
+        var barOp = 0.3 + (a / maxW) * 0.7;
+        h += '<rect x="'+(x-18)+'" y="'+(barBase-barH)+'" width="36" height="'+barH+'" rx="4" fill="'+barColor+'" opacity="'+barOp+'"><animate attributeName="height" from="0" to="'+barH+'" dur="0.35s" fill="freeze"/><animate attributeName="y" from="'+barBase+'" to="'+(barBase-barH)+'" dur="0.35s" fill="freeze"/></rect>';
+        h += '<text x="'+x+'" y="'+(barBase-barH-6)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-weight="600">'+(a*100).toFixed(0)+'%</text>';
+
+        // Connection line from target to bar
+        if (!isTarget) {
+          h += '<line x1="'+(sx+s.target*gap)+'" y1="'+(wordY+14)+'" x2="'+x+'" y2="'+(barBase-barH)+'" stroke="'+barColor+'" stroke-width="'+(1+a*3)+'" opacity="'+(0.15+a*0.6)+'" stroke-dasharray="4,3"/>';
+        }
+      });
+
+      svg.innerHTML = h;
+      infoEl.innerHTML = s.desc;
+    }
+  }
+
+  // ============ 5. Score Functions Compare ============
+  function initScoreFns() {
+    var svg = document.getElementById('score-svg');
+    var infoEl = document.getElementById('score-info');
+    if (!svg) return;
+
+    var tokens = ['猫','坐','垫子','上'];
+    // Simulated scores for each method
+    var methods = {
+      additive: { scores: [0.6, 1.8, 1.2, 0.4], name: '加法注意力', color: '#8b5cf6',
+        desc: 'v^T tanh(W₁q + W₂k)：有额外参数 W₁, W₂, v。tanh 限制分数范围在 (-1,1) 附近。表达力强但计算慢——需要逐对做非线性运算，无法用矩阵乘法一次算完。' },
+      dot: { scores: [2.1, 8.5, 5.2, 1.3], name: '点积', color: '#ef4444',
+        desc: 'q · k：无额外参数，纯矩阵乘法，速度极快。但分数的量级随 d_k 增长——d_k=64 时分数可能到几十，softmax 会退化成接近 one-hot。' },
+      scaled: { scores: [0.26, 1.06, 0.65, 0.16], name: '缩放点积', color: '#10b981',
+        desc: 'q · k / √d_k：除以 √d_k 让分数方差回到 1，softmax 输出健康。兼顾了点积的速度和数值的稳定性——这就是 Transformer 的选择。' },
+    };
+    var current = 'scaled';
+
+    function draw() {
+      var c = C();
+      var m = methods[current];
+      var sm = softmaxRow(m.scores);
+      var maxSm = Math.max.apply(null, sm);
+      var sx = 100, gap = 140, barBase = 180, barMax = 120;
+
+      var h = '';
+      h += '<text x="350" y="22" text-anchor="middle" fill="'+m.color+'" font-size="13" font-weight="700">'+m.name+'</text>';
+
+      tokens.forEach(function(t, i) {
+        var x = sx + i * gap;
+        var barH = (sm[i] / maxSm) * barMax;
+        var isMax = sm[i] === maxSm;
+
+        // Score label
+        h += '<text x="'+x+'" y="'+(barBase-barMax-20)+'" text-anchor="middle" fill="'+c.muted+'" font-size="10">score: '+m.scores[i].toFixed(2)+'</text>';
+
+        // Bar
+        h += '<rect x="'+(x-25)+'" y="'+(barBase-barH)+'" width="50" height="'+barH+'" rx="5" fill="'+m.color+'" opacity="'+(0.3+sm[i]/maxSm*0.7)+'"/>';
+        h += '<text x="'+x+'" y="'+(barBase-barH-6)+'" text-anchor="middle" fill="'+c.text+'" font-size="11" font-weight="700">'+(sm[i]*100).toFixed(1)+'%</text>';
+
+        // Token label
+        h += '<text x="'+x+'" y="'+(barBase+18)+'" text-anchor="middle" fill="'+c.text+'" font-size="12" font-weight="'+(isMax?'700':'400')+'">'+t+'</text>';
+      });
+
+      // Baseline
+      h += '<line x1="60" y1="'+barBase+'" x2="640" y2="'+barBase+'" stroke="'+c.border+'" stroke-width="1"/>';
+
+      // Entropy
+      var entropy = -sm.reduce(function(s2, p) { return s2 + (p > 1e-10 ? p * Math.log(p) : 0); }, 0);
+      h += '<text x="350" y="220" text-anchor="middle" fill="'+c.muted+'" font-size="10">信息熵 = '+entropy.toFixed(3)+' (越高越分散，最大='+Math.log(4).toFixed(3)+')</text>';
+
+      svg.innerHTML = h;
+      infoEl.innerHTML = m.desc;
+    }
+
+    ['score-additive','score-dot','score-scaled'].forEach(function(id) {
+      var key = id.replace('score-','');
+      var btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', function() {
+        current = key;
+        ['score-additive','score-dot','score-scaled'].forEach(function(bid) {
+          document.getElementById(bid).className = 'attn-btn attn-btn-secondary';
+        });
+        btn.className = 'attn-btn attn-btn-primary';
+        draw();
+      });
+    });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 6. Diagonal Explorer ============
+  function initDiagonal() {
+    var matEl = document.getElementById('diag-matrix');
+    var barEl = document.getElementById('diag-bar');
+    var infoEl = document.getElementById('diag-info');
+    if (!matEl) return;
+
+    var words = ['猫','坐','垫子'];
+    // Simulated attention where diagonal is NOT always max
+    var attn = [
+      [0.25, 0.45, 0.30],  // 猫 → 最关注"坐"
+      [0.50, 0.15, 0.35],  // 坐 → 最关注"猫"
+      [0.20, 0.48, 0.32],  // 垫子 → 最关注"坐"
+    ];
+
+    function draw() {
+      var c = C();
+      // Matrix
+      var html = '<table class="matrix-table"><tr><th>α</th>';
+      words.forEach(function(w) { html += '<th>'+w+'</th>'; });
+      html += '</tr>';
+      for (var i = 0; i < 3; i++) {
+        html += '<tr><th style="cursor:pointer;" data-row="'+i+'">'+words[i]+' ▶</th>';
+        for (var j = 0; j < 3; j++) {
+          var v = attn[i][j];
+          var isDiag = i === j;
+          var isMax = v === Math.max.apply(null, attn[i]);
+          var bg = isMax ? 'rgba(59,130,246,0.3)' : (isDiag ? 'rgba(239,68,68,0.15)' : '');
+          html += '<td style="background:'+bg+';font-weight:'+(isMax||isDiag?'700':'400')+';'+(isDiag?'border:2px solid '+c.danger+';':'')+'">'+v.toFixed(2)+(isDiag?' ◆':'')+'</td>';
+        }
+        html += '</tr>';
+      }
+      html += '</table>';
+      html += '<div style="text-align:center;font-size:0.72rem;color:'+c.muted+';margin-top:0.3rem;">◆ = 对角线（自关注）</div>';
+      matEl.innerHTML = html;
+
+      // Attach click handlers
+      matEl.querySelectorAll('th[data-row]').forEach(function(th) {
+        th.addEventListener('click', function() { showRow(parseInt(th.getAttribute('data-row'))); });
+      });
+    }
+
+    function showRow(i) {
+      var c = C();
+      var row = attn[i];
+      var maxJ = row.indexOf(Math.max.apply(null, row));
+      var maxVal = Math.max.apply(null, row);
+
+      var h = '<div style="font-size:0.85rem;color:'+c.text+';">';
+      h += '<div style="font-weight:700;color:'+c.pStrong+';margin-bottom:0.5rem;">"'+words[i]+'" 的注意力分配</div>';
+      words.forEach(function(w, j) {
+        var v = row[j];
+        var barW = Math.round(v / maxVal * 150);
+        var isDiag = i === j;
+        var isMax = j === maxJ;
+        var barColor = isMax ? c.pStrong : (isDiag ? c.danger : c.muted);
+        h += '<div style="display:flex;align-items:center;gap:0.5rem;margin:0.3rem 0;">';
+        h += '<span style="width:40px;text-align:right;font-size:0.8rem;font-weight:'+(isDiag||isMax?'700':'400')+';">'+w+'</span>';
+        h += '<div style="height:16px;width:'+barW+'px;background:'+barColor+';border-radius:3px;opacity:'+(0.4+v/maxVal*0.6)+';"></div>';
+        h += '<span style="font-size:0.8rem;font-weight:600;">'+(v*100).toFixed(0)+'%</span>';
+        if (isDiag) h += '<span style="font-size:0.7rem;color:'+c.danger+';">←自己</span>';
+        if (isMax) h += '<span style="font-size:0.7rem;color:'+c.pStrong+';">←最高</span>';
+        h += '</div>';
+      });
+      h += '</div>';
+      barEl.innerHTML = h;
+
+      var diagMax = i === maxJ;
+      if (diagMax) {
+        infoEl.innerHTML = '"'+words[i]+'" 最关注自己（'+(row[i]*100).toFixed(0)+'%）。这说明它的 Query 和自己的 Key 方向最接近——在浅层网络中这比较常见。';
+      } else {
+        infoEl.innerHTML = '"'+words[i]+'" 最关注 "'+words[maxJ]+'"（'+(row[maxJ]*100).toFixed(0)+'%），<strong>不是自己</strong>（自关注只有 '+(row[i]*100).toFixed(0)+'%）。这说明 W^Q 和 W^K 把它的 Query 方向投影到了与 "'+words[maxJ]+'" 的 Key 更匹配的位置——模型在主动去其他位置取信息。';
+      }
+    }
+
+    draw();
+    onTheme(draw);
+    infoEl.innerHTML = '点击左侧表格的行头（如 "猫 ▶"），查看该位置的注意力分配。注意观察对角线是否最大。';
+  }
+
+  // ============ 7. Full Trace Stepper ============
+  function initTrace() {
+    var svg = document.getElementById('trace-svg');
+    var prev = document.getElementById('trace-prev');
+    var next = document.getElementById('trace-next');
+    var disp = document.getElementById('trace-disp');
+    var infoEl = document.getElementById('trace-info');
+    if (!svg) return;
+
+    var step = 0, total = 6;
+    var words = ['猫','坐','垫子'];
+    var X = [[1.0,0.5,-0.2,0.8],[0.3,-0.6,1.2,0.1],[0.7,0.9,0.4,-0.5]];
+    var Q = [[0.74,0.31,0.89],[1.26,-0.42,-0.17],[0.18,0.87,0.63]];
+    var K = [[0.62,0.85,-0.13],[-0.51,1.10,0.78],[0.94,0.22,0.41]];
+    var scores = [[0.69,0.85,0.79],[0.51,-1.23,0.84],[0.73,0.72,0.57]];
+    var dk = 3;
+    var scaled = scores.map(function(r) { return r.map(function(v) { return v / Math.sqrt(dk); }); });
+    var alpha = scaled.map(softmaxRow);
+
+    var infos = [
+      { t: '词嵌入 X', d: '3 个词各有一个 4 维嵌入向量。此时向量只包含词本身的静态信息，互相之间没有交互。' },
+      { t: 'Query 空间', d: 'X × W^Q → Q (3×3)。每个词被投影到 Query 空间：代表"我想找什么信息"。注意 Q 的维度从 4 降到了 3。' },
+      { t: 'Key 空间', d: 'X × W^K → K (3×3)。同样的 X 被投影到 Key 空间：代表"我能提供什么线索"。W^K ≠ W^Q，所以 K ≠ Q。' },
+      { t: '点积 → 分数矩阵', d: 'Q × K^T → (3×3) 分数矩阵。每个 S[i][j] = q_i · k_j = 位置 i 对位置 j 的原始匹配分数。注意这个矩阵不对称。' },
+      { t: '缩放 + Softmax', d: '除以 √d_k 后做 softmax。每行变成概率分布——这就是注意力权重。"猫"最关注"坐"('+  (alpha[0][1]*100).toFixed(0)+'%)，"坐"最关注"垫子"('+(alpha[1][2]*100).toFixed(0)+'%)。' },
+      { t: '关系矩阵', d: '最终的 α 矩阵就是 Attention 学到的"词与词关系"。它不对称（猫→坐 ≠ 坐→猫），不固定（换一组 W^Q, W^K 就完全不同），且由训练数据驱动。' },
+    ];
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var stages = [];
+
+      // Stage 0: X
+      if (step >= 0) {
+        stages.push({ label: 'X', sub: '(3×4)', color: c.pStrong, x: 30 });
+      }
+      // Stage 1: Q
+      if (step >= 1) {
+        stages.push({ label: 'Q', sub: '(3×3)', color: c.pStrong, x: 160 });
+      }
+      // Stage 2: K
+      if (step >= 2) {
+        stages.push({ label: 'K', sub: '(3×3)', color: c.warning, x: 290 });
+      }
+      // Stage 3: QK^T
+      if (step >= 3) {
+        stages.push({ label: 'QK^T', sub: '(3×3)', color: c.danger, x: 420 });
+      }
+      // Stage 4: α
+      if (step >= 4) {
+        stages.push({ label: 'α', sub: '(3×3)', color: c.purple, x: 550 });
+      }
+
+      // Draw stages as boxes
+      stages.forEach(function(st, idx) {
+        var bx = st.x, by = 30, bw = 110, bh = 180;
+        h += '<rect x="'+bx+'" y="'+by+'" width="'+bw+'" height="'+bh+'" rx="8" fill="'+c.node+'" stroke="'+st.color+'" stroke-width="2"/>';
+        h += '<text x="'+(bx+bw/2)+'" y="'+(by+18)+'" text-anchor="middle" fill="'+st.color+'" font-size="12" font-weight="700">'+st.label+' '+st.sub+'</text>';
+
+        // Decide data
+        var data;
+        if (st.label === 'X') data = X;
+        else if (st.label === 'Q') data = Q;
+        else if (st.label === 'K') data = K;
+        else if (st.label === 'QK^T') data = scores;
+        else data = alpha;
+
+        // Render rows
+        for (var i = 0; i < 3; i++) {
+          var rowStr = data[i].map(function(v) { return v.toFixed(2); }).join(' ');
+          h += '<text x="'+(bx+8)+'" y="'+(by+42+i*22)+'" fill="'+c.text+'" font-size="9" font-family="monospace">'+words[i]+': '+rowStr+'</text>';
+        }
+
+        // Highlight for alpha (color by value)
+        if (st.label === 'α') {
+          var gy = by + 100;
+          for (var i2 = 0; i2 < 3; i2++) {
+            for (var j = 0; j < 3; j++) {
+              var v = alpha[i2][j];
+              var cx = bx + 12 + j * 32;
+              var cy = gy + i2 * 22;
+              h += '<rect x="'+cx+'" y="'+cy+'" width="28" height="18" rx="3" fill="'+c.purple+'" opacity="'+(0.1+v*0.9)+'"/>';
+              h += '<text x="'+(cx+14)+'" y="'+(cy+13)+'" text-anchor="middle" fill="'+(v>0.35?'white':c.text)+'" font-size="8" font-weight="600">'+(v*100).toFixed(0)+'%</text>';
+            }
+          }
+        }
+
+        // Arrows between stages
+        if (idx > 0) {
+          var prevSt = stages[idx-1];
+          var ax1 = prevSt.x + 110;
+          var ax2 = bx;
+          var ay2 = by + 90;
+          h += '<line x1="'+ax1+'" y1="'+ay2+'" x2="'+ax2+'" y2="'+ay2+'" stroke="'+c.muted+'" stroke-width="2" marker-end="url(#ta)"/>';
+
+          // Operation labels
+          var labels = { Q: '×W^Q', K: '×W^K', 'QK^T': 'Q×K^T', 'α': 'softmax' };
+          var lbl = labels[st.label] || '';
+          h += '<text x="'+((ax1+ax2)/2)+'" y="'+(ay2-8)+'" text-anchor="middle" fill="'+st.color+'" font-size="9" font-weight="600">'+lbl+'</text>';
+        }
+      });
+
+      // Step 5: final highlight
+      if (step >= 5) {
+        h += '<rect x="545" y="25" width="120" height="190" rx="8" fill="none" stroke="'+c.success+'" stroke-width="3" stroke-dasharray="6,3"/>';
+        h += '<text x="605" y="240" text-anchor="middle" fill="'+c.success+'" font-size="11" font-weight="700">← 这就是"关系"</text>';
+
+        // Asymmetry callout
+        h += '<text x="360" y="260" text-anchor="middle" fill="'+c.danger+'" font-size="10">注意：α[猫→坐] = '+(alpha[0][1]*100).toFixed(0)+'% ≠ α[坐→猫] = '+(alpha[1][0]*100).toFixed(0)+'%</text>';
+        h += '<text x="360" y="278" text-anchor="middle" fill="'+c.muted+'" font-size="10">→ 不对称！"谁更关注谁"是不同的。</text>';
+      }
+
+      h += '<defs><marker id="ta" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="'+c.muted+'"/></marker></defs>';
+
+      svg.innerHTML = h;
+      disp.textContent = step + ' / ' + (total - 1);
+      infoEl.innerHTML = '<strong>' + infos[step].t + '</strong>：' + infos[step].d;
+    }
+
+    function go(d) { step = Math.max(0, Math.min(total - 1, step + d)); draw(); }
+    prev.addEventListener('click', function() { go(-1); });
+    next.addEventListener('click', function() { go(1); });
+    document.addEventListener('keydown', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight') go(1);
+      if (e.key === 'ArrowLeft') go(-1);
+    });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ Init ============
+  function init() {
+    initDotProduct();
+    initVsCompare();
+    initProjCompare();
+    initContext();
+    initScoreFns();
+    initDiagonal();
+    initTrace();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+`}</script>
