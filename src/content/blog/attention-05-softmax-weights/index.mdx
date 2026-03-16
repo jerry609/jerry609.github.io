@@ -1,0 +1,1008 @@
+---
+title: "Attention 05：softmax 为什么会变成注意力权重"
+description: "非负、归一化、放大差异但不绝对独占——softmax 如何把分数变成信息分配比例。"
+publishDate: "2026-03-16"
+tags: ["LLM", "Transformer", "Attention", "专题"]
+language: "zh-CN"
+draft: false
+---
+
+<style>{`
+  .attn-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .attn-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .attn-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .attn-demo-info {
+    text-align: center; font-size: 0.8rem;
+    color: hsl(var(--muted-foreground)); margin-top: 0.5rem;
+  }
+  .attn-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .attn-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .attn-btn-primary:hover { opacity: 0.85; }
+  .attn-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .attn-btn-secondary:hover { opacity: 0.85; }
+  .attn-btn:disabled { opacity: 0.4; cursor: default; }
+  .attn-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .score-input {
+    width: 60px; text-align: center; padding: 0.3rem;
+    border: 1.5px solid hsl(var(--border)); border-radius: 6px;
+    background: hsl(var(--card)); color: hsl(var(--foreground));
+    font-family: monospace; font-size: 0.9rem; font-weight: 600;
+  }
+  .score-input:focus {
+    outline: none; border-color: hsl(var(--primary));
+  }
+`}</style>
+
+[返回专题总目录](/blog/attention-series-outline/) · [上一讲：为什么 QKᵀ 表示关系](/blog/attention-04-qkt-meaning/)
+
+`01 > 02 > 03 > 04 > [05] > 06 | 07 > 08 > 09 > 10 > 11 > 12`
+
+> *"softmax 不是在证明谁最重要，而是在给当前 token 生成一个对所有候选位置的信息分配比例。"*
+
+---
+
+## 这一讲要回答什么
+
+上一讲我们知道 $QK^\top$ 产生了原始分数矩阵——每一行是一个 Query 对所有 Key 的匹配分数。但这些分数可以是任意实数：正的、负的、大的、小的。
+
+它们不能直接当"注意力权重"用，因为：
+
+- 负分数怎么理解？注意力为 -0.3 是什么意思？
+- 分数没有统一量纲，不同行之间无法比较
+- 不满足"分配比例"的语义——权重应该加起来等于 1
+
+所以需要一个函数，把任意实数变成**合法的概率分布**。这个函数就是 softmax：
+
+$$
+\alpha_j = \text{softmax}(s_j) = \frac{e^{s_j}}{\sum_{k=1}^{n} e^{s_k}}
+$$
+
+这一讲要回答：**为什么偏偏是 softmax？它的三个性质为什么恰好满足"注意力权重"的要求？**
+
+---
+
+## 先手算一次
+
+拿 3 个分数 $[2.0, \; 1.0, \; 0.5]$ 做一次完整的 softmax。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：实时 softmax 计算器</div>
+  <span class="attn-demo-subtitle">修改下面的分数，实时查看 softmax 的每一步计算和输出分布</span>
+  <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; align-items: center;">
+    <div style="text-align: center;">
+      <div style="font-size: 0.75rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.3rem;">s₁</div>
+      <input type="number" id="s-in-0" class="score-input" value="2.0" step="0.5"/>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 0.75rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.3rem;">s₂</div>
+      <input type="number" id="s-in-1" class="score-input" value="1.0" step="0.5"/>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 0.75rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.3rem;">s₃</div>
+      <input type="number" id="s-in-2" class="score-input" value="0.5" step="0.5"/>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 0.75rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.3rem;">s₄</div>
+      <input type="number" id="s-in-3" class="score-input" value="-1.0" step="0.5"/>
+    </div>
+  </div>
+  <svg id="calc-svg" viewBox="0 0 700 300" style="width: 100%; max-height: 300px; margin-top: 1rem;"></svg>
+  <div id="calc-info" class="attn-step-info"></div>
+</div>
+
+手算过程（以默认值 $[2.0, 1.0, 0.5, -1.0]$ 为例）：
+
+| 步骤 | Token 1 | Token 2 | Token 3 | Token 4 |
+| --- | --- | --- | --- | --- |
+| 原始分数 $s$ | 2.0 | 1.0 | 0.5 | -1.0 |
+| $e^s$ | 7.389 | 2.718 | 1.649 | 0.368 |
+| $\alpha = e^s / \sum e^s$ | 0.609 | 0.224 | 0.136 | 0.030 |
+
+验证：$0.609 + 0.224 + 0.136 + 0.030 = 1.000$ ✓
+
+---
+
+## softmax 的三个关键性质
+
+### 性质 1：非负
+
+$$
+e^{s_j} > 0 \quad \Longrightarrow \quad \alpha_j > 0
+$$
+
+不管原始分数多小、多负，指数函数的输出永远是正数。这保证了每个位置的权重 ≥ 0——"关注程度"不会是负数。
+
+### 性质 2：归一化
+
+$$
+\sum_{j=1}^{n} \alpha_j = \sum_{j=1}^{n} \frac{e^{s_j}}{\sum_k e^{s_k}} = 1
+$$
+
+所有权重加起来恰好等于 1，可以直接解读为**概率分布**或**信息分配比例**。"位置 $j$ 获得 30% 的注意力"比"位置 $j$ 的分数是 1.8"有意义得多。
+
+### 性质 3：保序且放大差异
+
+$$
+s_i > s_j \quad \Longrightarrow \quad \alpha_i > \alpha_j
+$$
+
+分数大的位置权重一定更大（保序），但差距会被**指数函数放大**。原始分数差 1.0，经过 $e^x$ 后差距变成 $e \approx 2.718$ 倍。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：指数放大效应</div>
+  <span class="attn-demo-subtitle">拖动滑块改变分数差距，观察 softmax 如何放大微小的分数差异</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <label style="font-size: 0.85rem; color: hsl(var(--foreground));">
+      最高分与次高分的差距 Δ = <strong id="gap-val">1.0</strong>
+    </label>
+    <br/>
+    <input type="range" id="gap-slider" min="0" max="5" value="1.0" step="0.1" style="width: 80%; max-width: 400px; margin-top: 0.5rem;"/>
+  </div>
+  <svg id="gap-svg" viewBox="0 0 700 220" style="width: 100%; max-height: 220px;"></svg>
+  <div id="gap-info" class="attn-step-info"></div>
+</div>
+
+关键观察：
+- Δ = 0 时，所有位置权重相等（均匀分布）
+- Δ 逐渐增大时，最高分位置越来越"独占"
+- 但即使 Δ 很大，其他位置的权重**永远不会变成 0**——softmax 是"软"的
+
+这就是 **soft**max 名字的由来：它**放大**差异，但**不完全消灭**低分位置，总是保留一点"后路"。
+
+---
+
+## 温度参数：控制 softmax 的"锐利度"
+
+在实际应用中，有时需要调节 softmax 的尖锐程度。方法很简单——在分数上除以一个**温度参数** $T$：
+
+$$
+\alpha_j = \frac{e^{s_j / T}}{\sum_k e^{s_k / T}}
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：温度如何改变注意力分布</div>
+  <span class="attn-demo-subtitle">拖动滑块调节温度 T，观察 softmax 输出从均匀到尖锐的变化</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <label style="font-size: 0.85rem; color: hsl(var(--foreground));">
+      温度 T = <strong id="temp-val">1.0</strong>
+    </label>
+    <br/>
+    <input type="range" id="temp-slider" min="0.1" max="5" value="1.0" step="0.1" style="width: 80%; max-width: 400px; margin-top: 0.5rem;"/>
+  </div>
+  <svg id="temp-svg" viewBox="0 0 700 240" style="width: 100%; max-height: 240px;"></svg>
+  <div id="temp-info" class="attn-step-info"></div>
+</div>
+
+| 温度 | 行为 | 类比 |
+| --- | --- | --- |
+| $T \to 0^+$ | 趋近 one-hot（hardmax） | "只看最相关的一个位置" |
+| $T = 1$ | 标准 softmax | Attention 的默认行为 |
+| $T \to \infty$ | 趋近均匀分布 | "所有位置一视同仁" |
+
+在 Attention 中，$\sqrt{d_k}$ 就起到了类似温度的作用——第 3 讲说过，除以 $\sqrt{d_k}$ 防止分数过大导致 softmax 退化成 one-hot。
+
+**对应关系**：$\text{softmax}(QK^\top / \sqrt{d_k})$ 中的 $\sqrt{d_k}$ 就是温度 $T$。$d_k$ 越大，"温度"越高，分布越平滑。
+
+---
+
+## 为什么不用别的归一化方式
+
+### 候选 1：直接除以总和
+
+$$
+\alpha_j = \frac{s_j}{\sum_k s_k}
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互对比：softmax vs 直接归一化 vs hardmax</div>
+  <span class="attn-demo-subtitle">点击切换，观察同一组分数在不同归一化方式下的输出差异</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <button id="norm-softmax" class="attn-btn attn-btn-primary" style="margin: 0.2rem;">softmax ✓</button>
+    <button id="norm-linear" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">直接归一化</button>
+    <button id="norm-hardmax" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">hardmax</button>
+    <button id="norm-sparsemax" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">sparsemax</button>
+  </div>
+  <svg id="norm-svg" viewBox="0 0 700 280" style="width: 100%; max-height: 280px;"></svg>
+  <div id="norm-info" class="attn-step-info"></div>
+</div>
+
+直接除以总和有两个致命问题：
+
+1. **负分数怎么办？** $s = [3, -1, 2]$，总和 = 4，但 $\alpha_2 = -1/4 = -0.25$ 是负权重——含义不明
+2. **总和为 0 怎么办？** $s = [1, -1]$，除以 0 直接崩溃
+
+softmax 用 $e^x$ 把所有分数先映射到正数，从根源上避免了这两个问题。
+
+### 候选 2：hardmax（只取最大值）
+
+$$
+\alpha_j = \begin{cases} 1 & \text{if } j = \arg\max_k s_k \\ 0 & \text{otherwise} \end{cases}
+$$
+
+hardmax 的问题第 2 讲已经讲过：不可微、丢信息。这里补充一个更根本的问题——**梯度为零**。hardmax 输出是阶跃函数，几乎处处梯度为 0，反向传播时什么也学不到。
+
+### 候选 3：sparsemax
+
+sparsemax 是 softmax 的"稀疏"变体：部分位置的权重会**恰好等于 0**（不只是接近 0）。
+
+$$
+\text{sparsemax}(\mathbf{s}) = \arg\min_{\mathbf{p} \in \Delta^n} \|\mathbf{p} - \mathbf{s}\|^2
+$$
+
+sparsemax 在一些场景下有优势（注意力更可解释），但标准 Transformer 不用它，因为：
+- 计算比 softmax 复杂（需要排序）
+- GPU 上缺乏高效实现
+- 实验证明对 Transformer 性能提升不大
+
+### 总结
+
+| 方式 | 非负 | 归一化 | 可微 | 保留低分信息 | 计算效率 |
+| --- | --- | --- | --- | --- | --- |
+| 直接归一化 | ✗ | ✓ | ✓ | ✓ | 快 |
+| hardmax | ✓ | ✓ | ✗ | ✗ | 快 |
+| sparsemax | ✓ | ✓ | ✓ | 部分 | 慢 |
+| **softmax** | **✓** | **✓** | **✓** | **✓** | **快** |
+
+softmax 是唯一同时满足全部四个要求的函数。
+
+---
+
+## softmax 的梯度：为什么它能训练
+
+softmax 可微这件事非常重要。它的 Jacobian 矩阵是：
+
+$$
+\frac{\partial \alpha_i}{\partial s_j} = \alpha_i (\delta_{ij} - \alpha_j)
+$$
+
+其中 $\delta_{ij}$ 是 Kronecker delta。这意味着：
+
+- **$i = j$**（自身）：$\frac{\partial \alpha_i}{\partial s_i} = \alpha_i(1 - \alpha_i)$ — 权重越接近 0 或 1，梯度越小
+- **$i \neq j$**（交叉）：$\frac{\partial \alpha_i}{\partial s_j} = -\alpha_i \alpha_j$ — 提高一个位置的分数会降低其他位置的权重
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：softmax 的梯度</div>
+  <span class="attn-demo-subtitle">点击某个位置，查看提高它的分数如何影响所有位置的权重</span>
+  <svg id="grad-svg" viewBox="0 0 700 260" style="width: 100%; max-height: 260px;"></svg>
+  <div id="grad-info" class="attn-step-info"></div>
+</div>
+
+梯度消失的风险：当某个 $\alpha_i \to 1$（softmax 退化成 one-hot），自身梯度 $\alpha_i(1-\alpha_i) \to 0$。这就是为什么要除以 $\sqrt{d_k}$——**防止分数过大导致 softmax 过于尖锐，从而导致梯度消失**。
+
+---
+
+## 数值稳定性：一个工程细节
+
+直接计算 $e^{s_j}$ 有溢出风险。如果 $s_j = 1000$，$e^{1000}$ 超出 float64 范围。
+
+解决方法很简单——先减去最大值：
+
+$$
+\text{softmax}(s_j) = \frac{e^{s_j}}{\sum_k e^{s_k}} = \frac{e^{s_j - \max(s)}}{\sum_k e^{s_k - \max(s)}}
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：数值稳定性</div>
+  <span class="attn-demo-subtitle">拖动滑块增大分数量级，观察减去最大值如何避免溢出</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <label style="font-size: 0.85rem; color: hsl(var(--foreground));">
+      分数缩放因子 = <strong id="overflow-val">1</strong>×
+    </label>
+    <br/>
+    <input type="range" id="overflow-slider" min="1" max="500" value="1" step="1" style="width: 80%; max-width: 400px; margin-top: 0.5rem;"/>
+  </div>
+  <svg id="overflow-svg" viewBox="0 0 700 200" style="width: 100%; max-height: 200px;"></svg>
+  <div id="overflow-info" class="attn-step-info"></div>
+</div>
+
+数学上完全等价，但数值上安全得多——减去最大值后所有指数的参数 ≤ 0，$e^x \leq 1$，不可能溢出。
+
+**PyTorch 的 `F.softmax` 和 `torch.softmax` 内部已经做了这个优化，不需要手写。**
+
+---
+
+## 完整的 PyTorch 实验
+
+```python
+import torch
+import torch.nn.functional as F
+import math
+
+scores = torch.tensor([2.0, 1.0, 0.5, -1.0])
+
+# ---- 手动实现 softmax ----
+def manual_softmax(s):
+    s_shifted = s - s.max()        # 数值稳定：减去最大值
+    exps = torch.exp(s_shifted)    # e^(s - max)
+    return exps / exps.sum()       # 归一化
+
+print("手动 softmax:", manual_softmax(scores))
+print("PyTorch softmax:", F.softmax(scores, dim=0))
+# 结果完全一致
+
+# ---- 性质验证 ----
+alpha = F.softmax(scores, dim=0)
+print(f"\n非负: 所有 α > 0? {(alpha > 0).all()}")         # True
+print(f"归一化: Σα = {alpha.sum().item():.6f}")             # 1.000000
+print(f"保序: scores 排序 = α 排序? "
+      f"{(scores.argsort() == alpha.argsort()).all()}")       # True
+
+# ---- 温度实验 ----
+print("\n温度实验:")
+for T in [0.1, 0.5, 1.0, 2.0, 5.0]:
+    a = F.softmax(scores / T, dim=0)
+    entropy = -(a * a.log()).sum().item()
+    print(f"  T={T:.1f}: α={a.numpy().round(3)}, 熵={entropy:.3f}")
+
+# ---- 梯度 ----
+scores_g = scores.clone().requires_grad_(True)
+alpha_g = F.softmax(scores_g, dim=0)
+alpha_g[0].backward()  # 对第一个位置的权重求梯度
+print(f"\n提高 s₁ 对各位置权重的影响:")
+print(f"  ∂α/∂s = {scores_g.grad.numpy().round(4)}")
+# 第一个位置正梯度（提高自己），其余负梯度（降低别人）
+
+# ---- 数值稳定性 ----
+big_scores = scores * 500  # 放大 500 倍
+try:
+    naive = torch.exp(big_scores) / torch.exp(big_scores).sum()
+    print(f"\n朴素计算: {naive}")  # 可能出现 nan/inf
+except:
+    print("\n朴素计算: 溢出!")
+print(f"稳定计算: {F.softmax(big_scores, dim=0)}")  # 正常
+```
+
+---
+
+## 把 softmax 放回 Attention 里
+
+现在我们可以完整理解注意力权重矩阵 $\alpha$ 的含义：
+
+$$
+\alpha_{ij} = \frac{e^{S_{ij}/\sqrt{d_k}}}{\sum_{k=1}^{n} e^{S_{ik}/\sqrt{d_k}}}
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：注意力权重热力图</div>
+  <span class="attn-demo-subtitle">点击任意行（Query 位置），查看该位置的完整注意力分布和 softmax 计算</span>
+  <svg id="heatmap-svg" viewBox="0 0 700 340" style="width: 100%; max-height: 340px;"></svg>
+  <div id="heatmap-info" class="attn-step-info"></div>
+</div>
+
+**逐行阅读**这个矩阵：
+
+- 第 $i$ 行：位置 $i$ 把注意力分配给所有位置的比例
+- 每行之和 = 1（softmax 保证）
+- 颜色越深 = 权重越大 = 从该位置取越多信息
+
+softmax 把"分数"变成了"比例"——这就是为什么 Attention 的输出 $\alpha V$ 是一个**加权平均**，而不是某种奇怪的线性组合。
+
+---
+
+## 这一讲的三个核心结论
+
+1. **softmax 满足注意力权重的所有要求**：非负、归一化、可微、保序。是唯一同时满足这四个条件且计算高效的函数。
+
+2. **指数函数放大差异但不消灭低分**。分数高的位置获得更多权重，但其他位置永远不会完全归零——这是"soft"的核心含义。
+
+3. **$\sqrt{d_k}$ 就是温度**。它控制 softmax 的锐利度：防止分数过大导致 one-hot 退化（梯度消失），也防止分数过小导致均匀分布（不区分重要性）。
+
+---
+
+## 试着想一想
+
+1. 如果所有分数都相等（$s_1 = s_2 = \cdots = s_n$），softmax 输出什么？这对应 Attention 的什么行为？
+2. 温度 $T$ 和 $\sqrt{d_k}$ 的区别是什么？一个是超参数，另一个是……？
+3. softmax 的梯度公式 $\alpha_i(1 - \alpha_i)$ 和 sigmoid 的梯度 $\sigma(1 - \sigma)$ 长得一样。这是巧合吗？（提示：softmax 是 sigmoid 的多类推广。）
+4. 如果用 $\text{ReLU}(s_j) / \sum_k \text{ReLU}(s_k)$ 替代 softmax，会出什么问题？
+5. 为什么 Flash Attention 的论文要花大量篇幅讨论 softmax 的计算？它和矩阵分块有什么冲突？（提示：softmax 的分母需要看到一整行。）
+
+---
+
+## 下一讲
+
+softmax 产出了权重，下一步是 $\alpha V$——加权求和。但为什么是求和？为什么不直接取权重最大的那个 Value？
+
+> 第 6 讲：为什么是加权求和而不是取最大值
+
+---
+
+<script>{`
+(function() {
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+  function C() {
+    var d = isDark();
+    return {
+      text: d ? '#e2e8f0' : '#334155',
+      muted: d ? '#94a3b8' : '#64748b',
+      primary: d ? '#7dd3fc' : '#3b82f6',
+      pStrong: '#3b82f6',
+      pLight: d ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981', sLight: d ? '#064e3b' : '#d1fae5',
+      warning: '#f59e0b', wLight: d ? '#78350f' : '#fef3c7',
+      danger: '#ef4444', dLight: d ? '#7f1d1d' : '#fee2e2',
+      purple: '#8b5cf6', purpleLight: d ? '#4c1d95' : '#ede9fe',
+      border: d ? '#334155' : '#e2e8f0',
+      node: d ? '#1e293b' : '#ffffff',
+      nodeStroke: d ? '#475569' : '#cbd5e1',
+    };
+  }
+  function onTheme(fn) {
+    new MutationObserver(fn).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+  function softmax(arr, T) {
+    T = T || 1;
+    var mx = Math.max.apply(null, arr);
+    var exps = arr.map(function(v) { return Math.exp((v - mx) / T); });
+    var s = exps.reduce(function(a, b) { return a + b; });
+    return exps.map(function(e) { return e / s; });
+  }
+
+  // ============ 1. Live Softmax Calculator ============
+  function initCalc() {
+    var svg = document.getElementById('calc-svg');
+    var infoEl = document.getElementById('calc-info');
+    if (!svg) return;
+
+    function getScores() {
+      var s = [];
+      for (var i = 0; i < 4; i++) {
+        var el = document.getElementById('s-in-' + i);
+        s.push(el ? parseFloat(el.value) || 0 : 0);
+      }
+      return s;
+    }
+
+    function draw() {
+      var c = C();
+      var scores = getScores();
+      var mx = Math.max.apply(null, scores);
+      var shifted = scores.map(function(v) { return v - mx; });
+      var exps = shifted.map(function(v) { return Math.exp(v); });
+      var sumE = exps.reduce(function(a, b) { return a + b; });
+      var alpha = exps.map(function(e) { return e / sumE; });
+      var maxA = Math.max.apply(null, alpha);
+      var labels = ['Token 1', 'Token 2', 'Token 3', 'Token 4'];
+
+      var h = '';
+      var sx = 60, gap = 160, barBase = 240, barMax = 140;
+
+      // Step labels
+      h += '<text x="20" y="30" fill="' + c.muted + '" font-size="10">原始分数 s</text>';
+      h += '<text x="20" y="55" fill="' + c.muted + '" font-size="10">e^(s-max)</text>';
+      h += '<text x="20" y="80" fill="' + c.muted + '" font-size="10">α = e^s/Σe^s</text>';
+
+      labels.forEach(function(l, i) {
+        var x = sx + i * gap;
+        var a = alpha[i];
+        var isMax = a === maxA;
+
+        // Score
+        h += '<text x="' + x + '" y="30" text-anchor="middle" fill="' + c.text + '" font-size="12" font-weight="600" font-family="monospace">' + scores[i].toFixed(1) + '</text>';
+        // Exp
+        h += '<text x="' + x + '" y="55" text-anchor="middle" fill="' + c.warning + '" font-size="11" font-family="monospace">' + exps[i].toFixed(3) + '</text>';
+        // Alpha
+        h += '<text x="' + x + '" y="80" text-anchor="middle" fill="' + (isMax ? c.pStrong : c.text) + '" font-size="13" font-weight="700" font-family="monospace">' + (a * 100).toFixed(1) + '%</text>';
+
+        // Bar
+        var barH = (a / (maxA + 0.001)) * barMax;
+        var barColor = isMax ? c.pStrong : (a > 0.15 ? '#60a5fa' : c.muted);
+        h += '<rect x="' + (x - 30) + '" y="' + (barBase - barH) + '" width="60" height="' + barH + '" rx="5" fill="' + barColor + '" opacity="' + (0.3 + a / (maxA + 0.001) * 0.7) + '"/>';
+        h += '<text x="' + x + '" y="' + (barBase + 18) + '" text-anchor="middle" fill="' + c.text + '" font-size="11" font-weight="' + (isMax ? '700' : '400') + '">' + l + '</text>';
+      });
+
+      // Sum line
+      h += '<line x1="40" y1="' + barBase + '" x2="680" y2="' + barBase + '" stroke="' + c.border + '" stroke-width="1"/>';
+
+      // Sum = info
+      h += '<text x="660" y="80" text-anchor="end" fill="' + c.muted + '" font-size="10">Σe^s = ' + sumE.toFixed(3) + '</text>';
+      h += '<text x="660" y="96" text-anchor="end" fill="' + c.success + '" font-size="10" font-weight="600">Σα = ' + alpha.reduce(function(a2, b) { return a2 + b; }).toFixed(4) + '</text>';
+
+      // Entropy
+      var entropy = -alpha.reduce(function(s2, p) { return s2 + (p > 1e-10 ? p * Math.log(p) : 0); }, 0);
+      h += '<text x="660" y="112" text-anchor="end" fill="' + c.muted + '" font-size="10">熵 = ' + entropy.toFixed(3) + '</text>';
+
+      svg.innerHTML = h;
+      infoEl.innerHTML = '最大权重：' + labels[alpha.indexOf(maxA)] + ' (' + (maxA * 100).toFixed(1) + '%)。熵 = ' + entropy.toFixed(3) + '（最大可能 = ' + Math.log(4).toFixed(3) + '）。试试把某个分数改成很大或很小的值。';
+    }
+
+    for (var i = 0; i < 4; i++) {
+      var el = document.getElementById('s-in-' + i);
+      if (el) el.addEventListener('input', draw);
+    }
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 2. Gap / Amplification Demo ============
+  function initGap() {
+    var svg = document.getElementById('gap-svg');
+    var slider = document.getElementById('gap-slider');
+    var valEl = document.getElementById('gap-val');
+    var infoEl = document.getElementById('gap-info');
+    if (!svg || !slider) return;
+
+    function draw() {
+      var c = C();
+      var gap = parseFloat(slider.value);
+      valEl.textContent = gap.toFixed(1);
+
+      var scores = [1.0 + gap, 1.0, 0.5, 0.2];
+      var alpha = softmax(scores);
+      var labels = ['最高分', 'Token 2', 'Token 3', 'Token 4'];
+      var maxA = Math.max.apply(null, alpha);
+      var sx = 80, gapX = 140, barBase = 170, barMax = 120;
+
+      var h = '';
+      h += '<text x="350" y="22" text-anchor="middle" fill="' + c.text + '" font-size="12" font-weight="600">分数: [' + scores.map(function(v) { return v.toFixed(1); }).join(', ') + ']</text>';
+
+      labels.forEach(function(l, i) {
+        var x = sx + i * gapX;
+        var a = alpha[i];
+        var isMax = i === 0;
+        var barH = (a / (maxA + 0.001)) * barMax;
+        var barColor = isMax ? c.pStrong : c.muted;
+
+        h += '<rect x="' + (x - 28) + '" y="' + (barBase - barH) + '" width="56" height="' + barH + '" rx="5" fill="' + barColor + '" opacity="' + (0.3 + a / (maxA + 0.001) * 0.7) + '"/>';
+        h += '<text x="' + x + '" y="' + (barBase - barH - 6) + '" text-anchor="middle" fill="' + c.text + '" font-size="11" font-weight="700">' + (a * 100).toFixed(1) + '%</text>';
+        h += '<text x="' + x + '" y="' + (barBase + 18) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">' + l + '</text>';
+        h += '<text x="' + x + '" y="' + (barBase + 33) + '" text-anchor="middle" fill="' + c.muted + '" font-size="9" font-family="monospace">s=' + scores[i].toFixed(1) + '</text>';
+      });
+
+      h += '<line x1="40" y1="' + barBase + '" x2="660" y2="' + barBase + '" stroke="' + c.border + '" stroke-width="1"/>';
+
+      svg.innerHTML = h;
+
+      if (gap < 0.2) {
+        infoEl.innerHTML = 'Δ ≈ 0：所有分数几乎相等 → softmax 输出接近 <strong>均匀分布</strong>。注意力没有重点。';
+      } else if (gap < 2) {
+        infoEl.innerHTML = 'Δ = ' + gap.toFixed(1) + '：最高分位置获得更多权重，但其他位置仍然有非零权重。softmax 在<strong>放大差异但保留多样性</strong>。';
+      } else {
+        infoEl.innerHTML = 'Δ = ' + gap.toFixed(1) + '：最高分位置接近独占（' + (alpha[0] * 100).toFixed(1) + '%），其他位置权重被压缩到很小。但即便如此，<strong>它们仍然不是 0</strong>——这就是"软"的含义。';
+      }
+    }
+
+    slider.addEventListener('input', draw);
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 3. Temperature Demo ============
+  function initTemp() {
+    var svg = document.getElementById('temp-svg');
+    var slider = document.getElementById('temp-slider');
+    var valEl = document.getElementById('temp-val');
+    var infoEl = document.getElementById('temp-info');
+    if (!svg || !slider) return;
+
+    var baseScores = [2.5, 1.2, 0.8, -0.3, 0.5];
+    var labels = ['猫', '坐', '在', '了', '垫子'];
+
+    function draw() {
+      var c = C();
+      var T = parseFloat(slider.value);
+      valEl.textContent = T.toFixed(1);
+
+      var alpha = softmax(baseScores, T);
+      var maxA = Math.max.apply(null, alpha);
+      var sx = 60, gapX = 125, barBase = 195, barMax = 130;
+
+      var h = '';
+      labels.forEach(function(l, i) {
+        var x = sx + i * gapX;
+        var a = alpha[i];
+        var isMax = a === maxA;
+        var barH = Math.max(2, (a / (maxA + 0.001)) * barMax);
+        var barColor = isMax ? c.pStrong : (a > 0.15 ? '#60a5fa' : c.muted);
+
+        h += '<rect x="' + (x - 25) + '" y="' + (barBase - barH) + '" width="50" height="' + barH + '" rx="5" fill="' + barColor + '" opacity="' + (0.3 + a / (maxA + 0.001) * 0.7) + '"/>';
+        h += '<text x="' + x + '" y="' + (barBase - barH - 6) + '" text-anchor="middle" fill="' + c.text + '" font-size="11" font-weight="700">' + (a * 100).toFixed(1) + '%</text>';
+        h += '<text x="' + x + '" y="' + (barBase + 18) + '" text-anchor="middle" fill="' + c.text + '" font-size="12" font-weight="' + (isMax ? '700' : '400') + '">' + l + '</text>';
+        h += '<text x="' + x + '" y="' + (barBase + 33) + '" text-anchor="middle" fill="' + c.muted + '" font-size="9" font-family="monospace">s=' + baseScores[i].toFixed(1) + '</text>';
+      });
+
+      h += '<line x1="20" y1="' + barBase + '" x2="680" y2="' + barBase + '" stroke="' + c.border + '" stroke-width="1"/>';
+
+      // Entropy bar
+      var entropy = -alpha.reduce(function(s2, p) { return s2 + (p > 1e-10 ? p * Math.log(p) : 0); }, 0);
+      var maxEntropy = Math.log(5);
+      h += '<text x="640" y="30" text-anchor="end" fill="' + c.muted + '" font-size="10">熵 = ' + entropy.toFixed(3) + '</text>';
+      var ew = 100;
+      h += '<rect x="540" y="36" width="' + ew + '" height="6" rx="3" fill="' + c.border + '"/>';
+      h += '<rect x="540" y="36" width="' + (ew * entropy / maxEntropy) + '" height="6" rx="3" fill="' + c.pStrong + '"/>';
+
+      svg.innerHTML = h;
+
+      if (T < 0.3) {
+        infoEl.innerHTML = 'T = ' + T.toFixed(1) + '（极低温度）：分布接近 <strong>one-hot</strong>，几乎所有注意力集中在"猫"上。相当于 hardmax，梯度接近 0。';
+      } else if (T < 1.5) {
+        infoEl.innerHTML = 'T = ' + T.toFixed(1) + '：正常范围。最高分位置获得最大权重，但其他位置也有合理的比例。<strong>标准 Attention 使用 T = √d_k。</strong>';
+      } else {
+        infoEl.innerHTML = 'T = ' + T.toFixed(1) + '（高温度）：分布趋近 <strong>均匀</strong>，所有位置权重差不多。注意力失去了区分能力——所有位置被平等对待。';
+      }
+    }
+
+    slider.addEventListener('input', draw);
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 4. Normalization Comparison ============
+  function initNorm() {
+    var svg = document.getElementById('norm-svg');
+    var infoEl = document.getElementById('norm-info');
+    if (!svg) return;
+
+    var scores = [2.5, -0.8, 1.5, 0.3];
+    var labels = ['猫', '了', '垫子', '上'];
+    var current = 'softmax';
+
+    function compute(mode) {
+      if (mode === 'softmax') return softmax(scores);
+      if (mode === 'linear') {
+        var s = scores.reduce(function(a, b) { return a + b; });
+        return scores.map(function(v) { return v / s; });
+      }
+      if (mode === 'hardmax') {
+        var mx = Math.max.apply(null, scores);
+        return scores.map(function(v) { return v === mx ? 1 : 0; });
+      }
+      if (mode === 'sparsemax') {
+        // Simplified sparsemax approximation
+        var sorted = scores.slice().sort(function(a, b) { return b - a; });
+        var cumSum = 0, k = 0;
+        for (var i = 0; i < sorted.length; i++) {
+          cumSum += sorted[i];
+          if (sorted[i] > (cumSum - 1) / (i + 1)) k = i + 1;
+        }
+        cumSum = 0;
+        for (var j = 0; j < k; j++) cumSum += sorted[j];
+        var tau = (cumSum - 1) / k;
+        return scores.map(function(v) { return Math.max(0, v - tau); });
+      }
+      return softmax(scores);
+    }
+
+    function draw() {
+      var c = C();
+      var alpha = compute(current);
+      var maxA = Math.max.apply(null, alpha.map(Math.abs));
+      var sx = 80, gapX = 140, barBase = 200, barMax = 120;
+
+      var h = '';
+      var modeNames = { softmax: 'softmax', linear: '直接归一化 s/Σs', hardmax: 'hardmax', sparsemax: 'sparsemax' };
+      var modeColors = { softmax: c.pStrong, linear: c.warning, hardmax: c.danger, sparsemax: c.purple };
+      var mColor = modeColors[current];
+
+      h += '<text x="350" y="22" text-anchor="middle" fill="' + mColor + '" font-size="13" font-weight="700">' + modeNames[current] + '</text>';
+      h += '<text x="350" y="40" text-anchor="middle" fill="' + c.muted + '" font-size="10">原始分数: [' + scores.join(', ') + ']（注意有负数 -0.8）</text>';
+
+      labels.forEach(function(l, i) {
+        var x = sx + i * gapX;
+        var a = alpha[i];
+        var isNeg = a < 0;
+        var barH = Math.max(2, (Math.abs(a) / (maxA + 0.001)) * barMax);
+        var barY = isNeg ? barBase : barBase - barH;
+        var barColor = isNeg ? c.danger : mColor;
+
+        h += '<rect x="' + (x - 28) + '" y="' + barY + '" width="56" height="' + barH + '" rx="5" fill="' + barColor + '" opacity="0.7"/>';
+        var valY = isNeg ? barBase + barH + 15 : barBase - barH - 6;
+        h += '<text x="' + x + '" y="' + valY + '" text-anchor="middle" fill="' + (isNeg ? c.danger : c.text) + '" font-size="11" font-weight="700">' + (a >= 0 ? (a * 100).toFixed(1) + '%' : a.toFixed(3)) + '</text>';
+        h += '<text x="' + x + '" y="' + (barBase + (isNeg ? barH + 32 : 18)) + '" text-anchor="middle" fill="' + c.text + '" font-size="11">' + l + '</text>';
+        h += '<text x="' + x + '" y="' + (barBase + (isNeg ? barH + 47 : 33)) + '" text-anchor="middle" fill="' + c.muted + '" font-size="9" font-family="monospace">s=' + scores[i] + '</text>';
+
+        // Warning for negative
+        if (isNeg) {
+          h += '<text x="' + x + '" y="' + (barY - 5) + '" text-anchor="middle" fill="' + c.danger + '" font-size="10" font-weight="700">⚠ 负权重!</text>';
+        }
+        // Warning for zero (sparsemax)
+        if (a === 0 && current === 'sparsemax') {
+          h += '<text x="' + x + '" y="' + (barBase - 10) + '" text-anchor="middle" fill="' + c.purple + '" font-size="10" font-weight="600">= 0（稀疏）</text>';
+        }
+      });
+
+      h += '<line x1="40" y1="' + barBase + '" x2="660" y2="' + barBase + '" stroke="' + c.border + '" stroke-width="1"/>';
+
+      // Sum check
+      var sum = alpha.reduce(function(a2, b) { return a2 + b; });
+      var allNonNeg = alpha.every(function(v) { return v >= -0.001; });
+      h += '<text x="640" y="60" text-anchor="end" fill="' + (Math.abs(sum - 1) < 0.01 ? c.success : c.danger) + '" font-size="10">Σ = ' + sum.toFixed(3) + (Math.abs(sum - 1) < 0.01 ? ' ✓' : ' ✗') + '</text>';
+      h += '<text x="640" y="76" text-anchor="end" fill="' + (allNonNeg ? c.success : c.danger) + '" font-size="10">全部≥0? ' + (allNonNeg ? '✓' : '✗') + '</text>';
+
+      svg.innerHTML = h;
+
+      var descs = {
+        softmax: '所有权重非负、和为 1、保序、可微。负分数 -0.8 变成了很小但仍然 > 0 的权重。这正是注意力需要的。',
+        linear: '"了"的分数 -0.8，直接归一化后变成 <strong>负权重</strong>。语义不明："负关注度"是什么意思？而且如果分数总和恰好为 0，直接除以 0 崩溃。',
+        hardmax: '只有最高分的"猫"获得 100% 权重，其他位置全为 0。信息严重丢失，而且 argmax <strong>不可微</strong>——反向传播时梯度为 0，模型学不到东西。',
+        sparsemax: '部分位置被精确置零（稀疏），但仍然可微。注意力更可解释，但计算需要排序，GPU 不友好。标准 Transformer 不使用。'
+      };
+      infoEl.innerHTML = descs[current];
+    }
+
+    ['norm-softmax', 'norm-linear', 'norm-hardmax', 'norm-sparsemax'].forEach(function(id) {
+      var mode = id.replace('norm-', '');
+      var btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', function() {
+        current = mode;
+        ['norm-softmax', 'norm-linear', 'norm-hardmax', 'norm-sparsemax'].forEach(function(bid) {
+          document.getElementById(bid).className = 'attn-btn attn-btn-secondary';
+        });
+        btn.className = 'attn-btn attn-btn-primary';
+        draw();
+      });
+    });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 5. Gradient Demo ============
+  function initGrad() {
+    var svg = document.getElementById('grad-svg');
+    var infoEl = document.getElementById('grad-info');
+    if (!svg) return;
+
+    var scores = [2.0, 1.0, 0.5, -0.5];
+    var alpha = softmax(scores);
+    var labels = ['猫', '坐', '垫子', '上'];
+    var selected = -1;
+
+    function draw() {
+      var c = C();
+      var sx = 60, gapX = 160, nodeY = 50, barBase = 210, barMax = 80;
+
+      var h = '';
+      h += '<text x="350" y="22" text-anchor="middle" fill="' + c.text + '" font-size="12" font-weight="600">点击一个位置，看提高它的分数如何影响所有权重</text>';
+
+      labels.forEach(function(l, i) {
+        var x = sx + i * gapX;
+        var a = alpha[i];
+        var isSel = i === selected;
+
+        // Node
+        h += '<rect x="' + (x - 30) + '" y="' + (nodeY - 14) + '" width="60" height="28" rx="6" fill="' + (isSel ? c.pLight : c.node) + '" stroke="' + (isSel ? c.pStrong : c.nodeStroke) + '" stroke-width="' + (isSel ? 2.5 : 1.5) + '" style="cursor:pointer;" data-idx="' + i + '"/>';
+        h += '<text x="' + x + '" y="' + (nodeY + 4) + '" text-anchor="middle" fill="' + c.text + '" font-size="12" font-weight="600" style="pointer-events:none;">' + l + '</text>';
+        h += '<text x="' + x + '" y="' + (nodeY + 22) + '" text-anchor="middle" fill="' + c.muted + '" font-size="9" font-family="monospace">α=' + a.toFixed(3) + '</text>';
+
+        // Gradient arrow if selected
+        if (selected >= 0) {
+          var grad;
+          if (i === selected) {
+            grad = alpha[i] * (1 - alpha[i]);
+          } else {
+            grad = -alpha[selected] * alpha[i];
+          }
+          var arrowH = Math.abs(grad) * barMax * 8;
+          var isPos = grad > 0;
+          var arrowColor = isPos ? c.success : c.danger;
+
+          h += '<rect x="' + (x - 20) + '" y="' + (isPos ? barBase - arrowH : barBase) + '" width="40" height="' + Math.max(2, arrowH) + '" rx="4" fill="' + arrowColor + '" opacity="0.6"/>';
+          h += '<text x="' + x + '" y="' + (isPos ? barBase - arrowH - 8 : barBase + arrowH + 14) + '" text-anchor="middle" fill="' + arrowColor + '" font-size="10" font-weight="700">' + (isPos ? '+' : '') + grad.toFixed(4) + '</text>';
+          h += '<text x="' + x + '" y="' + (barBase + barMax + 15) + '" text-anchor="middle" fill="' + c.muted + '" font-size="9">' + (isPos ? '↑ 权重增加' : '↓ 权重减少') + '</text>';
+        }
+      });
+
+      h += '<line x1="40" y1="' + barBase + '" x2="680" y2="' + barBase + '" stroke="' + c.border + '" stroke-width="1" stroke-dasharray="4,3"/>';
+      h += '<text x="690" y="' + (barBase + 4) + '" fill="' + c.muted + '" font-size="9">0</text>';
+
+      svg.innerHTML = h;
+
+      // Click handlers
+      svg.querySelectorAll('rect[data-idx]').forEach(function(rect) {
+        rect.addEventListener('click', function() {
+          selected = parseInt(rect.getAttribute('data-idx'));
+          draw();
+        });
+      });
+
+      if (selected >= 0) {
+        var selfGrad = alpha[selected] * (1 - alpha[selected]);
+        infoEl.innerHTML = '提高 "' + labels[selected] + '" 的分数：<strong>自身权重增加</strong>（∂α/∂s = ' + selfGrad.toFixed(4) + '），<strong>其他位置权重全部减少</strong>。这就是 softmax 的竞争机制——权重是零和的。';
+      } else {
+        infoEl.innerHTML = '← 点击上面的词节点，查看梯度方向';
+      }
+    }
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 6. Numerical Stability Demo ============
+  function initOverflow() {
+    var svg = document.getElementById('overflow-svg');
+    var slider = document.getElementById('overflow-slider');
+    var valEl = document.getElementById('overflow-val');
+    var infoEl = document.getElementById('overflow-info');
+    if (!svg || !slider) return;
+
+    var baseScores = [2.0, 1.0, 0.5, -1.0];
+
+    function draw() {
+      var c = C();
+      var factor = parseInt(slider.value);
+      valEl.textContent = factor;
+      var scores = baseScores.map(function(v) { return v * factor; });
+      var mx = Math.max.apply(null, scores);
+      var shifted = scores.map(function(v) { return v - mx; });
+
+      var sx = 50, gapX = 170;
+      var h = '';
+
+      // Header
+      h += '<text x="140" y="25" text-anchor="middle" fill="' + c.danger + '" font-size="11" font-weight="700">朴素 e^s</text>';
+      h += '<text x="490" y="25" text-anchor="middle" fill="' + c.success + '" font-size="11" font-weight="700">稳定 e^(s-max)</text>';
+
+      var labels = ['s₁', 's₂', 's₃', 's₄'];
+      labels.forEach(function(l, i) {
+        var y = 50 + i * 36;
+        // Label
+        h += '<text x="20" y="' + (y + 4) + '" fill="' + c.muted + '" font-size="10" font-family="monospace">' + l + '=' + scores[i].toFixed(0) + '</text>';
+
+        // Naive exp
+        var naiveExp = Math.exp(scores[i]);
+        var naiveStr = naiveExp === Infinity ? '∞ (溢出!)' : (naiveExp > 1e10 ? naiveExp.toExponential(1) : naiveExp.toFixed(2));
+        var naiveColor = naiveExp === Infinity ? c.danger : c.text;
+        h += '<text x="140" y="' + (y + 4) + '" text-anchor="middle" fill="' + naiveColor + '" font-size="11" font-weight="' + (naiveExp === Infinity ? '700' : '400') + '">' + naiveStr + '</text>';
+
+        // Arrow
+        h += '<text x="310" y="' + (y + 4) + '" text-anchor="middle" fill="' + c.muted + '" font-size="12">→</text>';
+
+        // Shifted
+        h += '<text x="370" y="' + (y + 4) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10" font-family="monospace">s-max=' + shifted[i].toFixed(1) + '</text>';
+
+        // Stable exp
+        var stableExp = Math.exp(shifted[i]);
+        h += '<text x="510" y="' + (y + 4) + '" text-anchor="middle" fill="' + c.success + '" font-size="11" font-weight="600">' + stableExp.toFixed(4) + '</text>';
+
+        // Final softmax
+        var sm = softmax(scores);
+        h += '<text x="640" y="' + (y + 4) + '" text-anchor="middle" fill="' + c.pStrong + '" font-size="11" font-weight="700">' + (sm[i] * 100).toFixed(1) + '%</text>';
+      });
+
+      h += '<text x="640" y="25" text-anchor="middle" fill="' + c.pStrong + '" font-size="11" font-weight="700">softmax</text>';
+
+      svg.innerHTML = h;
+
+      var anyOverflow = baseScores.some(function(v) { return Math.exp(v * factor) === Infinity; });
+      if (factor <= 1) {
+        infoEl.innerHTML = '缩放因子 = 1：分数较小，朴素计算和稳定计算结果一致。';
+      } else if (!anyOverflow) {
+        infoEl.innerHTML = '缩放因子 = ' + factor + '：分数增大，朴素 e^s 的数值也在增大，但还没溢出。减去 max 后所有指数参数 ≤ 0。';
+      } else {
+        infoEl.innerHTML = '<strong>缩放因子 = ' + factor + '：朴素计算已经溢出（∞）！</strong>但减去 max 后，所有 e^(s-max) ≤ 1，计算完全正常。softmax 结果不受影响。';
+      }
+    }
+
+    slider.addEventListener('input', draw);
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 7. Attention Heatmap ============
+  function initHeatmap() {
+    var svg = document.getElementById('heatmap-svg');
+    var infoEl = document.getElementById('heatmap-info');
+    if (!svg) return;
+
+    var words = ['工程师', '在', '加州', '工作', '十年'];
+    var n = words.length;
+    // Simulated attention weights
+    var attn = [
+      [0.12, 0.08, 0.25, 0.35, 0.20],
+      [0.30, 0.10, 0.25, 0.20, 0.15],
+      [0.10, 0.15, 0.15, 0.25, 0.35],
+      [0.45, 0.10, 0.15, 0.10, 0.20],
+      [0.08, 0.05, 0.12, 0.40, 0.35],
+    ];
+
+    function draw() {
+      var c = C();
+      var cellSize = 55, sx = 120, sy = 55;
+      var h = '';
+
+      // Axis labels
+      h += '<text x="' + (sx + n * cellSize / 2) + '" y="20" text-anchor="middle" fill="' + c.warning + '" font-size="11" font-weight="600">← Key (被关注) →</text>';
+      h += '<text x="30" y="' + (sy + n * cellSize / 2) + '" text-anchor="middle" fill="' + c.pStrong + '" font-size="11" font-weight="600" transform="rotate(-90,30,' + (sy + n * cellSize / 2) + ')">← Query (关注者) →</text>';
+
+      // Column headers
+      words.forEach(function(w, j) {
+        h += '<text x="' + (sx + j * cellSize + cellSize / 2) + '" y="' + (sy - 8) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">' + w + '</text>';
+      });
+
+      // Rows
+      for (var i = 0; i < n; i++) {
+        // Row header
+        h += '<text x="' + (sx - 8) + '" y="' + (sy + i * cellSize + cellSize / 2 + 4) + '" text-anchor="end" fill="' + c.muted + '" font-size="10">' + words[i] + '</text>';
+
+        var maxJ = attn[i].indexOf(Math.max.apply(null, attn[i]));
+
+        for (var j = 0; j < n; j++) {
+          var v = attn[i][j];
+          var x = sx + j * cellSize;
+          var y = sy + i * cellSize;
+          var isMax = j === maxJ;
+          var isDiag = i === j;
+
+          // Cell
+          var intensity = v * 2.5;
+          h += '<rect x="' + x + '" y="' + y + '" width="' + cellSize + '" height="' + cellSize + '" fill="rgba(59,130,246,' + Math.min(intensity, 0.85) + ')" stroke="' + (isMax ? c.pStrong : c.border) + '" stroke-width="' + (isMax ? 2 : 0.5) + '" style="cursor:pointer;" data-i="' + i + '" data-j="' + j + '"/>';
+
+          // Value
+          h += '<text x="' + (x + cellSize / 2) + '" y="' + (y + cellSize / 2 + 4) + '" text-anchor="middle" fill="' + (v > 0.25 ? 'white' : c.text) + '" font-size="11" font-weight="' + (isMax ? '700' : '400') + '" style="pointer-events:none;">' + (v * 100).toFixed(0) + '%</text>';
+
+          // Diagonal marker
+          if (isDiag) {
+            h += '<circle cx="' + (x + cellSize - 8) + '" cy="' + (y + 8) + '" r="3" fill="' + (v === attn[i][maxJ] ? c.success : c.warning) + '" style="pointer-events:none;"/>';
+          }
+        }
+
+        // Row sum
+        var rowSum = attn[i].reduce(function(a, b) { return a + b; });
+        h += '<text x="' + (sx + n * cellSize + 10) + '" y="' + (sy + i * cellSize + cellSize / 2 + 4) + '" fill="' + c.success + '" font-size="9" font-weight="600">Σ=' + rowSum.toFixed(2) + '</text>';
+      }
+
+      // Legend
+      h += '<text x="' + (sx + n * cellSize + 10) + '" y="' + (sy - 8) + '" fill="' + c.success + '" font-size="9">行和</text>';
+
+      svg.innerHTML = h;
+
+      // Click handlers
+      svg.querySelectorAll('rect[data-i]').forEach(function(rect) {
+        rect.addEventListener('click', function() {
+          var ii = parseInt(rect.getAttribute('data-i'));
+          var jj = parseInt(rect.getAttribute('data-j'));
+          var maxJJ = attn[ii].indexOf(Math.max.apply(null, attn[ii]));
+          infoEl.innerHTML = '"<strong>' + words[ii] + '</strong>" → "<strong>' + words[jj] + '</strong>"：注意力权重 ' + (attn[ii][jj] * 100).toFixed(0) + '%。' + (jj === maxJJ ? ' ★ 这是该行的最大权重。' : '') + (ii === jj ? ' （自关注）' : '') + ' 这一行所有权重之和 = ' + attn[ii].reduce(function(a, b) { return a + b; }).toFixed(2) + '（softmax 保证）。';
+        });
+      });
+    }
+
+    draw();
+    onTheme(draw);
+    infoEl.innerHTML = '点击热力图中的任意格子，查看对应的注意力权重。每一行之和 = 1（softmax 保证）。小圆点标记对角线位置。';
+  }
+
+  // ============ Init ============
+  function init() {
+    initCalc();
+    initGap();
+    initTemp();
+    initNorm();
+    initGrad();
+    initOverflow();
+    initHeatmap();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+`}</script>
