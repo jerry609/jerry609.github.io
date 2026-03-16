@@ -24,6 +24,7 @@ draft: false
 
 - [第 1 讲：为什么需要 Attention](/blog/attention-01-why-attention/)
 - [第 2 讲：Q / K / V 直觉](/blog/attention-02-qkv-intuition/)
+- [第 3 讲：单头注意力的完整计算流程](/blog/attention-03-single-head-math/)
 
 ## 一、为什么要拆成 12 + 4
 

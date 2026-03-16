@@ -1,0 +1,1191 @@
+---
+title: "Attention 03：单头注意力的完整计算流程"
+description: "从一个 3 词短句出发，手推 Attention 公式的每一步维度和数值。"
+publishDate: "2026-03-16"
+tags: ["LLM", "Transformer", "Attention", "专题"]
+language: "zh-CN"
+draft: false
+---
+
+<style>{`
+  .attn-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .attn-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .attn-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .attn-demo-info {
+    text-align: center; font-size: 0.8rem;
+    color: hsl(var(--muted-foreground)); margin-top: 0.5rem;
+  }
+  .attn-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .attn-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .attn-btn-primary:hover { opacity: 0.85; }
+  .attn-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .attn-btn-secondary:hover { opacity: 0.85; }
+  .attn-btn:disabled { opacity: 0.4; cursor: default; }
+  .attn-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .matrix-table {
+    border-collapse: collapse; margin: 0 auto;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.8rem;
+  }
+  .matrix-table td, .matrix-table th {
+    padding: 0.35rem 0.6rem; text-align: center;
+    border: 1px solid hsl(var(--border));
+  }
+  .matrix-table th {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+    font-weight: 600; font-size: 0.75rem;
+  }
+  .code-block {
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px; padding: 1rem 1.2rem;
+    overflow-x: auto; margin: 1rem 0;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.82rem; line-height: 1.6;
+    color: hsl(var(--foreground));
+  }
+  .code-comment {
+    color: hsl(var(--muted-foreground));
+    font-style: italic;
+  }
+  .dim-tag {
+    display: inline-block; padding: 0.1rem 0.5rem;
+    border-radius: 4px; font-size: 0.75rem;
+    font-family: monospace; font-weight: 600;
+  }
+`}</style>
+
+[返回专题总目录](/blog/attention-series-outline/) · [上一讲：Q / K / V 直觉](/blog/attention-02-qkv-intuition/)
+
+`01 > 02 > [03] > 04 > 05 > 06 | 07 > 08 > 09 > 10 > 11 > 12`
+
+> *"如果你不能用一个 3 词的句子手推一遍 Attention，那你还没有真正理解它。"*
+
+---
+
+## 这一讲要回答什么
+
+上一讲我们用"查资料"的类比理解了 Q / K / V 的角色。但类比终究是类比——模型真正跑的是矩阵乘法和 softmax。
+
+这一讲只回答一个问题：**给定一个短句，Attention 从输入到输出，数学上每一步到底是怎么算的？**
+
+目标是把下面这条公式链一次讲完整：
+
+$$
+Q = XW^Q,\quad K = XW^K,\quad V = XW^V
+$$
+
+$$
+\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+$$
+
+我们不会只给公式——我们会用一个 3 词的短句，手推每一步的维度和数值。
+
+---
+
+## 先把维度搞清楚
+
+这是所有初学者最容易卡住的地方，所以我们先把维度全部写明白。
+
+假设输入序列有 $n = 3$ 个词，每个词的嵌入维度 $d_{\text{model}} = 4$，注意力头的维度 $d_k = d_v = 3$。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：点击查看每个矩阵的维度</div>
+  <span class="attn-demo-subtitle">点击下方的矩阵名称，查看它的形状、含义和具体数值</span>
+  <div id="dim-btns" style="display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem;"></div>
+  <div id="dim-display" style="margin-top: 1rem;"></div>
+  <div id="dim-info" class="attn-step-info"></div>
+</div>
+
+用一张表总结所有维度：
+
+| 矩阵 | 形状 | 含义 |
+| --- | --- | --- |
+| $X$ | $(n, d_{\text{model}}) = (3, 4)$ | 输入序列，3 个词各 4 维嵌入 |
+| $W^Q$ | $(d_{\text{model}}, d_k) = (4, 3)$ | Query 投影矩阵 |
+| $W^K$ | $(d_{\text{model}}, d_k) = (4, 3)$ | Key 投影矩阵 |
+| $W^V$ | $(d_{\text{model}}, d_v) = (4, 3)$ | Value 投影矩阵 |
+| $Q$ | $(n, d_k) = (3, 3)$ | Query 矩阵 |
+| $K$ | $(n, d_k) = (3, 3)$ | Key 矩阵 |
+| $V$ | $(n, d_v) = (3, 3)$ | Value 矩阵 |
+| $QK^\top$ | $(n, n) = (3, 3)$ | 原始注意力分数矩阵 |
+| $\alpha$ | $(n, n) = (3, 3)$ | softmax 后的注意力权重矩阵 |
+| Output | $(n, d_v) = (3, 3)$ | 融合上下文后的输出序列 |
+
+**维度的关键规律**：不管序列多长，$QK^\top$ 永远是 $(n, n)$——这就是 Attention 时间复杂度 $O(n^2)$ 的来源。
+
+---
+
+## 第一步：输入矩阵 $X$
+
+假设我们的句子是 `[猫, 坐, 地毯]`，每个词已经通过 Embedding 层变成了 4 维向量：
+
+$$
+X = \begin{bmatrix} 1.0 & 0.5 & -0.2 & 0.8 \\ 0.3 & -0.6 & 1.2 & 0.1 \\ 0.7 & 0.9 & 0.4 & -0.5 \end{bmatrix}
+\quad \text{shape: } (3, 4)
+$$
+
+- 第 1 行：$\mathbf{x}_1$ ="猫"的嵌入
+- 第 2 行：$\mathbf{x}_2$ ="坐"的嵌入
+- 第 3 行：$\mathbf{x}_3$ ="地毯"的嵌入
+
+---
+
+## 第二步：线性投影得到 Q、K、V
+
+接下来，$X$ 分别乘以三个权重矩阵：
+
+$$
+Q = XW^Q, \quad K = XW^K, \quad V = XW^V
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">步进演示：从 X 到 Q / K / V 的投影</div>
+  <span class="attn-demo-subtitle">点击 Q / K / V 查看完整的矩阵乘法过程（支持键盘 ←→）</span>
+  <svg id="proj-step-svg" viewBox="0 0 720 380" style="width: 100%; max-height: 380px;"></svg>
+  <div style="text-align: center; margin-top: 0.75rem;">
+    <button id="proj-prev" class="attn-btn attn-btn-secondary">◀ 上一步</button>
+    <span id="proj-disp" style="margin: 0 1rem; font-size: 0.85rem; font-weight: 600; color: hsl(var(--foreground));">0 / 5</span>
+    <button id="proj-next" class="attn-btn attn-btn-primary">下一步 ▶</button>
+  </div>
+  <div id="proj-info" class="attn-step-info"></div>
+</div>
+
+投影之后的结果（使用演示中的示例权重）：
+
+$$
+Q = \begin{bmatrix} 0.74 & 0.31 & 0.89 \\ 1.26 & -0.42 & -0.17 \\ 0.18 & 0.87 & 0.63 \end{bmatrix}, \quad
+K = \begin{bmatrix} 0.62 & 0.85 & -0.13 \\ -0.51 & 1.10 & 0.78 \\ 0.94 & 0.22 & 0.41 \end{bmatrix}, \quad
+V = \begin{bmatrix} 0.41 & -0.25 & 0.93 \\ 0.87 & 0.62 & -0.31 \\ -0.18 & 0.74 & 0.56 \end{bmatrix}
+$$
+
+**对应的 PyTorch 代码**：
+
+```python
+import torch
+import torch.nn as nn
+
+# 参数
+n = 3          # 序列长度
+d_model = 4    # 嵌入维度
+d_k = 3        # 注意力头维度
+
+# 输入：3 个词，每个 4 维
+X = torch.tensor([
+    [1.0, 0.5, -0.2, 0.8],   # 猫
+    [0.3, -0.6, 1.2, 0.1],   # 坐
+    [0.7, 0.9, 0.4, -0.5],   # 地毯
+])  # shape: (3, 4)
+
+# 三个投影矩阵（实际训练中是可学习参数）
+W_Q = nn.Linear(d_model, d_k, bias=False)
+W_K = nn.Linear(d_model, d_k, bias=False)
+W_V = nn.Linear(d_model, d_k, bias=False)
+
+# 投影
+Q = W_Q(X)    # (3, 4) @ (4, 3) → (3, 3)
+K = W_K(X)    # (3, 4) @ (4, 3) → (3, 3)
+V = W_V(X)    # (3, 4) @ (4, 3) → (3, 3)
+
+print(f"Q shape: {Q.shape}")  # torch.Size([3, 3])
+print(f"K shape: {K.shape}")  # torch.Size([3, 3])
+print(f"V shape: {V.shape}")  # torch.Size([3, 3])
+```
+
+---
+
+## 第三步：计算注意力分数 $QK^\top$
+
+这是 Attention 最核心的一步——**让每个 Query 和所有 Key 做点积，得到一个"分数矩阵"**。
+
+$$
+S = QK^\top \quad \text{shape: } (n, n) = (3, 3)
+$$
+
+矩阵中第 $i$ 行第 $j$ 列的值 $S_{ij} = \mathbf{q}_i \cdot \mathbf{k}_j$，表示**位置 $i$ 对位置 $j$ 的原始相关性分数**。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：QK<sup>T</sup> — 每个分数是怎么来的</div>
+  <span class="attn-demo-subtitle">点击分数矩阵中的任意格子，查看这个分数的点积计算过程</span>
+  <div style="display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem; align-items: flex-start;">
+    <div id="qkt-matrix"></div>
+    <div id="qkt-detail" style="min-width: 280px;"></div>
+  </div>
+  <div id="qkt-info" class="attn-demo-info">← 点击矩阵格子查看计算细节</div>
+</div>
+
+**为什么是 $QK^\top$ 而不是 $QK$？**
+
+$Q$ 的形状是 $(3, 3)$，$K$ 的形状也是 $(3, 3)$。如果直接做 $QK$，那是 $(3, 3) \times (3, 3)$——虽然维度上可行，但含义不对。
+
+我们需要的是让 $Q$ 的每一行（一个 Query）和 $K$ 的每一行（一个 Key）做点积。转置 $K$ 之后：
+
+$$
+QK^\top = (3, 3) \times (3, 3)^\top = (3, \underbrace{3}_{d_k}) \times (\underbrace{3}_{d_k}, 3) = (3, 3)
+$$
+
+结果中第 $i$ 行第 $j$ 列 = $\mathbf{q}_i$ 和 $\mathbf{k}_j$ 的点积。这正是我们想要的。
+
+**对应的 PyTorch 代码**：
+
+```python
+# 计算原始注意力分数
+scores = Q @ K.transpose(-2, -1)  # (3, 3) @ (3, 3)^T → (3, 3)
+print(scores)
+# 每个 scores[i][j] = Q 第 i 行 · K 第 j 行 = q_i · k_j
+```
+
+---
+
+## 第四步：除以 $\sqrt{d_k}$ ——缩放
+
+$$
+S_{\text{scaled}} = \frac{QK^\top}{\sqrt{d_k}}
+$$
+
+为什么要除以 $\sqrt{d_k}$？这不是可选的 trick，而是**必要的数值稳定措施**。
+
+**直觉解释**：当 $d_k$ 很大时，$\mathbf{q} \cdot \mathbf{k} = \sum_{i=1}^{d_k} q_i k_i$ 的结果也会很大（因为更多项求和）。大的分数值传入 softmax 后会导致梯度消失——输出接近 one-hot，模型很难学到"分散注意力"的模式。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：为什么需要 √d_k 缩放</div>
+  <span class="attn-demo-subtitle">拖动滑块改变 d_k 的大小，观察有无缩放时 softmax 输出的差异</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <label style="font-size: 0.85rem; color: hsl(var(--foreground));">
+      d_k = <strong id="dk-value">64</strong>
+    </label>
+    <br/>
+    <input type="range" id="dk-slider" min="4" max="512" value="64" step="4" style="width: 80%; max-width: 400px; margin-top: 0.5rem;"/>
+  </div>
+  <svg id="scale-svg" viewBox="0 0 700 280" style="width: 100%; max-height: 280px;"></svg>
+  <div id="scale-info" class="attn-step-info"></div>
+</div>
+
+**数学上**：假设 $q_i, k_i$ 独立、均值为 0、方差为 1，那么：
+
+$$
+\text{Var}(\mathbf{q} \cdot \mathbf{k}) = \sum_{i=1}^{d_k} \text{Var}(q_i k_i) = d_k
+$$
+
+除以 $\sqrt{d_k}$ 后方差变为 1，分数不会因为维度增大而膨胀。
+
+**对应的 PyTorch 代码**：
+
+```python
+import math
+
+d_k = Q.size(-1)  # = 3
+scores_scaled = scores / math.sqrt(d_k)
+# 等价于：scores / (3 ** 0.5) ≈ scores / 1.732
+```
+
+---
+
+## 第五步：Softmax → 注意力权重
+
+$$
+\alpha = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)
+$$
+
+Softmax 对分数矩阵的**每一行**独立操作，将分数转化为概率分布：
+
+$$
+\alpha_{ij} = \frac{e^{S_{ij}}}{\sum_{k=1}^{n} e^{S_{ik}}}
+$$
+
+**每一行加起来等于 1**——这就是"注意力权重"的含义。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：Softmax 逐行转化</div>
+  <span class="attn-demo-subtitle">点击行号，查看该行从原始分数到 softmax 权重的转化过程</span>
+  <div style="display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem; align-items: flex-start;">
+    <div>
+      <div style="text-align: center; font-size: 0.8rem; font-weight: 600; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem;">缩放后分数</div>
+      <div id="softmax-left"></div>
+    </div>
+    <div style="display: flex; align-items: center; font-size: 1.5rem; color: hsl(var(--muted-foreground));">→</div>
+    <div>
+      <div style="text-align: center; font-size: 0.8rem; font-weight: 600; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem;">注意力权重 α</div>
+      <div id="softmax-right"></div>
+    </div>
+  </div>
+  <div id="softmax-detail" class="attn-step-info"></div>
+</div>
+
+**对应的 PyTorch 代码**：
+
+```python
+import torch.nn.functional as F
+
+# softmax 在最后一个维度上（即每一行独立做 softmax）
+attn_weights = F.softmax(scores_scaled, dim=-1)  # (3, 3)
+
+print(attn_weights)
+# 每行之和 == 1
+print(attn_weights.sum(dim=-1))  # tensor([1., 1., 1.])
+```
+
+---
+
+## 第六步：加权求和 → 输出
+
+$$
+\text{Output} = \alpha V
+$$
+
+用注意力权重矩阵 $\alpha$ 左乘 Value 矩阵 $V$，得到最终输出：
+
+$$
+(n, n) \times (n, d_v) = (3, 3) \times (3, 3) = (3, 3)
+$$
+
+**输出的第 $i$ 行**是所有 Value 向量按第 $i$ 行权重的加权平均：
+
+$$
+\mathbf{o}_i = \sum_{j=1}^{n} \alpha_{ij} \mathbf{v}_j
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">步进演示：从权重到输出的完整计算</div>
+  <span class="attn-demo-subtitle">逐步查看每个位置如何用注意力权重聚合 Value，得到最终输出（支持键盘 ←→）</span>
+  <svg id="output-svg" viewBox="0 0 720 350" style="width: 100%; max-height: 350px;"></svg>
+  <div style="text-align: center; margin-top: 0.75rem;">
+    <button id="out-prev" class="attn-btn attn-btn-secondary">◀ 上一步</button>
+    <span id="out-disp" style="margin: 0 1rem; font-size: 0.85rem; font-weight: 600; color: hsl(var(--foreground));">0 / 4</span>
+    <button id="out-next" class="attn-btn attn-btn-primary">下一步 ▶</button>
+  </div>
+  <div id="out-info" class="attn-step-info"></div>
+</div>
+
+**对应的 PyTorch 代码**：
+
+```python
+# 加权求和
+output = attn_weights @ V  # (3, 3) @ (3, 3) → (3, 3)
+print(f"Output shape: {output.shape}")  # torch.Size([3, 3])
+
+# output[0] = α[0,0]*V[0] + α[0,1]*V[1] + α[0,2]*V[2]
+# "猫"位置的输出 = 融合了"猫""坐""地毯"信息的新表示
+```
+
+---
+
+## 把所有步骤串起来：完整的 Attention 公式
+
+$$
+\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V
+$$
+
+<div class="attn-demo">
+  <div class="attn-demo-title">全流程动画：从 X 到 Output 的完整 Attention</div>
+  <span class="attn-demo-subtitle">自动播放 / 手动步进，看整个计算管线如何流动（支持键盘 ←→）</span>
+  <svg id="pipeline-svg" viewBox="0 0 720 160" style="width: 100%; max-height: 160px;"></svg>
+  <div style="text-align: center; margin-top: 0.75rem;">
+    <button id="pipe-prev" class="attn-btn attn-btn-secondary">◀</button>
+    <button id="pipe-play" class="attn-btn attn-btn-primary" style="margin: 0 0.5rem;">▶ 播放</button>
+    <button id="pipe-next" class="attn-btn attn-btn-secondary">▶</button>
+    <span id="pipe-disp" style="margin-left: 1rem; font-size: 0.85rem; font-weight: 600; color: hsl(var(--foreground));">0 / 6</span>
+  </div>
+  <div id="pipe-info" class="attn-step-info"></div>
+</div>
+
+---
+
+## 完整的 PyTorch 实现
+
+把上面所有步骤合在一起，一个完整的单头注意力就是这么简短：
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+class SingleHeadAttention(nn.Module):
+    """单头 Scaled Dot-Product Attention"""
+
+    def __init__(self, d_model: int, d_k: int):
+        super().__init__()
+        self.d_k = d_k
+        self.W_Q = nn.Linear(d_model, d_k, bias=False)
+        self.W_K = nn.Linear(d_model, d_k, bias=False)
+        self.W_V = nn.Linear(d_model, d_k, bias=False)
+
+    def forward(self, X: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            X: (n, d_model) — 输入序列
+        Returns:
+            output: (n, d_k)  — 融合上下文后的表示
+            attn:   (n, n)    — 注意力权重矩阵
+        """
+        Q = self.W_Q(X)                              # (n, d_k)
+        K = self.W_K(X)                              # (n, d_k)
+        V = self.W_V(X)                              # (n, d_k)
+
+        scores = Q @ K.transpose(-2, -1)             # (n, n)
+        scores_scaled = scores / math.sqrt(self.d_k) # (n, n)
+        attn = F.softmax(scores_scaled, dim=-1)      # (n, n)
+        output = attn @ V                            # (n, d_k)
+
+        return output, attn
+
+# ---- 使用 ----
+attn_layer = SingleHeadAttention(d_model=4, d_k=3)
+
+X = torch.tensor([
+    [1.0, 0.5, -0.2, 0.8],
+    [0.3, -0.6, 1.2, 0.1],
+    [0.7, 0.9, 0.4, -0.5],
+])
+
+output, weights = attn_layer(X)
+print(f"Output:\n{output}")
+print(f"\nAttention weights:\n{weights}")
+print(f"Rows sum to 1: {weights.sum(dim=-1)}")
+```
+
+运行这段代码，你会得到：
+- `output`: $(3, 3)$ 矩阵——每个词融合上下文后的新表示
+- `weights`: $(3, 3)$ 矩阵——每个词对其他词的注意力分配
+
+---
+
+## 逐行对照：公式 ↔ 代码
+
+| 公式 | 代码 | 维度变化 |
+| --- | --- | --- |
+| $Q = XW^Q$ | `Q = self.W_Q(X)` | $(n, d_m) \to (n, d_k)$ |
+| $K = XW^K$ | `K = self.W_K(X)` | $(n, d_m) \to (n, d_k)$ |
+| $V = XW^V$ | `V = self.W_V(X)` | $(n, d_m) \to (n, d_v)$ |
+| $QK^\top$ | `Q @ K.transpose(-2, -1)` | $(n, d_k) \times (d_k, n) \to (n, n)$ |
+| $/ \sqrt{d_k}$ | `/ math.sqrt(self.d_k)` | $(n, n)$ 不变 |
+| $\text{softmax}(\cdot)$ | `F.softmax(…, dim=-1)` | $(n, n)$ 每行归一化 |
+| $\alpha V$ | `attn @ V` | $(n, n) \times (n, d_v) \to (n, d_v)$ |
+
+---
+
+## 四个容易搞混的问题
+
+### 1. 为什么 $QK^\top$ 是"词与词的关系矩阵"？
+
+$S_{ij} = \mathbf{q}_i \cdot \mathbf{k}_j$ 是 Query $i$ 和 Key $j$ 的**点积**。点积衡量两个向量的方向相似性——方向越接近，值越大。
+
+所以 $S_{ij}$ 大 ⟹ 位置 $i$ 认为位置 $j$ 和自己"相关"——注意这里的"相关"是模型通过训练学到的，不是固定的语言学标签。
+
+### 2. 为什么 softmax 要对**每一行**做？
+
+因为我们在为**每个 Query 位置**生成一个完整的注意力分布。第 $i$ 行表示"位置 $i$ 如何把注意力分配给所有位置"。
+
+如果对列做 softmax，含义就变了——变成"位置 $j$ 被各个 Query 竞争的程度"，这不是我们想要的。
+
+### 3. 为什么最后输出还是和输入一样的"一个词一个向量"？
+
+因为 $\alpha V$ 的结果是 $(n, d_v)$——仍然是 $n$ 个向量。但每个向量的含义变了：
+
+- **输入** $\mathbf{x}_i$：词 $i$ 的静态嵌入，不知道上下文
+- **输出** $\mathbf{o}_i$：词 $i$ 融合了整个序列上下文后的动态表示
+
+形式相同，但信息量完全不同。
+
+### 4. $d_k$ 和 $d_{\text{model}}$ 什么关系？
+
+在多头注意力中，通常 $d_k = d_{\text{model}} / h$，其中 $h$ 是头数。比如 $d_{\text{model}} = 512, h = 8$ 时，$d_k = 64$。
+
+但在单头情况下，$d_k$ 可以自由设定。关键约束只有一个：$d_k$ 越大，$QK^\top$ 的方差越大，所以**必须**除以 $\sqrt{d_k}$。
+
+---
+
+## 一张图总结完整流程
+
+$$
+\boxed{
+X \xrightarrow{W^Q} Q \quad
+X \xrightarrow{W^K} K \quad
+X \xrightarrow{W^V} V \quad
+\longrightarrow \quad
+\frac{QK^\top}{\sqrt{d_k}}
+\xrightarrow{\text{softmax}}
+\alpha
+\xrightarrow{\times V}
+\text{Output}
+}
+$$
+
+每一步的形状变化：
+
+$$
+(3,4) \to (3,3) \to (3,3) \to (3,3) \to (3,3) \to (3,3) \to (3,3)
+$$
+
+---
+
+## 试着想一想
+
+1. 如果把 $\sqrt{d_k}$ 换成 $d_k$（不取根号），softmax 的输出会有什么变化？
+2. 在 $QK^\top$ 的结果中，对角线 $S_{ii}$ 表示什么？它一定最大吗？
+3. 如果 $n = 1000$，$QK^\top$ 有多少个元素？这就是为什么长序列计算量大的原因。
+4. 修改上面的 `SingleHeadAttention` 类，给它加一个 causal mask 参数，让位置 $i$ 只能看到 $j \leq i$ 的位置。（提示：在 softmax 之前把未来位置的分数设为 $-\infty$。）
+5. 运行代码，比较 `output[0]` 和 `V[0]`——输出和"猫"自己的 Value 差多少？这个差距就是上下文信息的融合效果。
+
+---
+
+## 下一讲
+
+下一讲我们深入 $QK^\top$，回答一个更本质的问题：
+
+> 为什么偏偏是点积来衡量词与词的关系？为什么不是别的形式？
+
+---
+
+<script>{`
+(function() {
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+  function C() {
+    const d = isDark();
+    return {
+      text: d ? '#e2e8f0' : '#334155',
+      muted: d ? '#94a3b8' : '#64748b',
+      primary: d ? '#7dd3fc' : '#3b82f6',
+      pStrong: '#3b82f6',
+      pLight: d ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981', sLight: d ? '#064e3b' : '#d1fae5',
+      warning: '#f59e0b', wLight: d ? '#78350f' : '#fef3c7',
+      danger: '#ef4444',
+      purple: '#8b5cf6', purpleLight: d ? '#4c1d95' : '#ede9fe',
+      border: d ? '#334155' : '#e2e8f0',
+      node: d ? '#1e293b' : '#ffffff',
+      nodeStroke: d ? '#475569' : '#cbd5e1',
+      cardBg: d ? '#0f172a' : '#f8fafc',
+    };
+  }
+  function onTheme(fn) {
+    new MutationObserver(fn).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // Example data
+  var X = [[1.0,0.5,-0.2,0.8],[0.3,-0.6,1.2,0.1],[0.7,0.9,0.4,-0.5]];
+  var WQ = [[0.2,0.1,0.4],[0.5,-0.3,0.1],[0.1,0.6,-0.2],[-0.3,0.2,0.7]];
+  var WK = [[0.3,-0.1,0.2],[0.1,0.5,0.3],[-0.4,0.2,0.1],[0.6,0.3,-0.5]];
+  var WV = [[-0.2,0.4,0.1],[0.3,0.1,0.6],[0.5,-0.3,0.2],[0.1,0.2,-0.4]];
+  var words = ['猫','坐','地毯'];
+
+  function matmul(A, B) {
+    var R = A.length, C2 = B[0].length, K2 = B.length;
+    var out = [];
+    for (var i = 0; i < R; i++) {
+      out[i] = [];
+      for (var j = 0; j < C2; j++) {
+        var s = 0;
+        for (var k = 0; k < K2; k++) s += A[i][k] * B[k][j];
+        out[i][j] = s;
+      }
+    }
+    return out;
+  }
+  function transpose(M) {
+    var R = M.length, C2 = M[0].length, out = [];
+    for (var j = 0; j < C2; j++) { out[j] = []; for (var i = 0; i < R; i++) out[j][i] = M[i][j]; }
+    return out;
+  }
+  function softmaxRow(row) {
+    var mx = Math.max.apply(null, row);
+    var exps = row.map(function(v) { return Math.exp(v - mx); });
+    var s = exps.reduce(function(a,b) { return a+b; });
+    return exps.map(function(e) { return e/s; });
+  }
+
+  var Qm = matmul(X, WQ);
+  var Km = matmul(X, WK);
+  var Vm = matmul(X, WV);
+  var dk = 3;
+  var Scores = matmul(Qm, transpose(Km));
+  var ScoresScaled = Scores.map(function(row) { return row.map(function(v) { return v / Math.sqrt(dk); }); });
+  var Alpha = ScoresScaled.map(softmaxRow);
+  var Output = matmul(Alpha, Vm);
+
+  // ============ 1. Dimension Explorer ============
+  function initDimExplorer() {
+    var container = document.getElementById('dim-btns');
+    var display = document.getElementById('dim-display');
+    var info = document.getElementById('dim-info');
+    if (!container) return;
+
+    var items = [
+      { name: 'X', shape: '(3, 4)', color: '#3b82f6', data: X, desc: '输入序列。3 个词，每个词是 4 维嵌入向量。第 1 行 = "猫"，第 2 行 = "坐"，第 3 行 = "地毯"。' },
+      { name: 'W^Q', shape: '(4, 3)', color: '#8b5cf6', data: WQ, desc: 'Query 投影矩阵。把 4 维嵌入投影到 3 维 Query 空间。这是训练中学到的参数。' },
+      { name: 'Q', shape: '(3, 3)', color: '#3b82f6', data: Qm, desc: 'Query 矩阵 = X × W^Q。每行是一个位置发出的"我想找什么"信号。' },
+      { name: 'K', shape: '(3, 3)', color: '#f59e0b', data: Km, desc: 'Key 矩阵 = X × W^K。每行是一个位置的"我能匹配什么"线索。' },
+      { name: 'V', shape: '(3, 3)', color: '#10b981', data: Vm, desc: 'Value 矩阵 = X × W^V。每行是一个位置"匹配后提供的完整内容"。' },
+      { name: 'QK^T', shape: '(3, 3)', color: '#ef4444', data: Scores, desc: '注意力分数矩阵。S[i][j] = Q第i行 · K第j行 的点积。表示位置 i 对位置 j 的原始相关性。' },
+      { name: 'α', shape: '(3, 3)', color: '#8b5cf6', data: Alpha, desc: '注意力权重矩阵 = softmax(QK^T/√d_k)。每行之和 = 1，表示一个概率分布。' },
+      { name: 'Output', shape: '(3, 3)', color: '#10b981', data: Output, desc: '最终输出 = α × V。每个词融合了上下文信息后的新表示。' },
+    ];
+
+    items.forEach(function(it) {
+      var btn = document.createElement('button');
+      btn.textContent = it.name + ' ' + it.shape;
+      btn.className = 'attn-btn attn-btn-secondary';
+      btn.style.margin = '0.2rem';
+      btn.style.fontFamily = 'monospace';
+      btn.addEventListener('click', function() {
+        showMatrix(it);
+      });
+      container.appendChild(btn);
+    });
+
+    function showMatrix(it) {
+      var c = C();
+      var html = '<table class="matrix-table"><tr><th style="background:'+it.color+';color:white;">'+it.name+'</th>';
+      for (var j = 0; j < it.data[0].length; j++) html += '<th>col '+j+'</th>';
+      html += '</tr>';
+      for (var i = 0; i < it.data.length; i++) {
+        html += '<tr><th>' + (it.name === 'X' ? words[i] : 'row '+i) + '</th>';
+        for (var j2 = 0; j2 < it.data[i].length; j2++) {
+          var v = it.data[i][j2];
+          var bg = v > 0 ? 'rgba(59,130,246,'+Math.min(Math.abs(v)*0.3, 0.4)+')' : 'rgba(239,68,68,'+Math.min(Math.abs(v)*0.3, 0.4)+')';
+          html += '<td style="background:'+bg+';">'+v.toFixed(2)+'</td>';
+        }
+        html += '</tr>';
+      }
+      html += '</table>';
+      display.innerHTML = html;
+      info.innerHTML = '<strong>'+it.name+'</strong> <span class="dim-tag" style="background:'+it.color+';color:white;">'+it.shape+'</span> — '+it.desc;
+    }
+
+    showMatrix(items[0]);
+  }
+
+  // ============ 2. Projection Step-by-step ============
+  function initProjStep() {
+    var svg = document.getElementById('proj-step-svg');
+    var prev = document.getElementById('proj-prev');
+    var next = document.getElementById('proj-next');
+    var disp = document.getElementById('proj-disp');
+    var infoEl = document.getElementById('proj-info');
+    if (!svg) return;
+
+    var step = 0, total = 6;
+    var infos = [
+      { t:'初始状态', d:'输入矩阵 X 有 3 行（3 个词），每行 4 维。接下来将分别投影到 Q、K、V 空间。' },
+      { t:'X → Q = X·W^Q', d:'"猫坐地毯" 的每个词向量乘以 W^Q(4×3)，生成 Query。Q 的每一行是对应位置"想找什么"的表示。维度: (3,4)×(4,3)→(3,3)' },
+      { t:'X → K = X·W^K', d:'同一个 X 乘以不同的权重矩阵 W^K，生成 Key。K 的每一行是对应位置"能匹配什么"的线索。维度: (3,4)×(4,3)→(3,3)' },
+      { t:'X → V = X·W^V', d:'同一个 X 再乘以 W^V，生成 Value。V 的每一行是对应位置"匹配后提供的内容"。维度: (3,4)×(4,3)→(3,3)' },
+      { t:'三路投影完成', d:'同一个输入 X，通过 3 个不同的权重矩阵，被"解读"成了 3 种不同角色。这就是 Self-Attention 中"三种视角看同一个输入"的核心思想。' },
+      { t:'维度检查', d:'X(3,4) → Q(3,3), K(3,3), V(3,3)。每个矩阵仍然是"3 个词 × 每词一个向量"，但向量维度从 d_model=4 变成了 d_k=3。' },
+    ];
+
+    function draw() {
+      var c = C();
+      var s = '';
+      var bx = 80, gx = 180;
+
+      // X box
+      s += '<rect x="40" y="60" width="80" height="100" rx="8" fill="'+c.node+'" stroke="'+c.primary+'" stroke-width="2.5"/>';
+      s += '<text x="80" y="55" text-anchor="middle" fill="'+c.primary+'" font-size="13" font-weight="700">X (3×4)</text>';
+      for (var i = 0; i < 3; i++) {
+        s += '<text x="80" y="'+(85+i*28)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-family="monospace">['+X[i].map(function(v){return v.toFixed(1);}).join(', ')+']</text>';
+      }
+
+      var targets = [
+        { name: 'Q', W: 'W^Q', color: c.pStrong, y: 20, data: Qm, minStep: 1 },
+        { name: 'K', W: 'W^K', color: c.warning, y: 150, data: Km, minStep: 2 },
+        { name: 'V', W: 'W^V', color: c.success, y: 280, data: Vm, minStep: 3 },
+      ];
+
+      targets.forEach(function(t) {
+        if (step >= t.minStep) {
+          // Arrow
+          s += '<line x1="120" y1="110" x2="280" y2="'+(t.y+50)+'" stroke="'+t.color+'" stroke-width="2" opacity="0.7"/>';
+          // W label
+          var mx = 200, my = (110+t.y+50)/2;
+          s += '<text x="'+mx+'" y="'+(my-6)+'" text-anchor="middle" fill="'+t.color+'" font-size="10" font-weight="600">×'+t.W+'</text>';
+          // Result box
+          s += '<rect x="280" y="'+t.y+'" width="160" height="100" rx="8" fill="'+c.node+'" stroke="'+t.color+'" stroke-width="2.5"/>';
+          s += '<text x="360" y="'+(t.y-5)+'" text-anchor="middle" fill="'+t.color+'" font-size="13" font-weight="700">'+t.name+' (3×3)</text>';
+          for (var i = 0; i < 3; i++) {
+            s += '<text x="360" y="'+(t.y+25+i*28)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-family="monospace">['+t.data[i].map(function(v){return v.toFixed(2);}).join(', ')+']</text>';
+          }
+        }
+      });
+
+      // Step >= 4: connect Q,K,V
+      if (step >= 4) {
+        s += '<text x="560" y="110" fill="'+c.muted+'" font-size="11" font-weight="600" text-anchor="middle">同一个 X</text>';
+        s += '<text x="560" y="128" fill="'+c.muted+'" font-size="11" text-anchor="middle">3 种解读</text>';
+        s += '<line x1="440" y1="70" x2="500" y2="110" stroke="'+c.border+'" stroke-width="1.5" stroke-dasharray="4,3"/>';
+        s += '<line x1="440" y1="200" x2="500" y2="115" stroke="'+c.border+'" stroke-width="1.5" stroke-dasharray="4,3"/>';
+        s += '<line x1="440" y1="330" x2="500" y2="120" stroke="'+c.border+'" stroke-width="1.5" stroke-dasharray="4,3"/>';
+      }
+
+      if (step >= 5) {
+        s += '<text x="600" y="200" fill="'+c.primary+'" font-size="10" font-weight="600" text-anchor="middle">维度变化:</text>';
+        s += '<text x="600" y="218" fill="'+c.text+'" font-size="10" font-family="monospace" text-anchor="middle">(3,4)→(3,3)</text>';
+        s += '<text x="600" y="236" fill="'+c.muted+'" font-size="9" text-anchor="middle">d_model → d_k</text>';
+      }
+
+      svg.innerHTML = s;
+      disp.textContent = step + ' / ' + (total - 1);
+      infoEl.innerHTML = '<strong>'+infos[step].t+'</strong>：'+infos[step].d;
+    }
+
+    function go(d) { step = Math.max(0, Math.min(total-1, step+d)); draw(); }
+    prev.addEventListener('click', function() { go(-1); });
+    next.addEventListener('click', function() { go(1); });
+    document.addEventListener('keydown', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 3. QKT Matrix Explorer ============
+  function initQKT() {
+    var matrix = document.getElementById('qkt-matrix');
+    var detail = document.getElementById('qkt-detail');
+    var info = document.getElementById('qkt-info');
+    if (!matrix) return;
+
+    function draw() {
+      var c = C();
+      var html = '<table class="matrix-table"><tr><th>QK<sup>T</sup></th>';
+      words.forEach(function(w, j) { html += '<th>K:'+w+'</th>'; });
+      html += '</tr>';
+      for (var i = 0; i < 3; i++) {
+        html += '<tr><th>Q:'+words[i]+'</th>';
+        for (var j = 0; j < 3; j++) {
+          var v = Scores[i][j];
+          var bg = v > 0 ? 'rgba(59,130,246,'+Math.min(v*0.3,0.5)+')' : 'rgba(239,68,68,'+Math.min(Math.abs(v)*0.3,0.5)+')';
+          html += '<td style="background:'+bg+';cursor:pointer;" data-i="'+i+'" data-j="'+j+'">'+v.toFixed(3)+'</td>';
+        }
+        html += '</tr>';
+      }
+      html += '</table>';
+      matrix.innerHTML = html;
+
+      // Attach click handlers
+      matrix.querySelectorAll('td[data-i]').forEach(function(td) {
+        td.addEventListener('click', function() {
+          var ii = parseInt(td.getAttribute('data-i'));
+          var jj = parseInt(td.getAttribute('data-j'));
+          showDetail(ii, jj);
+        });
+      });
+    }
+
+    function showDetail(i, j) {
+      var c = C();
+      var q = Qm[i], k = Km[j];
+      var terms = [];
+      var sum = 0;
+      for (var d = 0; d < 3; d++) {
+        terms.push(q[d].toFixed(2) + ' × ' + k[d].toFixed(2) + ' = ' + (q[d]*k[d]).toFixed(3));
+        sum += q[d]*k[d];
+      }
+      var html = '<div style="font-size:0.85rem;color:'+c.text+';">';
+      html += '<div style="font-weight:700;color:'+c.primary+';margin-bottom:0.5rem;">S['+i+']['+j+'] = q_'+words[i]+' · k_'+words[j]+'</div>';
+      html += '<div style="font-family:monospace;font-size:0.8rem;">';
+      html += 'Q['+i+'] = ['+q.map(function(v){return v.toFixed(2);}).join(', ')+']<br/>';
+      html += 'K['+j+'] = ['+k.map(function(v){return v.toFixed(2);}).join(', ')+']<br/><br/>';
+      html += '点积 = <br/>';
+      terms.forEach(function(t) { html += '  '+t+'<br/>'; });
+      html += '<br/><strong>= '+sum.toFixed(3)+'</strong>';
+      html += '</div></div>';
+      detail.innerHTML = html;
+      info.textContent = '"'+words[i]+'" 对 "'+words[j]+'" 的原始相关性分数 = '+sum.toFixed(3);
+      info.style.color = c.primary;
+    }
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 4. Scaling Demo ============
+  function initScaling() {
+    var svg = document.getElementById('scale-svg');
+    var slider = document.getElementById('dk-slider');
+    var valEl = document.getElementById('dk-value');
+    var infoEl = document.getElementById('scale-info');
+    if (!svg || !slider) return;
+
+    function draw() {
+      var c = C();
+      var dk2 = parseInt(slider.value);
+      valEl.textContent = dk2;
+
+      // Simulate: raw scores grow with sqrt(dk)
+      var rawScores = [0.5*Math.sqrt(dk2), -0.2*Math.sqrt(dk2), 1.1*Math.sqrt(dk2), 0.3*Math.sqrt(dk2)];
+      var scaledScores = rawScores.map(function(v) { return v / Math.sqrt(dk2); });
+
+      var rawSm = softmaxRow(rawScores);
+      var scaledSm = softmaxRow(scaledScores);
+
+      var labels = ['Token 1','Token 2','Token 3','Token 4'];
+      var barW = 60, gap = 90, sx = 80, barMax = 140;
+
+      var h = '';
+      // Title: No scaling
+      h += '<text x="280" y="20" text-anchor="middle" fill="'+c.danger+'" font-size="12" font-weight="700">不缩放 softmax(QK^T)</text>';
+      // Title: With scaling
+      h += '<text x="560" y="20" text-anchor="middle" fill="'+c.success+'" font-size="12" font-weight="700">缩放后 softmax(QK^T/√d_k)</text>';
+
+      labels.forEach(function(l, i) {
+        var x1 = 120 + i * 80;
+        var x2 = 400 + i * 80;
+
+        // No scaling bars
+        var h1 = rawSm[i] * barMax;
+        var rawColor = rawSm[i] > 0.5 ? c.danger : c.muted;
+        h += '<rect x="'+(x1-25)+'" y="'+(180-h1)+'" width="50" height="'+h1+'" rx="4" fill="'+rawColor+'" opacity="0.7"/>';
+        h += '<text x="'+x1+'" y="'+(180-h1-6)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-weight="600">'+(rawSm[i]*100).toFixed(1)+'%</text>';
+        h += '<text x="'+x1+'" y="198" text-anchor="middle" fill="'+c.muted+'" font-size="9">'+l+'</text>';
+
+        // With scaling bars
+        var h2 = scaledSm[i] * barMax;
+        var scColor = scaledSm[i] > 0.5 ? c.success : (scaledSm[i] > 0.2 ? '#60a5fa' : c.muted);
+        h += '<rect x="'+(x2-25)+'" y="'+(180-h2)+'" width="50" height="'+h2+'" rx="4" fill="'+scColor+'" opacity="0.7"/>';
+        h += '<text x="'+x2+'" y="'+(180-h2-6)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-weight="600">'+(scaledSm[i]*100).toFixed(1)+'%</text>';
+        h += '<text x="'+x2+'" y="198" text-anchor="middle" fill="'+c.muted+'" font-size="9">'+l+'</text>';
+      });
+
+      // Baseline
+      h += '<line x1="70" y1="180" x2="430" y2="180" stroke="'+c.border+'" stroke-width="1"/>';
+      h += '<line x1="370" y1="180" x2="710" y2="180" stroke="'+c.border+'" stroke-width="1"/>';
+
+      // Entropy indicator
+      var entropyRaw = -rawSm.reduce(function(s,p) { return s + (p > 1e-10 ? p*Math.log(p) : 0); }, 0);
+      var entropyScaled = -scaledSm.reduce(function(s,p) { return s + (p > 1e-10 ? p*Math.log(p) : 0); }, 0);
+      var maxEntropy = Math.log(4);
+      h += '<text x="280" y="230" text-anchor="middle" fill="'+c.danger+'" font-size="10">熵 = '+entropyRaw.toFixed(2)+' / '+maxEntropy.toFixed(2)+'</text>';
+      h += '<text x="560" y="230" text-anchor="middle" fill="'+c.success+'" font-size="10">熵 = '+entropyScaled.toFixed(2)+' / '+maxEntropy.toFixed(2)+'</text>';
+
+      // Entropy bars
+      var ew = 120;
+      h += '<rect x="'+(280-ew/2)+'" y="238" width="'+ew+'" height="6" rx="3" fill="'+c.border+'"/>';
+      h += '<rect x="'+(280-ew/2)+'" y="238" width="'+(ew*entropyRaw/maxEntropy)+'" height="6" rx="3" fill="'+c.danger+'"/>';
+      h += '<rect x="'+(560-ew/2)+'" y="238" width="'+ew+'" height="6" rx="3" fill="'+c.border+'"/>';
+      h += '<rect x="'+(560-ew/2)+'" y="238" width="'+(ew*entropyScaled/maxEntropy)+'" height="6" rx="3" fill="'+c.success+'"/>';
+
+      h += '<text x="280" y="265" text-anchor="middle" fill="'+c.muted+'" font-size="9">熵越低 → 越集中（接近 one-hot）</text>';
+      h += '<text x="560" y="265" text-anchor="middle" fill="'+c.muted+'" font-size="9">熵越高 → 越分散（信息更均匀）</text>';
+
+      svg.innerHTML = h;
+
+      if (dk2 <= 16) {
+        infoEl.innerHTML = 'd_k = '+dk2+' 较小时，缩放前后差异不大。两种 softmax 的分布都比较均匀。';
+      } else if (dk2 <= 128) {
+        infoEl.innerHTML = 'd_k = '+dk2+'，不缩放时分数已经偏大，softmax 开始变得尖锐（集中在 Token 3）。缩放后分布仍然合理。';
+      } else {
+        infoEl.innerHTML = '<strong>d_k = '+dk2+'！</strong>不缩放时 softmax 已经接近 one-hot——几乎所有注意力都集中在一个 token 上，梯度接近 0，模型很难通过训练调整权重。缩放后分布正常。';
+      }
+    }
+
+    slider.addEventListener('input', draw);
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 5. Softmax Row Explorer ============
+  function initSoftmax() {
+    var leftEl = document.getElementById('softmax-left');
+    var rightEl = document.getElementById('softmax-right');
+    var detailEl = document.getElementById('softmax-detail');
+    if (!leftEl) return;
+
+    function draw() {
+      var c = C();
+      // Left table: scaled scores
+      var html1 = '<table class="matrix-table"><tr><th>缩放分数</th>';
+      words.forEach(function(w) { html1 += '<th>'+w+'</th>'; });
+      html1 += '</tr>';
+      for (var i = 0; i < 3; i++) {
+        html1 += '<tr><th style="cursor:pointer;" data-row="'+i+'">'+words[i]+' ▶</th>';
+        for (var j = 0; j < 3; j++) {
+          html1 += '<td>'+ScoresScaled[i][j].toFixed(3)+'</td>';
+        }
+        html1 += '</tr>';
+      }
+      html1 += '</table>';
+      leftEl.innerHTML = html1;
+
+      // Right table: alpha
+      var html2 = '<table class="matrix-table"><tr><th>α 权重</th>';
+      words.forEach(function(w) { html2 += '<th>'+w+'</th>'; });
+      html2 += '</tr>';
+      for (var i = 0; i < 3; i++) {
+        html2 += '<tr><th>'+words[i]+'</th>';
+        for (var j = 0; j < 3; j++) {
+          var a = Alpha[i][j];
+          var bg = 'rgba(59,130,246,'+Math.min(a*1.5, 0.6)+')';
+          html2 += '<td style="background:'+bg+';font-weight:600;">'+a.toFixed(3)+'</td>';
+        }
+        html2 += '</tr>';
+      }
+      html2 += '</table>';
+      rightEl.innerHTML = html2;
+
+      // Click handler on row headers
+      leftEl.querySelectorAll('th[data-row]').forEach(function(th) {
+        th.addEventListener('click', function() {
+          showRow(parseInt(th.getAttribute('data-row')));
+        });
+      });
+    }
+
+    function showRow(i) {
+      var c = C();
+      var row = ScoresScaled[i];
+      var exps = row.map(function(v) { return Math.exp(v); });
+      var sumE = exps.reduce(function(a,b) { return a+b; });
+      var html = '<strong>"'+words[i]+'" 行的 softmax 计算：</strong><br/><br/>';
+      html += '<span style="font-family:monospace;font-size:0.8rem;">';
+      html += '原始分数 → ['+row.map(function(v){return v.toFixed(3);}).join(', ')+']<br/>';
+      html += 'exp(·)&nbsp;&nbsp;&nbsp; → ['+exps.map(function(v){return v.toFixed(3);}).join(', ')+']<br/>';
+      html += 'sum(exp) = '+sumE.toFixed(3)+'<br/>';
+      html += 'α = exp/sum → ['+Alpha[i].map(function(v){return v.toFixed(3);}).join(', ')+']<br/>';
+      html += '验证: '+Alpha[i].reduce(function(a,b){return a+b;},0).toFixed(6)+' ≈ 1.0 ✓';
+      html += '</span>';
+      detailEl.innerHTML = html;
+    }
+
+    draw();
+    onTheme(draw);
+    detailEl.innerHTML = '点击左侧表格的行头（如 "猫 ▶"），查看该行的 softmax 计算过程。';
+  }
+
+  // ============ 6. Output Step-by-step ============
+  function initOutput() {
+    var svg = document.getElementById('output-svg');
+    var prev = document.getElementById('out-prev');
+    var next = document.getElementById('out-next');
+    var disp = document.getElementById('out-disp');
+    var infoEl = document.getElementById('out-info');
+    if (!svg) return;
+
+    var step = 0, total = 5;
+    var infos = [
+      { t:'准备阶段', d:'我们已经有了注意力权重 α (3×3) 和 Value 矩阵 V (3×3)。接下来要计算 Output = α × V。' },
+      { t:'计算 o₁（"猫"的输出）', d:'o₁ = α[0,0]·V[0] + α[0,1]·V[1] + α[0,2]·V[2] = '+Alpha[0].map(function(a,j){return a.toFixed(2)+'·V['+j+']';}).join(' + ')+'。"猫"的新表示融合了所有词的 Value 信息。' },
+      { t:'计算 o₂（"坐"的输出）', d:'o₂ = '+Alpha[1].map(function(a,j){return a.toFixed(2)+'·V['+j+']';}).join(' + ')+'。"坐"会更关注和动作相关的位置信息。' },
+      { t:'计算 o₃（"地毯"的输出）', d:'o₃ = '+Alpha[2].map(function(a,j){return a.toFixed(2)+'·V['+j+']';}).join(' + ')+'。"地毯"融合了主语和动作的信息，理解了更完整的上下文。' },
+      { t:'输出完成', d:'Output(3×3) 和输入 X(3,4) 形式类似——仍然是"每词一个向量"。但每个向量现在包含了上下文信息，不再是孤立的词义。' },
+    ];
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var colW = 120, startX = 40;
+
+      // Alpha matrix
+      h += '<text x="'+(startX+60)+'" y="25" text-anchor="middle" fill="'+c.purple+'" font-size="12" font-weight="700">α (注意力权重)</text>';
+      for (var i = 0; i < 3; i++) {
+        for (var j = 0; j < 3; j++) {
+          var x = startX + j*55 + 10;
+          var y = 40 + i*40;
+          var a = Alpha[i][j];
+          var active = step >= 1 && (step - 1) === i;
+          var bg = active ? 'rgba(139,92,246,'+(0.2+a*0.6)+')' : 'rgba(139,92,246,'+(a*0.3)+')';
+          h += '<rect x="'+x+'" y="'+y+'" width="50" height="30" rx="4" fill="'+bg+'" stroke="'+(active?c.purple:c.border)+'" stroke-width="'+(active?2:1)+'"/>';
+          h += '<text x="'+(x+25)+'" y="'+(y+19)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-weight="'+(active?'700':'400')+'">'+a.toFixed(2)+'</text>';
+        }
+        h += '<text x="'+(startX-5)+'" y="'+(55+i*40)+'" text-anchor="end" fill="'+c.muted+'" font-size="9">'+words[i]+'</text>';
+      }
+
+      // × sign
+      h += '<text x="225" y="95" text-anchor="middle" fill="'+c.text+'" font-size="20" font-weight="700">×</text>';
+
+      // V matrix
+      h += '<text x="340" y="25" text-anchor="middle" fill="'+c.success+'" font-size="12" font-weight="700">V (Value)</text>';
+      for (var i2 = 0; i2 < 3; i2++) {
+        for (var j2 = 0; j2 < 3; j2++) {
+          var x2 = 260 + j2*55;
+          var y2 = 40 + i2*40;
+          var active2 = step >= 1 && step <= 3;
+          h += '<rect x="'+x2+'" y="'+y2+'" width="50" height="30" rx="4" fill="'+(active2?c.sLight:c.node)+'" stroke="'+c.success+'" stroke-width="1"/>';
+          h += '<text x="'+(x2+25)+'" y="'+(y2+19)+'" text-anchor="middle" fill="'+c.text+'" font-size="10">'+Vm[i2][j2].toFixed(2)+'</text>';
+        }
+      }
+
+      // = sign
+      h += '<text x="445" y="95" text-anchor="middle" fill="'+c.text+'" font-size="20" font-weight="700">=</text>';
+
+      // Output matrix
+      h += '<text x="575" y="25" text-anchor="middle" fill="'+c.pStrong+'" font-size="12" font-weight="700">Output</text>';
+      for (var i3 = 0; i3 < 3; i3++) {
+        var show = step >= (i3 + 1);
+        for (var j3 = 0; j3 < 3; j3++) {
+          var x3 = 475 + j3*65;
+          var y3 = 40 + i3*40;
+          h += '<rect x="'+x3+'" y="'+y3+'" width="60" height="30" rx="4" fill="'+(show?c.pLight:c.node)+'" stroke="'+(show?c.pStrong:c.border)+'" stroke-width="'+(show?2:1)+'"/>';
+          h += '<text x="'+(x3+30)+'" y="'+(y3+19)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-weight="'+(show?'600':'400')+'">'+(show?Output[i3][j3].toFixed(2):'?')+'</text>';
+        }
+        if (show) h += '<text x="'+(475+3*65+10)+'" y="'+(55+i3*40)+'" fill="'+c.pStrong+'" font-size="9">o'+(i3+1)+'</text>';
+      }
+
+      // Connection lines for current step
+      if (step >= 1 && step <= 3) {
+        var ci = step - 1;
+        for (var j4 = 0; j4 < 3; j4++) {
+          var fromX = startX + j4*55 + 60;
+          var fromY = 55 + ci*40;
+          var toX = 260 + j4*55;
+          var toY = 55 + j4*40;
+          h += '<line x1="'+fromX+'" y1="'+fromY+'" x2="'+toX+'" y2="'+toY+'" stroke="'+c.purple+'" stroke-width="'+(1+Alpha[ci][j4]*3)+'" opacity="0.5" stroke-dasharray="4,2"/>';
+        }
+      }
+
+      svg.innerHTML = h;
+      disp.textContent = step + ' / ' + (total - 1);
+      infoEl.innerHTML = '<strong>'+infos[step].t+'</strong>：'+infos[step].d;
+    }
+
+    function go(d) { step = Math.max(0, Math.min(total-1, step+d)); draw(); }
+    prev.addEventListener('click', function() { go(-1); });
+    next.addEventListener('click', function() { go(1); });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 7. Full Pipeline Animation ============
+  function initPipeline() {
+    var svg = document.getElementById('pipeline-svg');
+    var prev = document.getElementById('pipe-prev');
+    var next = document.getElementById('pipe-next');
+    var playBtn = document.getElementById('pipe-play');
+    var disp = document.getElementById('pipe-disp');
+    var infoEl = document.getElementById('pipe-info');
+    if (!svg) return;
+
+    var step = 0, total = 7, timer = null;
+    var stages = [
+      { name: 'X', shape: '(3,4)', color: '#3b82f6' },
+      { name: 'Q', shape: '(3,3)', color: '#3b82f6' },
+      { name: 'K', shape: '(3,3)', color: '#f59e0b' },
+      { name: 'V', shape: '(3,3)', color: '#10b981' },
+      { name: 'QK^T', shape: '(3,3)', color: '#ef4444' },
+      { name: 'softmax', shape: '(3,3)', color: '#8b5cf6' },
+      { name: 'Output', shape: '(3,3)', color: '#10b981' },
+    ];
+    var infos = [
+      'X：输入嵌入矩阵，3 个词 × 4 维。',
+      'Q = X·W^Q：投影到 Query 空间。',
+      'K = X·W^K：投影到 Key 空间。',
+      'V = X·W^V：投影到 Value 空间。',
+      'QK^T / √d_k：计算缩放后的注意力分数。',
+      'softmax(·)：逐行归一化为概率分布。',
+      'α × V：加权求和得到最终输出。',
+    ];
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var gap = 95, sx = 30, nodeY = 80, nodeW = 80, nodeH = 40;
+
+      stages.forEach(function(st, i) {
+        var x = sx + i * gap;
+        var active = i <= step;
+        var isCurrent = i === step;
+        var fill = active ? st.color : c.border;
+        var opacity = active ? (isCurrent ? 1 : 0.6) : 0.2;
+
+        h += '<rect x="'+x+'" y="'+(nodeY-nodeH/2)+'" width="'+nodeW+'" height="'+nodeH+'" rx="8" fill="'+fill+'" opacity="'+opacity+'"/>';
+        h += '<text x="'+(x+nodeW/2)+'" y="'+(nodeY+2)+'" text-anchor="middle" fill="white" font-size="11" font-weight="700" opacity="'+(active?1:0.3)+'">'+st.name+'</text>';
+        h += '<text x="'+(x+nodeW/2)+'" y="'+(nodeY+16)+'" text-anchor="middle" fill="white" font-size="9" opacity="'+(active?0.8:0.2)+'">'+st.shape+'</text>';
+
+        // Arrow
+        if (i < stages.length - 1) {
+          var ax = x + nodeW;
+          var arrowActive = i < step;
+          h += '<line x1="'+ax+'" y1="'+nodeY+'" x2="'+(ax+15)+'" y2="'+nodeY+'" stroke="'+(arrowActive?c.text:c.border)+'" stroke-width="2" marker-end="url(#pa)"/>';
+        }
+
+        // Operation label above
+        if (i === 1 || i === 2 || i === 3) {
+          var labels = { 1: '×W^Q', 2: '×W^K', 3: '×W^V' };
+          h += '<text x="'+(x+nodeW/2)+'" y="'+(nodeY-nodeH/2-8)+'" text-anchor="middle" fill="'+(active?st.color:c.muted)+'" font-size="9">'+labels[i]+'</text>';
+        }
+        if (i === 4) h += '<text x="'+(x+nodeW/2)+'" y="'+(nodeY-nodeH/2-8)+'" text-anchor="middle" fill="'+(active?st.color:c.muted)+'" font-size="9">Q×K^T/√d</text>';
+        if (i === 5) h += '<text x="'+(x+nodeW/2)+'" y="'+(nodeY-nodeH/2-8)+'" text-anchor="middle" fill="'+(active?st.color:c.muted)+'" font-size="9">逐行 softmax</text>';
+        if (i === 6) h += '<text x="'+(x+nodeW/2)+'" y="'+(nodeY-nodeH/2-8)+'" text-anchor="middle" fill="'+(active?st.color:c.muted)+'" font-size="9">α × V</text>';
+      });
+
+      h += '<defs><marker id="pa" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="'+c.muted+'"/></marker></defs>';
+
+      svg.innerHTML = h;
+      disp.textContent = step + ' / ' + (total - 1);
+      infoEl.innerHTML = '<strong>Step '+step+'</strong>：'+infos[step];
+    }
+
+    function go(d) { step = Math.max(0, Math.min(total-1, step+d)); draw(); }
+    prev.addEventListener('click', function() { go(-1); });
+    next.addEventListener('click', function() { go(1); });
+
+    var playing = false;
+    playBtn.addEventListener('click', function() {
+      if (playing) {
+        clearInterval(timer); playing = false; playBtn.textContent = '▶ 播放';
+      } else {
+        playing = true; playBtn.textContent = '⏸ 暂停';
+        step = 0; draw();
+        timer = setInterval(function() {
+          step++;
+          if (step >= total) { step = total - 1; clearInterval(timer); playing = false; playBtn.textContent = '▶ 播放'; }
+          draw();
+        }, 1200);
+      }
+    });
+
+    // Keyboard
+    document.addEventListener('keydown', function(e) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    });
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ Init ============
+  function init() {
+    initDimExplorer();
+    initProjStep();
+    initQKT();
+    initScaling();
+    initSoftmax();
+    initOutput();
+    initPipeline();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+`}</script>
