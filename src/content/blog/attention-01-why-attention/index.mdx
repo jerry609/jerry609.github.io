@@ -1,0 +1,1057 @@
+---
+title: "Attention 01：为什么需要 Attention"
+description: "从长距离依赖、固定长度瓶颈和动态信息需求出发，理解 Attention 机制到底在解决什么问题。"
+publishDate: "2026-03-16"
+tags: ["LLM", "Transformer", "Attention", "专题"]
+language: "zh-CN"
+draft: false
+---
+
+<style>{`
+  /* ===== Demo container: adapts to theme ===== */
+  .attn-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .attn-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .attn-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .attn-demo-info {
+    text-align: center; font-size: 0.8rem;
+    color: hsl(var(--muted-foreground)); margin-top: 0.5rem;
+  }
+  /* ===== Buttons ===== */
+  .attn-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .attn-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .attn-btn-primary:hover { opacity: 0.85; }
+  .attn-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .attn-btn-secondary:hover { opacity: 0.85; }
+  .attn-btn:disabled { opacity: 0.4; cursor: default; }
+  /* ===== Token chips ===== */
+  .cn-token {
+    display: inline-block; padding: 0.3rem 0.5rem;
+    border-radius: 6px; font-size: 0.85rem;
+    transition: all 0.3s; cursor: default;
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .cn-token.highlighted {
+    background: #3b82f6; color: white;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(59,130,246,0.4);
+  }
+  .en-token {
+    display: inline-block; padding: 0.3rem 0.6rem;
+    border-radius: 6px; font-size: 0.85rem;
+    transition: all 0.2s; cursor: pointer;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 2px solid transparent;
+  }
+  .en-token:hover { border-color: #3b82f6; }
+  /* ===== Step info box ===== */
+  .attn-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  /* ===== Slider ===== */
+  .attn-slider {
+    width: 80%; margin-top: 0.5rem;
+    accent-color: hsl(var(--primary));
+  }
+  /* ===== Heatmap cell ===== */
+  .heatmap-cell {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 600; color: white;
+    border-radius: 3px; transition: all 0.2s; cursor: pointer;
+    min-width: 36px; height: 30px;
+  }
+  .heatmap-cell:hover { transform: scale(1.15); z-index: 1; }
+  .heatmap-label {
+    font-size: 0.75rem; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; max-width: 60px;
+    color: hsl(var(--foreground));
+  }
+`}</style>
+
+[返回专题总目录](/blog/attention-series-outline/)
+
+`[01] 02 > 03 > 04 > 05 > 06 | 07 > 08 > 09 > 10 > 11 > 12`
+
+> *"Attention 不是让模型凭空变聪明，而是让模型在需要的时候，能去对的位置取对的信息。"*
+
+---
+
+## 问题：序列建模的核心矛盾
+
+如果没有 Attention，绝大多数序列模型（RNN、LSTM、GRU、甚至早期 CNN）都采用同一种思路：
+
+1. **读取**：从头到尾扫描整个输入序列。
+2. **压缩**：把所有信息塞进一个固定维度的内部表示。
+3. **输出**：基于这个表示生成目标序列。
+
+这套方案在短句子上勉强能用。但一旦句子变长，就会暴露三个核心问题：
+
+| 问题 | 直觉描述 | 数学根源 |
+| --- | --- | --- |
+| **长距离依赖** | 前面很早出现的信息，到后面容易被冲淡 | 梯度消失 / 信息衰减 |
+| **固定长度瓶颈** | 不管输入多长，都被硬塞进同样大小的向量 | $\mathbf{c} \in \mathbb{R}^d$，$d$ 固定 |
+| **静态读取** | 所有输出步骤共用同一个压缩结果 | $p(y_t \mid y_{<t}, \mathbf{c})$ 中 $\mathbf{c}$ 不随 $t$ 变化 |
+
+Attention 的出现，就是为了同时解决这三个问题。
+
+---
+
+## 从 Encoder-Decoder 说起
+
+在经典的 Seq2Seq 架构（Sutskever et al., 2014）中，最容易出问题的一步就是中间的"瓶颈"：
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：固定向量瓶颈</div>
+  <span class="attn-demo-subtitle">拖动滑块改变输入长度，观察信息密度变化</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <label style="font-size: 0.85rem;">输入序列长度：<span id="seq-len-display">5</span> 个 token</label><br/>
+    <input type="range" id="seq-len-slider" min="3" max="30" value="5" class="attn-slider" />
+  </div>
+  <svg id="bottleneck-svg" viewBox="0 0 700 200" style="width: 100%; max-height: 200px;"></svg>
+  <div id="bottleneck-info" class="attn-demo-info"></div>
+</div>
+
+你可以把这个固定向量 $\mathbf{c}$ 理解成一个小背包：
+
+- 输入很短时，背包还能装下。
+- 输入一长，信息就开始挤压。
+- 真到生成输出时，模型只能翻这个背包，不能再回去看原文。
+
+用数学语言来说，Encoder 把整个输入序列 $(x_1, x_2, \ldots, x_T)$ 编码成一个固定向量：
+
+$$
+\mathbf{c} = f_{\text{enc}}(x_1, x_2, \ldots, x_T) \in \mathbb{R}^d
+$$
+
+Decoder 在每一步生成时都只能依赖这同一个向量：
+
+$$
+p(y_t \mid y_1, \ldots, y_{t-1}, \mathbf{c})
+$$
+
+无论 $T = 5$ 还是 $T = 500$，$\mathbf{c}$ 的维度 $d$ 始终不变。这就是**信息论意义上的瓶颈**。
+
+---
+
+## 经验证据：翻译质量随句子变长急剧下降
+
+Cho et al. (2014) 和 Bahdanau et al. (2015) 都观测到同一个现象：**无 Attention 的 Seq2Seq 模型，BLEU 分数会随着源句子长度的增加而迅速下降。** 加入 Attention 后，长句翻译质量显著恢复。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互图表：BLEU 分数 vs 句子长度</div>
+  <span class="attn-demo-subtitle">基于 Bahdanau et al. (2015) 论文数据趋势复现。悬停查看具体数值。</span>
+  <svg id="bleu-chart-svg" viewBox="0 0 600 300" style="width: 100%; max-height: 300px; margin-top: 1rem;"></svg>
+  <div id="bleu-chart-info" class="attn-demo-info"></div>
+</div>
+
+这不是巧合。固定向量 $\mathbf{c}$ 的容量不会随输入长度增长——短句时它够用，长句时信息必然丢失。Attention 通过让 Decoder 在每一步直接回看 Encoder 的所有位置，从根本上绕过了这个瓶颈。
+
+---
+
+## 一个具体场景：翻译为什么会难
+
+假设输入句子是：
+
+> 那位在加州工作了十年、后来搬到纽约创业、最近又回到上海的工程师，昨天终于发布了自己的新产品。
+
+如果模型要把它翻成英文，不同的输出位置需要关注输入中的不同部分：
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：翻译对齐</div>
+  <span class="attn-demo-subtitle">点击英文词，看它应该关注哪些中文词</span>
+  <div style="display: flex; flex-direction: column; gap: 1rem; align-items: center; margin-top: 1rem;">
+    <div id="cn-words" style="display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; padding: 0.5rem;"></div>
+    <div style="color: hsl(var(--muted-foreground)); font-size: 1.2rem;">↕</div>
+    <div id="en-words" style="display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; padding: 0.5rem;"></div>
+  </div>
+  <div id="alignment-info" class="attn-demo-info">← 点击上面的英文词试试</div>
+</div>
+
+旧方案的问题在于：它会先把整句话压缩成一个统一的 $\mathbf{c}$，到真正生成 `California`、`New York`、`released` 这些词时，模型没法说"这一步我想重点看输入的哪一段"。
+
+而 Attention 的思路恰好相反——**每一步输出都可以重新决定：我现在最该看哪里。**
+
+---
+
+## RNN 在长距离依赖上为什么会吃力
+
+### 信息传递路径：传话游戏
+
+RNN 的信息流动方式是**链式传递**：
+
+$$
+\mathbf{h}_t = f(\mathbf{W}_h \mathbf{h}_{t-1} + \mathbf{W}_x \mathbf{x}_t + \mathbf{b})
+$$
+
+第 $t$ 步想用到第 $1$ 步的信息，要经过 $t - 1$ 次状态传递。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：RNN 信息传递衰减</div>
+  <span class="attn-demo-subtitle">点击「播放」观察信息如何在链式传递中逐步衰减</span>
+  <svg id="rnn-svg" viewBox="0 0 700 180" style="width: 100%; max-height: 180px;"></svg>
+  <div style="text-align: center; margin-top: 0.75rem;">
+    <button id="rnn-play-btn" class="attn-btn attn-btn-primary">▶ 播放</button>
+    <button id="rnn-reset-btn" class="attn-btn attn-btn-secondary" style="margin-left: 0.5rem;">↺ 重置</button>
+  </div>
+  <div id="rnn-info" class="attn-demo-info">信号从 x₁ 出发，观察它在传递中如何衰减</div>
+</div>
+
+这会带来三个核心问题：
+
+### 1. 路径太长 → 梯度消失
+
+越早的信息，要经过越多步才能影响当前输出。数学上，信息的传递和梯度的反向传播都涉及矩阵连乘：
+
+$$
+\frac{\partial \mathbf{h}_t}{\partial \mathbf{h}_1} = \prod_{k=2}^{t} \frac{\partial \mathbf{h}_k}{\partial \mathbf{h}_{k-1}}
+$$
+
+当 $t$ 很大时，如果每一步的偏导数（即 Jacobian 矩阵）的**谱范数**小于 1：
+
+$$
+\left\| \frac{\partial \mathbf{h}_k}{\partial \mathbf{h}_{k-1}} \right\| < 1
+$$
+
+那么连乘结果会指数衰减，导致**梯度消失**。模型在训练时根本学不到远距离依赖。反过来，如果谱范数大于 1，梯度会指数爆炸。
+
+> **直觉**：你可以把它理解成"传话游戏"——一句话中间只传两三个人，失真还不明显；传二三十个人，最后的内容就很难保证不变形。
+
+### 2. 隐藏状态负担过重
+
+RNN 的隐藏状态 $\mathbf{h}_t \in \mathbb{R}^d$ 要同时承担：
+
+- **记忆存储**：保留之前所有输入的关键信息
+- **当前处理**：编码当前时间步的输入
+- **未来服务**：为后续预测提供上下文
+
+一个 $d$ 维向量同时做"存储器 + 压缩器 + 决策依据"，句子一长负担就会明显加重。
+
+### 3. 早期信息的重要性不稳定
+
+有些信息刚出现时看起来不重要，但到后面突然变得关键。比如：
+
+> **主语**在句首出现 → 句子中间是各种修饰 → **谓语**在句末出现
+
+此时主语（句首）对谓语（句末）至关重要，但 RNN 很难保证这个信息能被稳定保留。
+
+### 补充：LSTM / GRU 部分缓解了梯度问题，但没有解决瓶颈
+
+LSTM 通过**门控机制**（遗忘门、输入门、输出门）让信息可以选择性地"直通"多个时间步，大幅缓解了梯度消失：
+
+$$
+\mathbf{c}_t = \mathbf{f}_t \odot \mathbf{c}_{t-1} + \mathbf{i}_t \odot \tilde{\mathbf{c}}_t
+$$
+
+当遗忘门 $\mathbf{f}_t \approx 1$ 时，旧记忆几乎无损传递。GRU 是类似的简化版。
+
+但是，LSTM/GRU **不能解决固定长度瓶颈**——最终仍然是把整个序列压进一个 $\mathbf{h}_T$。Attention 解决的是更根本的问题：不是"怎么更好地记忆"，而是"怎么更灵活地读取"。
+
+---
+
+## CNN 也不能从根上解决问题
+
+CNN 处理序列时比 RNN 更并行，但也有天然限制。
+
+一个卷积核的感受野（receptive field）是有限的。如果窗口大小为 $k$，那么一层 CNN 只能看到 $k$ 个相邻的 token。想看到距离为 $L$ 的位置，需要的层数为：
+
+$$
+\text{层数} \geq \frac{L - 1}{k - 1}
+$$
+
+也就是说，**远距离交互的路径长度**是 $O(L / k)$——虽然比 RNN 的 $O(L)$ 好，但仍然不是 $O(1)$。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互对比：三种架构的信息路径长度</div>
+  <span class="attn-demo-subtitle">拖动滑块改变序列长度，观察不同架构的路径差异</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <label style="font-size: 0.85rem;">序列长度 L = <span id="path-len-display">16</span></label><br/>
+    <input type="range" id="path-len-slider" min="4" max="64" value="16" class="attn-slider" style="width: 70%;" />
+  </div>
+  <div id="path-compare" style="display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;"></div>
+</div>
+
+Attention 在这里的优势是：**任意两个位置之间的交互路径长度始终为 $O(1)$**，因为它允许每个位置直接"看到"所有其他位置。
+
+| 架构 | 路径长度 | 序列操作复杂度 | 并行度 |
+| --- | --- | --- | --- |
+| RNN | $O(n)$ | $O(n)$ | $O(1)$ |
+| CNN（$k$ 层） | $O(n / k)$ | $O(n \cdot k)$ | $O(1)$ |
+| **Self-Attention** | $O(1)$ | $O(n^2 \cdot d)$ | $O(n)$ |
+
+> Self-Attention 用 $O(n^2)$ 的计算换来了 $O(1)$ 的信息路径，这是它的核心 trade-off。
+
+---
+
+## 固定长度表示为什么不够
+
+这是理解 Attention 最关键的一点。
+
+### 信息论视角
+
+把输入序列看成一个信息源，它的信息量（熵）大致随序列长度线性增长：
+
+$$
+H(X_1, X_2, \ldots, X_T) \approx T \cdot \bar{H}
+$$
+
+其中 $\bar{H}$ 是每个 token 的平均信息量。
+
+但固定维度向量 $\mathbf{c} \in \mathbb{R}^d$ 能承载的信息量是有上界的（由 $d$ 决定）。当 $T$ 增大到一定程度：
+
+$$
+T \cdot \bar{H} > \text{capacity}(\mathbf{c})
+$$
+
+信息必然会丢失。这不是模型"没学好"，而是**信息论的硬约束**。
+
+### 不同解码步骤需要不同信息
+
+即使假设 $\mathbf{c}$ 的容量无限大，还有一个更根本的问题：
+
+解码第 1 个词时需要的信息，和解码第 10 个词时需要的信息，往往不是一回事：
+
+$$
+\underbrace{p(y_1 \mid \mathbf{c})}_{\text{需要主语信息}} \neq \underbrace{p(y_{10} \mid y_{<10}, \mathbf{c})}_{\text{需要动作/时态信息}}
+$$
+
+但如果所有步骤都只能用同一个 $\mathbf{c}$，等于要求这个向量同时满足所有解码步骤的需求。这是一个很强、也很不自然的要求。
+
+更合理的做法是：**输入序列先保留下来，每次输出时，再根据当前需求去取不同部分。**
+
+这正是 Attention 的出发点。
+
+---
+
+## Attention 到底解决了什么
+
+Attention 的核心转变用一个公式就能说清楚。
+
+**旧方案**（固定 context vector）：
+
+$$
+\mathbf{c} = \mathbf{h}_T \quad \text{（只用 Encoder 最后一个状态）}
+$$
+
+**Attention 方案**（动态 context vector）：
+
+$$
+\mathbf{c}_t = \sum_{j=1}^{T} \alpha_{tj} \cdot \mathbf{h}_j
+$$
+
+其中 $\alpha_{tj}$ 是 Decoder 在生成第 $t$ 个输出时，对 Encoder 第 $j$ 个位置的**注意力权重**：
+
+$$
+\alpha_{tj} = \frac{\exp(e_{tj})}{\sum_{k=1}^{T} \exp(e_{tk})}
+$$
+
+而 $e_{tj}$ 是一个**对齐分数**，衡量"Decoder 当前状态"和"Encoder 第 $j$ 个位置"之间的相关性：
+
+$$
+e_{tj} = a(\mathbf{s}_{t-1}, \mathbf{h}_j)
+$$
+
+这里 $a(\cdot)$ 是一个可学习的对齐函数（比如一个小型前馈网络），$\mathbf{s}_{t-1}$ 是 Decoder 在前一步的隐藏状态。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">步进演示：Attention 计算流程</div>
+  <span class="attn-demo-subtitle">逐步观察 Attention 如何从"分数 → 权重 → 加权求和"完成动态信息提取（支持键盘 ←→）</span>
+  <svg id="attention-flow-svg" viewBox="0 0 700 320" style="width: 100%; max-height: 320px;"></svg>
+  <div style="text-align: center; margin-top: 0.75rem;">
+    <button id="attn-prev-btn" class="attn-btn attn-btn-secondary">◀ 上一步</button>
+    <span id="attn-step-display" style="margin: 0 1rem; font-size: 0.85rem; font-weight: 600; color: hsl(var(--foreground));">0 / 5</span>
+    <button id="attn-next-btn" class="attn-btn attn-btn-primary">下一步 ▶</button>
+  </div>
+  <div id="attn-step-info" class="attn-step-info"></div>
+</div>
+
+关键的变化是：
+
+$$
+\underbrace{\mathbf{c}}_{\text{旧：固定不变}} \longrightarrow \underbrace{\mathbf{c}_t}_{\text{新：随 } t \text{ 变化}}
+$$
+
+每个解码步骤 $t$ 都有自己独立的 context vector $\mathbf{c}_t$，它由 Encoder 所有位置的加权和构成，而权重 $\alpha_{tj}$ 反映了当前步骤对各位置的关注程度。
+
+所以 Attention 真正解决的，不是单独一个点，而是**三个问题一起**：
+
+1. **读取方式太死** → 现在每一步都可以按需读取不同位置
+2. **远距离路径太长** → 每个位置直接与所有位置交互，路径 $O(1)$
+3. **不同步骤需求不同** → 每一步有独立的 $\mathbf{c}_t$
+
+---
+
+## "动态地看不同位置"是什么意思
+
+这是后面所有 Attention 公式的直觉原点。
+
+同一个输入序列，在不同输出时刻，模型关注的位置本来就应该不同。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：动态注意力分配</div>
+  <span class="attn-demo-subtitle">点击下方不同的输出词，观察注意力权重的动态变化</span>
+  <svg id="dynamic-attn-svg" viewBox="0 0 700 250" style="width: 100%; max-height: 250px;"></svg>
+  <div id="dynamic-attn-output" style="display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem;"></div>
+  <div id="dynamic-attn-info" class="attn-demo-info">← 点击输出词查看注意力分布</div>
+</div>
+
+注意，Attention 不是"只看一个位置"。很多时候，当前输出会**同时依赖多个位置**。所以更准确地说：
+
+> Attention 是一种**按相关性分配读取权重**的机制。它不是硬选择（hard selection），而是软检索（soft retrieval）。
+
+用数学表达就是：
+
+$$
+\mathbf{c}_t = \sum_{j=1}^{T} \alpha_{tj} \mathbf{h}_j, \quad \text{where } \sum_{j=1}^{T} \alpha_{tj} = 1, \quad \alpha_{tj} \geq 0
+$$
+
+每个 $\alpha_{tj}$ 都是非负的，加起来为 1——这就是一个**概率分布**，描述了"当前步骤对各个输入位置的注意力分配"。
+
+---
+
+## 注意力热图：全景视角
+
+上面的柱状图一次只看一个输出词的注意力分布。如果把**所有输出词的注意力权重**放在一起，就得到了一个**注意力矩阵**（attention heatmap）——这也是 Bahdanau 论文中最经典的可视化。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互热图：完整注意力矩阵</div>
+  <span class="attn-demo-subtitle">悬停/点击任意格子查看该位置的注意力权重。颜色越深 = 权重越大。</span>
+  <div id="heatmap-container" style="overflow-x: auto; margin-top: 1rem;"></div>
+  <div id="heatmap-info" class="attn-demo-info">悬停在热图上查看权重</div>
+</div>
+
+热图的每一**行**对应一个英文输出词，每一**列**对应一个中文输入词。你可以清楚地看到：
+
+- 对角线附近的高亮带表示**局部对齐**（顺序大致对应的翻译）。
+- 偏离对角线的亮点表示**跨距对齐**（输出需要回头看远处的输入）。
+- 每行的颜色分布不同，说明**每个输出步骤关注的位置确实不一样**。
+
+这就是 Attention 的可视化证据：模型真的在"动态地看不同位置"。
+
+---
+
+## Bahdanau Attention 的完整公式
+
+这里给出 Bahdanau et al. (2015) 的原始 Attention 公式，供需要完整数学推导的读者参考。
+
+**Encoder**：双向 RNN，得到每个位置的注释向量（annotation）：
+
+$$
+\mathbf{h}_j = [\overrightarrow{\mathbf{h}}_j ; \overleftarrow{\mathbf{h}}_j] \in \mathbb{R}^{2d}
+$$
+
+**Decoder**：在生成第 $t$ 个 token 时：
+
+1. 计算对齐分数：
+$$
+e_{tj} = \mathbf{v}_a^\top \tanh(\mathbf{W}_a \mathbf{s}_{t-1} + \mathbf{U}_a \mathbf{h}_j)
+$$
+
+2. 归一化得到注意力权重：
+$$
+\alpha_{tj} = \text{softmax}_j(e_{tj}) = \frac{\exp(e_{tj})}{\sum_{k=1}^{T} \exp(e_{tk})}
+$$
+
+3. 计算加权上下文向量：
+$$
+\mathbf{c}_t = \sum_{j=1}^{T} \alpha_{tj} \mathbf{h}_j
+$$
+
+4. 更新 Decoder 状态：
+$$
+\mathbf{s}_t = f(\mathbf{s}_{t-1}, y_{t-1}, \mathbf{c}_t)
+$$
+
+5. 预测输出概率：
+$$
+p(y_t \mid y_{<t}, \mathbf{x}) = g(\mathbf{s}_t, y_{t-1}, \mathbf{c}_t)
+$$
+
+其中 $\mathbf{v}_a, \mathbf{W}_a, \mathbf{U}_a$ 都是可学习参数。
+
+> 后面第 3 讲会详细展开 Self-Attention 的公式（$QK^TV$ 形式），它是 Bahdanau Attention 的进一步简化和推广。
+
+---
+
+## 这一讲先记住三句话
+
+如果你读完这一讲只记住三件事，我希望是：
+
+1. **Attention 首先在解决"怎么取信息"，而不是单纯解决"怎么存信息"。**
+2. **旧模型的瓶颈不只是记不住，而是必须把所有信息提前压进固定长度表示里。**
+3. **Attention 的核心思想是：当前需要什么，就按相关性去不同位置取什么。**
+
+---
+
+## 一个最小化心智模型
+
+| 方案 | 类比 | 数学描述 |
+| --- | --- | --- |
+| RNN / 固定向量 | 先把整本书写成一页摘要，之后所有问题都只能看这页摘要 | $\mathbf{c} = \mathbf{h}_T$（固定） |
+| Attention | 书还放在桌上，你每回答一个问题，都可以重新翻到最相关的几页 | $\mathbf{c}_t = \sum_j \alpha_{tj} \mathbf{h}_j$（动态） |
+
+Attention 没有取消"表示学习"，而是把"读取"这件事从一次性压缩，改成了**按需检索**。
+
+---
+
+## 试着想一想
+
+1. 如果一句话长度从 10 个词变成 100 个词，固定长度向量为什么会越来越吃力？（提示：信息论）
+2. 为什么生成一句翻译的不同词时，模型需要看输入中的不同位置？
+3. 如果 Attention 权重 $\alpha_{tj}$ 退化成均匀分布 $\alpha_{tj} = 1/T$，会发生什么？这还有意义吗？
+4. 为什么说 Attention 的信息路径长度是 $O(1)$？
+5. LSTM 缓解了梯度消失，为什么仍然需要 Attention？
+
+如果这五个问题你已经能用自己的话讲清楚，那这一讲的目标就达到了。
+
+---
+
+## 参考文献
+
+- Sutskever, I., Vinyals, O., & Le, Q. V. (2014). *Sequence to Sequence Learning with Neural Networks*. NeurIPS.
+- Cho, K., et al. (2014). *Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation*. EMNLP.
+- Bahdanau, D., Cho, K., & Bengio, Y. (2015). *Neural Machine Translation by Jointly Learning to Align and Translate*. ICLR.
+- Vaswani, A., et al. (2017). *Attention Is All You Need*. NeurIPS.
+
+---
+
+## 下一讲
+
+下一讲进入 Attention 最常见、也最容易混淆的三个角色：
+
+- Query
+- Key
+- Value
+
+我们先不急着写公式，而是先把它们讲成一个非常直观的"查资料 / 取信息"过程。
+
+---
+
+<script>{`
+(function() {
+  // ============ Color utilities ============
+  function isDark() {
+    return document.documentElement.classList.contains('dark');
+  }
+  function colors() {
+    const dark = isDark();
+    return {
+      text: dark ? '#e2e8f0' : '#334155',
+      textMuted: dark ? '#94a3b8' : '#64748b',
+      primary: dark ? '#7dd3fc' : '#3b82f6',
+      primaryStrong: '#3b82f6',
+      primaryLight: dark ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981',
+      warning: '#f59e0b',
+      danger: '#ef4444',
+      border: dark ? '#334155' : '#e2e8f0',
+      nodeFill: dark ? '#1e293b' : '#ffffff',
+      nodeStroke: dark ? '#475569' : '#cbd5e1',
+      activeFill: dark ? '#1e3a5f' : '#dbeafe',
+      activeStroke: dark ? '#7dd3fc' : '#3b82f6',
+      chartBg: dark ? '#0f172a' : '#f8fafc',
+      gridLine: dark ? '#1e293b' : '#e2e8f0',
+    };
+  }
+
+  // Reusable dark-mode observer
+  function onThemeChange(cb) {
+    const obs = new MutationObserver(cb);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return obs;
+  }
+
+  // ============ 1. Bottleneck Demo ============
+  function initBottleneck() {
+    const slider = document.getElementById('seq-len-slider');
+    const display = document.getElementById('seq-len-display');
+    const svg = document.getElementById('bottleneck-svg');
+    const info = document.getElementById('bottleneck-info');
+    if (!slider || !svg) return;
+
+    function draw() {
+      const c = colors();
+      const n = parseInt(slider.value);
+      display.textContent = n;
+      const tokenW = Math.min(40, 500 / n);
+      const startX = 20, tokenY = 50;
+      const vecX = 580, vecY = 100, vecW = 80, vecH = 50;
+      const pressure = Math.min(1, (n - 3) / 25);
+      const vecColor = pressure < 0.3 ? c.success : pressure < 0.7 ? c.warning : c.danger;
+
+      let h = '<defs><marker id="arrow-bn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="' + c.textMuted + '"/></marker></defs>';
+      for (let i = 0; i < n; i++) {
+        const x = startX + i * (tokenW + 2);
+        if (x + tokenW > 540) break;
+        h += '<rect x="'+x+'" y="'+tokenY+'" width="'+(tokenW-1)+'" height="30" rx="4" fill="'+c.primaryStrong+'" opacity="'+(0.4+0.6*(i/n))+'"/>';
+        if (tokenW > 15) h += '<text x="'+(x+tokenW/2)+'" y="'+(tokenY+19)+'" text-anchor="middle" fill="white" font-size="9">x'+(i+1)+'</text>';
+      }
+      h += '<line x1="'+Math.min(startX+n*(tokenW+2),540)+'" y1="'+(tokenY+15)+'" x2="'+(vecX-10)+'" y2="'+(vecY+vecH/2)+'" stroke="'+c.textMuted+'" stroke-width="2" marker-end="url(#arrow-bn)"/>';
+      h += '<rect x="'+vecX+'" y="'+vecY+'" width="'+vecW+'" height="'+vecH+'" rx="8" fill="'+vecColor+'" opacity="0.85" stroke="'+vecColor+'" stroke-width="2"/>';
+      h += '<text x="'+(vecX+vecW/2)+'" y="'+(vecY+vecH/2+5)+'" text-anchor="middle" fill="white" font-size="14" font-weight="bold">c</text>';
+      const barY = 170;
+      h += '<rect x="100" y="'+barY+'" width="500" height="12" rx="6" fill="'+c.border+'"/>';
+      h += '<rect x="100" y="'+barY+'" width="'+(500*pressure)+'" height="12" rx="6" fill="'+vecColor+'"/>';
+      h += '<text x="90" y="'+(barY+10)+'" text-anchor="end" fill="'+c.textMuted+'" font-size="11">信息压力</text>';
+      svg.innerHTML = h;
+      info.textContent = n + ' 个 token → 固定 d 维向量，信息保留率约 ' + Math.round((1 - pressure * 0.7) * 100) + '%';
+      info.style.color = vecColor;
+    }
+    slider.addEventListener('input', draw);
+    draw();
+    onThemeChange(draw);
+  }
+
+  // ============ 2. BLEU Chart ============
+  function initBleuChart() {
+    const svg = document.getElementById('bleu-chart-svg');
+    const info = document.getElementById('bleu-chart-info');
+    if (!svg) return;
+
+    // Simulated data based on Bahdanau 2015 Figure 2 trends
+    const lengths = [5, 10, 15, 20, 25, 30, 35, 40, 50, 60];
+    const noAttn =  [34, 30, 26, 22, 18, 15, 12, 10,  7,  5];
+    const withAttn = [35, 33, 32, 30, 29, 28, 27, 26, 24, 22];
+
+    function draw() {
+      const c = colors();
+      const pad = { top: 30, right: 30, bottom: 50, left: 55 };
+      const w = 600 - pad.left - pad.right;
+      const ht = 300 - pad.top - pad.bottom;
+      const maxBLEU = 40;
+      const xScale = (v) => pad.left + ((v - 5) / 55) * w;
+      const yScale = (v) => pad.top + (1 - v / maxBLEU) * ht;
+
+      let h = '';
+      // Grid
+      for (let bl = 0; bl <= maxBLEU; bl += 10) {
+        const y = yScale(bl);
+        h += '<line x1="'+pad.left+'" y1="'+y+'" x2="'+(600-pad.right)+'" y2="'+y+'" stroke="'+c.gridLine+'" stroke-width="1"/>';
+        h += '<text x="'+(pad.left-8)+'" y="'+(y+4)+'" text-anchor="end" fill="'+c.textMuted+'" font-size="11">'+bl+'</text>';
+      }
+      for (let i = 0; i < lengths.length; i++) {
+        const x = xScale(lengths[i]);
+        h += '<line x1="'+x+'" y1="'+pad.top+'" x2="'+x+'" y2="'+(300-pad.bottom)+'" stroke="'+c.gridLine+'" stroke-width="0.5"/>';
+        h += '<text x="'+x+'" y="'+(300-pad.bottom+16)+'" text-anchor="middle" fill="'+c.textMuted+'" font-size="11">'+lengths[i]+'</text>';
+      }
+      // Axes labels
+      h += '<text x="300" y="'+(300-5)+'" text-anchor="middle" fill="'+c.text+'" font-size="12">源句子长度</text>';
+      h += '<text x="14" y="'+(300/2)+'" text-anchor="middle" fill="'+c.text+'" font-size="12" transform="rotate(-90,14,'+(300/2)+')">BLEU</text>';
+
+      // Line: no attention
+      let pathNA = 'M';
+      lengths.forEach((l, i) => { pathNA += (i ? ' L ' : ' ') + xScale(l) + ' ' + yScale(noAttn[i]); });
+      h += '<path d="'+pathNA+'" fill="none" stroke="'+c.danger+'" stroke-width="2.5" stroke-dasharray="6,4"/>';
+      // Line: with attention
+      let pathWA = 'M';
+      lengths.forEach((l, i) => { pathWA += (i ? ' L ' : ' ') + xScale(l) + ' ' + yScale(withAttn[i]); });
+      h += '<path d="'+pathWA+'" fill="none" stroke="'+c.primaryStrong+'" stroke-width="2.5"/>';
+
+      // Data points (interactive)
+      lengths.forEach((l, i) => {
+        h += '<circle cx="'+xScale(l)+'" cy="'+yScale(noAttn[i])+'" r="5" fill="'+c.danger+'" stroke="white" stroke-width="1.5" class="bleu-dot" data-info="无 Attention：长度 '+l+'，BLEU '+noAttn[i]+'" style="cursor:pointer"/>';
+        h += '<circle cx="'+xScale(l)+'" cy="'+yScale(withAttn[i])+'" r="5" fill="'+c.primaryStrong+'" stroke="white" stroke-width="1.5" class="bleu-dot" data-info="有 Attention：长度 '+l+'，BLEU '+withAttn[i]+'" style="cursor:pointer"/>';
+      });
+
+      // Legend
+      const lx = 600 - pad.right - 160, ly = pad.top + 10;
+      h += '<rect x="'+lx+'" y="'+ly+'" width="155" height="50" rx="6" fill="'+c.nodeFill+'" stroke="'+c.border+'" opacity="0.9"/>';
+      h += '<line x1="'+(lx+10)+'" y1="'+(ly+18)+'" x2="'+(lx+35)+'" y2="'+(ly+18)+'" stroke="'+c.primaryStrong+'" stroke-width="2.5"/>';
+      h += '<text x="'+(lx+40)+'" y="'+(ly+22)+'" fill="'+c.text+'" font-size="11">+ Attention</text>';
+      h += '<line x1="'+(lx+10)+'" y1="'+(ly+38)+'" x2="'+(lx+35)+'" y2="'+(ly+38)+'" stroke="'+c.danger+'" stroke-width="2.5" stroke-dasharray="6,4"/>';
+      h += '<text x="'+(lx+40)+'" y="'+(ly+42)+'" fill="'+c.text+'" font-size="11">无 Attention (baseline)</text>';
+
+      svg.innerHTML = h;
+
+      // Hover interaction
+      svg.querySelectorAll('.bleu-dot').forEach(dot => {
+        dot.addEventListener('mouseenter', () => { info.textContent = dot.dataset.info; info.style.color = c.primary; });
+        dot.addEventListener('mouseleave', () => { info.textContent = '悬停在数据点上查看具体数值'; info.style.color = ''; });
+      });
+    }
+    draw();
+    onThemeChange(draw);
+  }
+
+  // ============ 3. Alignment Demo ============
+  function initAlignment() {
+    const cnContainer = document.getElementById('cn-words');
+    const enContainer = document.getElementById('en-words');
+    const infoEl = document.getElementById('alignment-info');
+    if (!cnContainer || !enContainer) return;
+
+    const cnTokens = ['那位','在','加州','工作了','十年','后来','搬到','纽约','创业','最近','又','回到','上海','的','工程师','昨天','终于','发布了','自己的','新产品'];
+    const enTokens = ['The','engineer','who','worked','in','California','for','ten years','moved to','New York','released','new product'];
+    const alignments = {
+      'The':[0,14],'engineer':[14],'who':[13],'worked':[3],'in':[1],'California':[2],
+      'for':[4],'ten years':[4],'moved to':[5,6],'New York':[7],'released':[16,17],'new product':[18,19],
+    };
+
+    cnTokens.forEach((t, i) => {
+      const s = document.createElement('span');
+      s.textContent = t; s.dataset.idx = i; s.className = 'cn-token';
+      cnContainer.appendChild(s);
+    });
+    enTokens.forEach(t => {
+      const s = document.createElement('span');
+      s.textContent = t; s.className = 'en-token';
+      s.addEventListener('click', () => highlight(t));
+      enContainer.appendChild(s);
+    });
+
+    function highlight(enWord) {
+      const aligned = alignments[enWord] || [];
+      document.querySelectorAll('.cn-token').forEach(el => {
+        const idx = parseInt(el.dataset.idx);
+        if (aligned.includes(idx)) el.classList.add('highlighted');
+        else el.classList.remove('highlighted');
+      });
+      infoEl.textContent = '"' + enWord + '" → 关注中文：' + aligned.map(i => '"'+cnTokens[i]+'"').join(', ');
+      infoEl.style.color = '#3b82f6';
+    }
+  }
+
+  // ============ 4. RNN Decay Demo ============
+  function initRNN() {
+    const svg = document.getElementById('rnn-svg');
+    const playBtn = document.getElementById('rnn-play-btn');
+    const resetBtn = document.getElementById('rnn-reset-btn');
+    const infoEl = document.getElementById('rnn-info');
+    if (!svg || !playBtn) return;
+
+    const N = 10;
+    let timer = null, step = -1;
+
+    function draw() {
+      const c = colors();
+      const R = 22, sx = 60, gap = 62, cy = 90;
+      let h = '<defs><marker id="arr-rnn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="'+c.textMuted+'"/></marker></defs>';
+
+      for (let i = 0; i < N; i++) {
+        const cx = sx + i * gap;
+        const sig = (step >= i && step >= 0) ? Math.pow(0.75, i) : 0;
+        const active = step >= i && step >= 0, cur = step === i;
+
+        if (i > 0) {
+          const aClr = active ? c.activeStroke : c.textMuted;
+          const aOp = active ? (0.3 + 0.7 * Math.pow(0.75, i)) : 0.3;
+          h += '<line x1="'+(sx+(i-1)*gap+R)+'" y1="'+cy+'" x2="'+(cx-R-2)+'" y2="'+cy+'" stroke="'+aClr+'" stroke-width="2" opacity="'+aOp+'" marker-end="url(#arr-rnn)"/>';
+        }
+        h += '<line x1="'+cx+'" y1="'+(cy+55)+'" x2="'+cx+'" y2="'+(cy+R+2)+'" stroke="'+c.textMuted+'" stroke-width="1.5" opacity="0.5"/>';
+        h += '<text x="'+cx+'" y="'+(cy+68)+'" text-anchor="middle" fill="'+c.textMuted+'" font-size="11" font-family="monospace">x'+(i+1)+'</text>';
+
+        const fill = cur ? c.activeStroke : active ? c.activeFill : c.nodeFill;
+        const stk = cur ? c.activeStroke : active ? c.activeStroke : c.nodeStroke;
+        const op = active ? (0.3 + 0.7 * sig) : 1;
+        h += '<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'" fill="'+fill+'" stroke="'+stk+'" stroke-width="2" opacity="'+op+'"/>';
+        h += '<text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" fill="'+(cur?'white':c.text)+'" font-size="11" font-family="monospace">h'+(i+1)+'</text>';
+
+        if (active) {
+          const bH = 30 * sig;
+          const bClr = sig > 0.5 ? c.success : sig > 0.2 ? c.warning : c.danger;
+          h += '<rect x="'+(cx-8)+'" y="'+(cy-R-10-bH)+'" width="16" height="'+bH+'" rx="3" fill="'+bClr+'" opacity="0.8"/>';
+          h += '<text x="'+cx+'" y="'+(cy-R-14-bH)+'" text-anchor="middle" fill="'+c.textMuted+'" font-size="9">'+Math.round(sig*100)+'%</text>';
+        }
+      }
+      svg.innerHTML = h;
+      if (step >= 0) {
+        const s = Math.round(Math.pow(0.75, step) * 100);
+        infoEl.textContent = '步骤 '+(step+1)+'/'+N+'：x₁ 的信息保留约 '+s+'%';
+        infoEl.style.color = s > 50 ? '#10b981' : s > 20 ? '#f59e0b' : '#ef4444';
+      }
+    }
+
+    playBtn.addEventListener('click', () => {
+      step = -1; playBtn.disabled = true;
+      (function tick() { step++; draw(); if (step < N - 1) timer = setTimeout(tick, 500); else playBtn.disabled = false; })();
+    });
+    resetBtn.addEventListener('click', () => {
+      clearTimeout(timer); step = -1; draw(); playBtn.disabled = false;
+      infoEl.textContent = '信号从 x₁ 出发，观察它在传递中如何衰减'; infoEl.style.color = '';
+    });
+    draw();
+    onThemeChange(draw);
+  }
+
+  // ============ 5. Path Length Comparison ============
+  function initPathCompare() {
+    const slider = document.getElementById('path-len-slider');
+    const display = document.getElementById('path-len-display');
+    const container = document.getElementById('path-compare');
+    if (!slider || !container) return;
+
+    function draw() {
+      const c = colors();
+      const L = parseInt(slider.value);
+      display.textContent = L;
+      const k = 3;
+      const data = [
+        { name: 'RNN', path: L, color: c.danger },
+        { name: 'CNN (k='+k+')', path: Math.ceil(L/(k-1)), color: c.warning },
+        { name: 'Self-Attention', path: 1, color: c.success },
+      ];
+      container.innerHTML = data.map(d => {
+        const bw = Math.max(5, (d.path / L) * 100);
+        return '<div style="flex:1;min-width:140px;max-width:200px;background:'+c.nodeFill+';border:1px solid '+c.border+';border-radius:10px;padding:1rem;text-align:center;">'
+          + '<div style="font-weight:700;font-size:0.85rem;color:'+c.text+';margin-bottom:0.5rem;">'+d.name+'</div>'
+          + '<div style="background:'+c.border+';border-radius:6px;height:10px;overflow:hidden;margin-bottom:0.3rem;">'
+          + '<div style="background:'+d.color+';height:100%;width:'+bw+'%;border-radius:6px;transition:width 0.3s;"></div></div>'
+          + '<div style="font-size:1.2rem;font-weight:800;color:'+d.color+';">O('+d.path+')</div></div>';
+      }).join('');
+    }
+    slider.addEventListener('input', draw);
+    draw();
+    onThemeChange(draw);
+  }
+
+  // ============ 6. Attention Flow Step-by-step ============
+  function initAttentionFlow() {
+    const svg = document.getElementById('attention-flow-svg');
+    const prevBtn = document.getElementById('attn-prev-btn');
+    const nextBtn = document.getElementById('attn-next-btn');
+    const stepDisp = document.getElementById('attn-step-display');
+    const stepInfoEl = document.getElementById('attn-step-info');
+    if (!svg || !prevBtn || !nextBtn) return;
+
+    let step = 0;
+    const total = 6;
+    const tokens = ['我','喜欢','吃','苹果'];
+    const scores = [0.8,2.1,0.3,1.5];
+    const exps = scores.map(s => Math.exp(s));
+    const sumE = exps.reduce((a,b) => a+b, 0);
+    const alphas = exps.map(e => e/sumE);
+
+    const infos = [
+      {t:'初始状态',d:'Encoder 将输入序列编码为隐藏状态 h₁–h₄。Decoder 正在生成当前输出词。'},
+      {t:'计算对齐分数 e',d:'Decoder 当前状态 s 与每个 Encoder 状态 h 计算相关性分数：e = a(s, h)'},
+      {t:'Softmax 归一化',d:'将原始分数通过 softmax 转换为概率分布（注意力权重 α），所有权重加和为 1。'},
+      {t:'加权求和',d:'用权重 α 对所有 h 做加权求和：c = Σ αⱼhⱼ，得到当前步的上下文向量。'},
+      {t:'生成输出',d:'将上下文向量 c 与 Decoder 状态结合，预测当前位置的输出词。'},
+      {t:'完整流程',d:'每个解码步骤都重复以上过程，每次得到不同的 α 分布 → 不同的 c → 关注不同位置。'},
+    ];
+
+    function draw() {
+      const c = colors();
+      const sx = 80, gap = 140, encY = 80, decY = 240, R = 28;
+      let h = '<defs><marker id="arr-af" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="'+c.textMuted+'"/></marker><marker id="arr-af-a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="'+c.activeStroke+'"/></marker></defs>';
+
+      tokens.forEach((t, i) => {
+        const cx = sx + i * gap;
+        h += '<circle cx="'+cx+'" cy="'+encY+'" r="'+R+'" fill="'+c.nodeFill+'" stroke="'+c.nodeStroke+'" stroke-width="2"/>';
+        h += '<text x="'+cx+'" y="'+(encY-5)+'" text-anchor="middle" fill="'+c.text+'" font-size="12" font-weight="600">'+t+'</text>';
+        h += '<text x="'+cx+'" y="'+(encY+12)+'" text-anchor="middle" fill="'+c.textMuted+'" font-size="10" font-family="monospace">h'+(i+1)+'</text>';
+      });
+      const decX = 340;
+      h += '<circle cx="'+decX+'" cy="'+decY+'" r="'+R+'" fill="'+c.primaryLight+'" stroke="'+c.activeStroke+'" stroke-width="2.5"/>';
+      h += '<text x="'+decX+'" y="'+(decY-3)+'" text-anchor="middle" fill="'+c.text+'" font-size="11" font-weight="600">Decoder</text>';
+      h += '<text x="'+decX+'" y="'+(decY+12)+'" text-anchor="middle" fill="'+c.textMuted+'" font-size="10" font-family="monospace">s_t</text>';
+
+      if (step >= 1) {
+        tokens.forEach((t, i) => {
+          const cx = sx + i * gap, a = alphas[i];
+          const lw = 1 + a * 4;
+          const op = step >= 2 ? (0.2 + a * 0.8) : 0.6;
+          const lc = step >= 2 ? c.activeStroke : c.textMuted;
+          h += '<line x1="'+decX+'" y1="'+(decY-R)+'" x2="'+cx+'" y2="'+(encY+R)+'" stroke="'+lc+'" stroke-width="'+lw+'" opacity="'+op+'"/>';
+          const mx = (decX+cx)/2 + (i < 2 ? -15 : 15), my = (decY+encY)/2;
+          if (step === 1) {
+            h += '<rect x="'+(mx-20)+'" y="'+(my-10)+'" width="40" height="18" rx="4" fill="'+c.warning+'" opacity="0.9"/>';
+            h += '<text x="'+mx+'" y="'+(my+3)+'" text-anchor="middle" fill="white" font-size="10" font-weight="600">'+scores[i].toFixed(1)+'</text>';
+          }
+          if (step >= 2) {
+            h += '<rect x="'+(mx-22)+'" y="'+(my-10)+'" width="44" height="18" rx="4" fill="'+c.activeStroke+'" opacity="0.9"/>';
+            h += '<text x="'+mx+'" y="'+(my+3)+'" text-anchor="middle" fill="white" font-size="10" font-weight="600">α='+a.toFixed(2)+'</text>';
+            h += '<circle cx="'+cx+'" cy="'+encY+'" r="'+(R+4)+'" fill="none" stroke="'+c.activeStroke+'" stroke-width="'+(1+a*4)+'" opacity="'+(0.2+a*0.8)+'"/>';
+          }
+        });
+      }
+      if (step >= 3) {
+        h += '<rect x="570" y="142" width="60" height="36" rx="8" fill="'+c.success+'" stroke="'+c.success+'" stroke-width="2" opacity="0.9"/>';
+        h += '<text x="600" y="165" text-anchor="middle" fill="white" font-size="13" font-weight="700">c_t</text>';
+        if (step >= 4) {
+          h += '<line x1="600" y1="178" x2="'+(decX+R+10)+'" y2="'+(decY-10)+'" stroke="'+c.success+'" stroke-width="2.5" stroke-dasharray="5,3" marker-end="url(#arr-af-a)"/>';
+          h += '<rect x="'+(decX+60)+'" y="'+(decY-15)+'" width="60" height="30" rx="8" fill="'+c.success+'" opacity="0.15" stroke="'+c.success+'" stroke-width="1.5"/>';
+          h += '<text x="'+(decX+90)+'" y="'+(decY+5)+'" text-anchor="middle" fill="'+c.success+'" font-size="12" font-weight="700">y_t</text>';
+        }
+      }
+      if (step === 5) {
+        h += '<text x="350" y="30" text-anchor="middle" fill="'+c.activeStroke+'" font-size="12" font-weight="600" font-style="italic">每个解码步骤重复此过程，α 随步骤动态变化</text>';
+        h += '<path d="M 420 270 Q 500 300 480 240" fill="none" stroke="'+c.activeStroke+'" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-af-a)"/>';
+        h += '<text x="490" y="275" fill="'+c.activeStroke+'" font-size="10">t+1</text>';
+      }
+
+      svg.innerHTML = h;
+      stepDisp.textContent = step + ' / ' + (total - 1);
+      stepInfoEl.innerHTML = '<strong>' + infos[step].t + '</strong>：' + infos[step].d;
+    }
+
+    function go(d) { step = Math.max(0, Math.min(total - 1, step + d)); draw(); }
+    prevBtn.addEventListener('click', () => go(-1));
+    nextBtn.addEventListener('click', () => go(1));
+    // Keyboard support
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight') go(1);
+      if (e.key === 'ArrowLeft') go(-1);
+    });
+    draw();
+    onThemeChange(draw);
+  }
+
+  // ============ 7. Dynamic Attention Demo ============
+  function initDynamicAttn() {
+    const svg = document.getElementById('dynamic-attn-svg');
+    const outCtr = document.getElementById('dynamic-attn-output');
+    const infoEl = document.getElementById('dynamic-attn-info');
+    if (!svg || !outCtr) return;
+
+    const inTk = ['工程师','在','加州','工作','十年','搬到','纽约','发布','新产品'];
+    const outTk = ['engineer','California','ten years','New York','released','product'];
+    const wts = {
+      'engineer': [.65,.02,.05,.08,.02,.01,.02,.05,.10],
+      'California': [.03,.15,.60,.10,.02,.02,.03,.02,.03],
+      'ten years': [.02,.05,.08,.20,.50,.03,.02,.05,.05],
+      'New York': [.02,.03,.05,.03,.02,.20,.55,.05,.05],
+      'released': [.05,.02,.02,.03,.02,.01,.02,.70,.13],
+      'product': [.08,.02,.02,.02,.02,.01,.02,.15,.66],
+    };
+
+    outTk.forEach(t => {
+      const b = document.createElement('button');
+      b.textContent = t; b.className = 'en-token';
+      b.addEventListener('click', () => show(t));
+      outCtr.appendChild(b);
+    });
+
+    function show(word) {
+      const c = colors();
+      const w = wts[word], maxW = Math.max(...w);
+      const sx = 50, gap = 70, maxH = 120, baseY = 180, bw = 40;
+      let h = '<text x="350" y="25" text-anchor="middle" fill="'+c.primary+'" font-size="13" font-weight="600">输出 "'+word+'" 时的注意力分布</text>';
+      inTk.forEach((t, i) => {
+        const cx = sx + i * gap, bH = (w[i]/maxW)*maxH;
+        const op = 0.3 + 0.7 * (w[i]/maxW);
+        const bc = w[i] === maxW ? c.primaryStrong : (w[i] > 0.1 ? '#60a5fa' : c.textMuted);
+        h += '<rect x="'+(cx-bw/2)+'" y="'+(baseY-bH)+'" width="'+bw+'" height="'+bH+'" rx="4" fill="'+bc+'" opacity="'+op+'"><animate attributeName="height" from="0" to="'+bH+'" dur="0.4s" fill="freeze"/><animate attributeName="y" from="'+baseY+'" to="'+(baseY-bH)+'" dur="0.4s" fill="freeze"/></rect>';
+        h += '<text x="'+cx+'" y="'+(baseY-bH-8)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-weight="600">'+(w[i]*100).toFixed(0)+'%</text>';
+        h += '<text x="'+cx+'" y="'+(baseY+18)+'" text-anchor="middle" fill="'+c.text+'" font-size="11">'+t+'</text>';
+        h += '<text x="'+cx+'" y="'+(baseY+32)+'" text-anchor="middle" fill="'+c.textMuted+'" font-size="9" font-family="monospace">h'+(i+1)+'</text>';
+      });
+      svg.innerHTML = h;
+      infoEl.textContent = '生成 "'+word+'" 时，注意力最集中在 "'+inTk[w.indexOf(maxW)]+'"（'+(maxW*100).toFixed(0)+'%）';
+      infoEl.style.color = c.primary;
+    }
+
+    function drawEmpty() {
+      svg.innerHTML = '<text x="350" y="130" text-anchor="middle" fill="'+colors().textMuted+'" font-size="13">← 点击下方输出词查看注意力分布</text>';
+    }
+    drawEmpty();
+  }
+
+  // ============ 8. Attention Heatmap ============
+  function initHeatmap() {
+    const container = document.getElementById('heatmap-container');
+    const infoEl = document.getElementById('heatmap-info');
+    if (!container) return;
+
+    const srcTokens = ['那位','在','加州','工作了','十年','后来','搬到','纽约','创业','工程师','昨天','终于','发布了','新产品'];
+    const tgtTokens = ['The','engineer','who','worked','in','California','for','ten years','moved to','New York','released','new product'];
+
+    // Attention weight matrix [tgt][src] — simulated alignment data
+    const matrix = [
+      [.30,.02,.01,.01,.01,.01,.01,.01,.01,.50,.02,.01,.04,.04],
+      [.05,.01,.02,.03,.01,.01,.01,.01,.01,.70,.03,.02,.05,.05],
+      [.10,.01,.01,.01,.01,.01,.01,.01,.01,.60,.05,.05,.05,.08],
+      [.02,.05,.05,.55,.10,.02,.02,.02,.02,.05,.03,.02,.03,.02],
+      [.02,.40,.05,.08,.02,.02,.02,.02,.02,.05,.02,.02,.02,.24],
+      [.02,.05,.60,.08,.02,.02,.02,.02,.02,.03,.02,.02,.04,.04],
+      [.02,.02,.02,.05,.55,.05,.02,.02,.02,.03,.02,.02,.02,.14],
+      [.02,.02,.02,.05,.55,.05,.02,.02,.02,.03,.02,.02,.02,.16],
+      [.02,.02,.02,.02,.02,.40,.35,.05,.02,.02,.02,.02,.02,.02],
+      [.02,.02,.02,.02,.02,.05,.05,.65,.05,.02,.02,.02,.02,.06],
+      [.03,.02,.02,.02,.02,.02,.02,.02,.02,.05,.15,.25,.30,.08],
+      [.02,.02,.02,.02,.02,.02,.02,.02,.02,.05,.05,.05,.15,.56],
+    ];
+
+    function draw() {
+      const c = colors();
+      const cellSize = 36;
+      const labelW = 70;
+
+      let html = '<div style="display:inline-block;">';
+      // Header row
+      html += '<div style="display:flex;align-items:end;margin-left:'+labelW+'px;gap:2px;margin-bottom:4px;">';
+      srcTokens.forEach(t => {
+        html += '<div style="width:'+cellSize+'px;text-align:center;transform:rotate(-45deg);transform-origin:center bottom;margin-bottom:8px;" class="heatmap-label">'+t+'</div>';
+      });
+      html += '</div>';
+
+      // Rows
+      tgtTokens.forEach((tgt, ti) => {
+        html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:2px;">';
+        html += '<div style="width:'+labelW+'px;text-align:right;padding-right:8px;" class="heatmap-label">'+tgt+'</div>';
+        srcTokens.forEach((src, si) => {
+          const w = matrix[ti][si];
+          const intensity = Math.min(1, w * 2.5);
+          const bg = 'rgba(59,130,246,' + intensity.toFixed(2) + ')';
+          const textColor = intensity > 0.5 ? 'white' : c.text;
+          html += '<div class="heatmap-cell" style="width:'+cellSize+'px;background:'+bg+';color:'+textColor+';" data-info="'+tgt+' → '+src+'：α = '+(w*100).toFixed(1)+'%">'+(w > 0.08 ? (w*100).toFixed(0) : '')+'</div>';
+        });
+        html += '</div>';
+      });
+      html += '</div>';
+      container.innerHTML = html;
+
+      container.querySelectorAll('.heatmap-cell').forEach(cell => {
+        cell.addEventListener('mouseenter', () => { infoEl.textContent = cell.dataset.info; infoEl.style.color = '#3b82f6'; });
+        cell.addEventListener('mouseleave', () => { infoEl.textContent = '悬停在热图上查看权重'; infoEl.style.color = ''; });
+      });
+    }
+    draw();
+    onThemeChange(draw);
+  }
+
+  // ============ Init All ============
+  function initAll() {
+    initBottleneck();
+    initBleuChart();
+    initAlignment();
+    initRNN();
+    initPathCompare();
+    initAttentionFlow();
+    initDynamicAttn();
+    initHeatmap();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initAll);
+  else initAll();
+})();
+`}</script>
