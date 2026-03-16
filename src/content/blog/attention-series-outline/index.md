@@ -23,6 +23,7 @@ draft: false
 已发布：
 
 - [第 1 讲：为什么需要 Attention](/blog/attention-01-why-attention/)
+- [第 2 讲：Q / K / V 直觉](/blog/attention-02-qkv-intuition/)
 
 ## 一、为什么要拆成 12 + 4
 

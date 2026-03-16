@@ -1,0 +1,824 @@
+---
+title: "Attention 02：从查资料直觉理解 Q K V"
+description: "把 Attention 解释成一次软检索：Query 是你的问题，Key 是索引，Value 是内容。"
+publishDate: "2026-03-16"
+tags: ["LLM", "Transformer", "Attention", "专题"]
+language: "zh-CN"
+draft: false
+---
+
+<style>{`
+  .attn-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .attn-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .attn-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .attn-demo-info {
+    text-align: center; font-size: 0.8rem;
+    color: hsl(var(--muted-foreground)); margin-top: 0.5rem;
+  }
+  .attn-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .attn-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .attn-btn-primary:hover { opacity: 0.85; }
+  .attn-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .attn-btn-secondary:hover { opacity: 0.85; }
+  .attn-btn:disabled { opacity: 0.4; cursor: default; }
+  .attn-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .role-card {
+    flex: 1; min-width: 180px;
+    border-radius: 10px; padding: 1rem 1.2rem;
+    border: 2px solid hsl(var(--border));
+    background: hsl(var(--card));
+    transition: all 0.3s; cursor: pointer;
+    text-align: center;
+  }
+  .role-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .role-card.active {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.2);
+  }
+  .role-tag {
+    display: inline-block; padding: 0.15rem 0.6rem;
+    border-radius: 999px; font-size: 0.75rem; font-weight: 700;
+    color: white; margin-bottom: 0.4rem;
+  }
+  .book-item {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.6rem 0.8rem; border-radius: 8px;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    transition: all 0.3s; cursor: pointer;
+    margin-bottom: 0.4rem;
+  }
+  .book-item:hover { border-color: hsl(var(--primary)); }
+  .book-item.matched {
+    border-color: #3b82f6;
+    background: rgba(59,130,246,0.08);
+  }
+  .book-item.retrieved {
+    border-color: #10b981;
+    background: rgba(16,185,129,0.08);
+  }
+`}</style>
+
+[返回专题总目录](/blog/attention-series-outline/) · [上一讲：为什么需要 Attention](/blog/attention-01-why-attention/)
+
+`01 > [02] 03 > 04 > 05 > 06 | 07 > 08 > 09 > 10 > 11 > 12`
+
+> *"Query 是你的问题，Key 是书脊上的标题，Value 是书里的内容。Attention 就是一次带权重的查资料过程。"*
+
+---
+
+## 这一讲要回答什么
+
+上一讲我们知道了 Attention 的核心动作是：**每一步输出，都按相关性从不同输入位置取信息。**
+
+但还留了三个问题没解答：
+
+1. "相关性"到底怎么衡量？
+2. "取信息"到底取的是什么？
+3. 为什么需要 Query、Key、Value 三个不同的角色？
+
+这一讲的目标是：**用"查资料"的直觉把 Q / K / V 的角色彻底讲清楚**，为下一讲的公式推导打好基础。
+
+---
+
+## 一个直觉起点：你在图书馆查资料
+
+想象你在图书馆里找资料。整个过程可以拆成三步：
+
+1. **你心里有一个问题**——你想找关于"梯度消失"的内容。
+2. **你扫描书架上的标题/标签**——看看哪些书和"梯度消失"最相关。
+3. **你从最相关的几本书中取走内容**——翻开那几本书，读里面的段落。
+
+这三步，恰好对应 Attention 中的三个角色：
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：Q / K / V 的图书馆类比</div>
+  <span class="attn-demo-subtitle">点击三张卡片，看每个角色在查资料过程中扮演什么</span>
+  <div id="role-cards" style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-top: 1rem;"></div>
+  <div id="role-detail" class="attn-step-info" style="min-height: 60px;"></div>
+</div>
+
+| 图书馆动作 | Attention 角色 | 含义 |
+| --- | --- | --- |
+| 你心里的问题 | **Query (Q)** | 当前位置"想找什么" |
+| 书脊上的标题 | **Key (K)** | 每个候选位置"能提供什么线索" |
+| 书里的内容 | **Value (V)** | 匹配之后"真正要取走的信息" |
+
+关键的一点是：**Key 和 Value 虽然来自同一个位置，但扮演的角色不同。** Key 用来做匹配，Value 用来做信息传递。
+
+---
+
+## 为什么不能只用两个角色
+
+读到这里你可能会问：为什么需要三个角色？直接用"Query 和 Content"两个不行吗？
+
+答案是：**"用来匹配的东西"和"匹配之后要取走的东西"，不一定是同一个。**
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：Key ≠ Value</div>
+  <span class="attn-demo-subtitle">搜索引擎场景：你的搜索词匹配的是标题/标签（Key），但你取走的是网页正文（Value）</span>
+  <div style="margin-top: 1rem;">
+    <div style="text-align: center; margin-bottom: 0.75rem;">
+      <span style="font-size: 0.85rem; color: hsl(var(--muted-foreground));">你的搜索：</span>
+      <strong id="search-query" style="color: #3b82f6; font-size: 1rem; margin-left: 0.3rem;"></strong>
+    </div>
+    <div id="search-results"></div>
+  </div>
+  <div style="text-align: center; margin-top: 0.75rem;">
+    <button id="search-btn-1" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">梯度消失</button>
+    <button id="search-btn-2" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">Transformer</button>
+    <button id="search-btn-3" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">KV Cache</button>
+  </div>
+  <div id="search-info" class="attn-demo-info">← 点击上面的搜索词试试</div>
+</div>
+
+三个经典的现实场景都遵循这个模式：
+
+| 场景 | Query | Key（用于匹配） | Value（被取走） |
+| --- | --- | --- | --- |
+| 图书馆 | 你想查的主题 | 书名 / 目录标题 | 书中的具体段落 |
+| 搜索引擎 | 搜索关键词 | 网页标题 / 标签 | 网页正文内容 |
+| 数据库 | SQL WHERE 条件 | 索引列 | 返回的数据行 |
+| 考试翻笔记 | 当前题目问了什么 | 笔记页上的小标题 | 标题下面的详细内容 |
+
+**Key 是"用来被搜索的摘要"，Value 是"搜到之后真正有价值的完整内容"。** 这就是为什么 Attention 需要三个角色而不是两个。
+
+---
+
+## 从查资料到 Attention：完整的对应
+
+现在把图书馆类比映射到真实的 Attention 机制上。
+
+假设我们有一个 4 个词的句子 `[工程师, 在, 加州, 工作]`，模型正在处理"工程师"这个位置。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">步进演示：一次完整的 Attention 查资料</div>
+  <span class="attn-demo-subtitle">逐步观察 Query 如何与每个 Key 匹配，然后按权重从 Value 中取信息（支持键盘 ←→）</span>
+  <svg id="qkv-flow-svg" viewBox="0 0 720 400" style="width: 100%; max-height: 400px;"></svg>
+  <div style="text-align: center; margin-top: 0.75rem;">
+    <button id="qkv-prev-btn" class="attn-btn attn-btn-secondary">◀ 上一步</button>
+    <span id="qkv-step-display" style="margin: 0 1rem; font-size: 0.85rem; font-weight: 600; color: hsl(var(--foreground));">0 / 6</span>
+    <button id="qkv-next-btn" class="attn-btn attn-btn-primary">下一步 ▶</button>
+  </div>
+  <div id="qkv-step-info" class="attn-step-info"></div>
+</div>
+
+用文字总结这个过程：
+
+1. **Query**："工程师"位置发出一个"我想了解什么"的向量 $\mathbf{q}$。
+2. **Key**：所有位置各自生成一个"我能提供什么线索"的向量 $\mathbf{k}_1, \mathbf{k}_2, \mathbf{k}_3, \mathbf{k}_4$。
+3. **匹配**：Query 和每个 Key 计算相似度（点积），得到分数。
+4. **权重**：分数经过 softmax 变成注意力权重 $\alpha_1, \alpha_2, \alpha_3, \alpha_4$。
+5. **Value**：所有位置各自生成一个"我能提供什么内容"的向量 $\mathbf{v}_1, \mathbf{v}_2, \mathbf{v}_3, \mathbf{v}_4$。
+6. **加权求和**：按权重对 Value 做加权求和，得到"工程师"位置的输出。
+
+---
+
+## Q、K、V 从哪里来
+
+上面说 Query、Key、Value 是三种不同的"角色"。但在 Self-Attention 中，它们**全都来自同一个输入序列**——只是经过了不同的线性变换：
+
+$$
+\mathbf{q}_i = \mathbf{x}_i \mathbf{W}^Q, \quad \mathbf{k}_i = \mathbf{x}_i \mathbf{W}^K, \quad \mathbf{v}_i = \mathbf{x}_i \mathbf{W}^V
+$$
+
+其中 $\mathbf{W}^Q, \mathbf{W}^K, \mathbf{W}^V$ 是三个可学习的权重矩阵。
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：同一个词，三种投影</div>
+  <span class="attn-demo-subtitle">点击不同的词，看它如何被同时投影成 Q、K、V 三种角色</span>
+  <svg id="projection-svg" viewBox="0 0 700 280" style="width: 100%; max-height: 280px;"></svg>
+  <div id="projection-btns" style="display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem;"></div>
+  <div id="projection-info" class="attn-demo-info">← 点击一个词查看它的三种投影</div>
+</div>
+
+这就像你在图书馆里，**同一本书**：
+
+- 它被检索时用的是**书名**（Key 角色）
+- 它匹配到之后被取走的是**内容**（Value 角色）
+- 而如果你正在读这本书想查其他书，你从这本书中提取出的**问题**就是 Query 角色
+
+三个角色源自同一个 $\mathbf{x}_i$，但 $\mathbf{W}^Q, \mathbf{W}^K, \mathbf{W}^V$ 让模型**学会**对同一个输入做不同的"解读"。
+
+### 为什么要分开投影，而不是直接用 $\mathbf{x}_i$？
+
+如果不做投影，那 Query 和 Key 就是同一个向量。这意味着：
+
+- "我想找什么"和"我能提供什么线索"完全绑死
+- 模型没有自由度去分别优化"怎么提问"和"怎么被匹配"
+
+分开投影给了模型一个关键能力：**同一个词可以以不同方式被搜索和被找到。**
+
+比如"加州"这个词：
+- 当别人在找地点信息时，它的 **Key** 应该强调"地理位置"
+- 当它自己想了解上下文时，它的 **Query** 可能在问"谁在这里？做了什么？"
+- 被匹配到之后，它的 **Value** 传递的是完整的语义信息
+
+---
+
+## 软检索 vs 硬检索
+
+传统数据库查询是**硬检索**：要么完全匹配（返回结果），要么不匹配（返回空）。
+
+Attention 是**软检索**：**每个位置都会返回结果，只是权重不同。**
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互对比：硬检索 vs 软检索</div>
+  <span class="attn-demo-subtitle">切换两种模式，看相同的 Query 会得到什么不同的结果</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <button id="mode-hard" class="attn-btn attn-btn-secondary" style="margin: 0.2rem;">硬检索 (argmax)</button>
+    <button id="mode-soft" class="attn-btn attn-btn-primary" style="margin: 0.2rem;">软检索 (softmax)</button>
+  </div>
+  <svg id="retrieval-svg" viewBox="0 0 700 280" style="width: 100%; max-height: 280px;"></svg>
+  <div id="retrieval-info" class="attn-step-info"></div>
+</div>
+
+用数学来对比：
+
+**硬检索（argmax）**：只取最高分的位置
+
+$$
+\text{output} = \mathbf{v}_{j^*}, \quad j^* = \arg\max_j (\mathbf{q} \cdot \mathbf{k}_j)
+$$
+
+**软检索（softmax + 加权和）**：按相关性混合所有位置
+
+$$
+\text{output} = \sum_{j=1}^{n} \alpha_j \mathbf{v}_j, \quad \alpha_j = \text{softmax}(\mathbf{q} \cdot \mathbf{k}_j)
+$$
+
+软检索的三个关键优势：
+
+1. **不丢信息**：即使次相关的位置也能贡献信息，不会因为"差一点"就被完全忽略。
+2. **可微分**：softmax 和加权和都是可微的，可以端到端训练。argmax 不可微，无法直接反向传播。
+3. **鲁棒**：当多个位置同样重要时（比如一个动词同时需要主语和宾语的信息），软检索能自然地混合多个来源。
+
+---
+
+## Self-Attention：自己问自己
+
+上面的描述中，Query 来自一个序列，Key/Value 来自另一个序列——这是 Cross-Attention（比如翻译中 Decoder 查 Encoder）。
+
+但在 Transformer 中更常见的是 **Self-Attention**：**Q、K、V 全部来自同一个序列。**
+
+<div class="attn-demo">
+  <div class="attn-demo-title">交互演示：Self-Attention — 每个词都在问所有词</div>
+  <span class="attn-demo-subtitle">点击左侧的词（Query 发起者），看它如何关注序列中的所有位置</span>
+  <div style="display: flex; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap;">
+    <div style="flex: 0 0 auto;">
+      <div style="font-size: 0.8rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; text-align: center;">发起 Query ↓</div>
+      <div id="self-attn-queries" style="display: flex; flex-direction: column; gap: 0.4rem;"></div>
+    </div>
+    <div style="flex: 1; min-width: 300px;">
+      <svg id="self-attn-svg" viewBox="0 0 500 220" style="width: 100%; max-height: 220px;"></svg>
+    </div>
+  </div>
+  <div id="self-attn-info" class="attn-demo-info">← 点击左侧的词，看它的注意力分布</div>
+</div>
+
+Self-Attention 的核心意义是：**让每个词都能直接看到序列中的所有其他词，从而理解上下文。**
+
+- "工程师"可以关注"加州"来获取地点信息
+- "工作"可以关注"工程师"来知道谁在工作
+- "加州"可以关注"工作"和"十年"来理解完整事件
+
+这就是为什么 Self-Attention 之后，每个词的表示都不再是"孤立的词义"，而是**融合了上下文的动态表示**。
+
+---
+
+## 一个完整的类比总结
+
+让我们把所有概念拉到一起：
+
+| 概念 | 类比 | 在 Attention 中 |
+| --- | --- | --- |
+| 输入序列 | 图书馆的所有书 | $\mathbf{x}_1, \mathbf{x}_2, \ldots, \mathbf{x}_n$ |
+| Query | 你心里的问题 | $\mathbf{q}_i = \mathbf{x}_i \mathbf{W}^Q$ |
+| Key | 每本书的标题/索引 | $\mathbf{k}_j = \mathbf{x}_j \mathbf{W}^K$ |
+| Value | 每本书的正文内容 | $\mathbf{v}_j = \mathbf{x}_j \mathbf{W}^V$ |
+| 匹配分数 | 标题和你的问题有多相关 | $e_{ij} = \mathbf{q}_i \cdot \mathbf{k}_j$ |
+| 注意力权重 | 你在每本书上花多少时间 | $\alpha_{ij} = \text{softmax}(e_{ij})$ |
+| 输出 | 你从所有书中综合得到的答案 | $\mathbf{o}_i = \sum_j \alpha_{ij} \mathbf{v}_j$ |
+| $\mathbf{W}^Q, \mathbf{W}^K, \mathbf{W}^V$ | 你学会的"怎么提问"、"怎么做索引"、"怎么提取内容" | 训练中学到的参数 |
+
+---
+
+## 这一讲先记住三句话
+
+1. **Query 是"我想找什么"，Key 是"我能匹配什么"，Value 是"匹配到了我能提供什么"。**
+2. **Q、K、V 来自同一个输入，但经过不同的线性投影，扮演不同角色。**
+3. **Attention 是软检索而非硬检索——不是只取最相关的一个，而是按相关性加权混合所有位置。**
+
+---
+
+## 为什么这一讲很重要
+
+如果你只是把 Q / K / V 记成"三个矩阵"，后面看公式时会一直困惑"为什么要这样设计"。
+
+但如果你建立了"查资料"的心理模型，那后面所有公式都只是在精确化这三步：
+
+1. $\mathbf{q} \cdot \mathbf{k}$：计算"我的问题"和"你的标题"有多匹配
+2. $\text{softmax}$：把匹配分数转成概率分布
+3. $\sum \alpha \mathbf{v}$：按概率从各本"书"中取信息
+
+---
+
+## 试着想一想
+
+1. 在 Self-Attention 中，为什么同一个词既可以是 Query（提问者）又可以是 Key（被匹配者）？
+2. 如果 $\mathbf{W}^Q = \mathbf{W}^K$，模型的能力会受什么限制？
+3. 如果去掉 Value 的独立投影，直接用 $\mathbf{x}_j$ 代替 $\mathbf{v}_j$，会有什么后果？
+4. 你能想到一个场景，其中 Key 和 Value 最好**不**来自同一个来源吗？（提示：Cross-Attention）
+5. "软检索"比"硬检索"强在哪里？有没有"软检索"不如"硬检索"的情况？
+
+---
+
+## 下一讲
+
+下一讲，我们终于要写出完整的公式了：
+
+$$
+\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
+$$
+
+我们会从一个 3~4 个词的短句出发，手推每一步的维度和数值，把这条公式链彻底拆开。
+
+---
+
+<script>{`
+(function() {
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+  function C() {
+    const d = isDark();
+    return {
+      text: d ? '#e2e8f0' : '#334155',
+      muted: d ? '#94a3b8' : '#64748b',
+      primary: d ? '#7dd3fc' : '#3b82f6',
+      pStrong: '#3b82f6',
+      pLight: d ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981', sLight: d ? '#064e3b' : '#d1fae5',
+      warning: '#f59e0b', wLight: d ? '#78350f' : '#fef3c7',
+      danger: '#ef4444',
+      purple: '#8b5cf6', purpleLight: d ? '#4c1d95' : '#ede9fe',
+      border: d ? '#334155' : '#e2e8f0',
+      node: d ? '#1e293b' : '#ffffff',
+      nodeStroke: d ? '#475569' : '#cbd5e1',
+      cardBg: d ? '#0f172a' : '#f8fafc',
+    };
+  }
+  function onTheme(fn) {
+    new MutationObserver(fn).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // ============ 1. Role Cards ============
+  function initRoleCards() {
+    const container = document.getElementById('role-cards');
+    const detail = document.getElementById('role-detail');
+    if (!container) return;
+
+    const roles = [
+      { name: 'Query (Q)', color: '#3b82f6', icon: '?',
+        desc: '<strong>你心里的问题</strong><br/>当前位置发出的"我想了解什么"信号。比如"工程师"位置想知道"这个人在哪里工作？做了什么？"，这个需求就被编码成 Query 向量。Query 决定了注意力的<em>方向</em>。' },
+      { name: 'Key (K)', color: '#f59e0b', icon: '🔑',
+        desc: '<strong>书脊上的标题</strong><br/>每个位置提供的"我能匹配什么"线索。比如"加州"位置的 Key 可能强调"地理位置"属性。Key 不是完整信息，而是<em>用于被搜索的摘要</em>。' },
+      { name: 'Value (V)', color: '#10b981', icon: '📄',
+        desc: '<strong>书里的正文内容</strong><br/>匹配成功后真正被取走的信息。比如"加州"匹配到之后，它的 Value 传递的是完整的语义向量——不仅仅是"地名"，还包含这个位置在上下文中的全部信息。' },
+    ];
+
+    roles.forEach((r, i) => {
+      const card = document.createElement('div');
+      card.className = 'role-card';
+      card.innerHTML = '<div class="role-tag" style="background:'+r.color+'">'+r.name+'</div><div style="font-size:1.5rem;margin:0.3rem 0;">'+r.icon+'</div>';
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.role-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        detail.innerHTML = r.desc;
+        detail.style.borderLeftColor = r.color;
+        detail.style.borderLeft = '3px solid ' + r.color;
+      });
+      container.appendChild(card);
+    });
+    detail.innerHTML = '点击上面的卡片，了解每个角色的含义。';
+  }
+
+  // ============ 2. Search Engine Demo ============
+  function initSearch() {
+    const results = document.getElementById('search-results');
+    const queryEl = document.getElementById('search-query');
+    const infoEl = document.getElementById('search-info');
+    if (!results) return;
+
+    const db = [
+      { key: '梯度消失与梯度爆炸', val: 'RNN 中由于连乘 Jacobian 矩阵，梯度在长序列中指数衰减或爆炸...', tags: ['梯度消失','RNN','深度学习'] },
+      { key: 'Transformer 架构详解', val: 'Transformer 由 Self-Attention 和 FFN 层交替堆叠，抛弃了循环结构...', tags: ['Transformer','Self-Attention','并行计算'] },
+      { key: 'LSTM 门控机制', val: 'LSTM 通过遗忘门、输入门、输出门控制信息流，部分缓解梯度消失...', tags: ['LSTM','梯度消失','门控'] },
+      { key: 'KV Cache 推理优化', val: '推理时缓存历史 token 的 Key 和 Value，避免重复计算，大幅降低延迟...', tags: ['KV Cache','推理优化','Transformer'] },
+      { key: 'Batch Normalization', val: '对每个 mini-batch 的特征做归一化，稳定训练过程...', tags: ['BatchNorm','训练技巧','正则化'] },
+    ];
+
+    const queries = {
+      '梯度消失': { scores: [0.9, 0.1, 0.7, 0.05, 0.02] },
+      'Transformer': { scores: [0.05, 0.85, 0.1, 0.6, 0.02] },
+      'KV Cache': { scores: [0.02, 0.3, 0.05, 0.95, 0.01] },
+    };
+
+    function search(q) {
+      const c = C();
+      queryEl.textContent = '"' + q + '"';
+      const sc = queries[q].scores;
+      const maxS = Math.max(...sc);
+
+      results.innerHTML = db.map((item, i) => {
+        const s = sc[i];
+        const isTop = s === maxS;
+        const barW = Math.round(s * 100);
+        const opacity = 0.15 + s * 0.85;
+        return '<div class="book-item" style="opacity:'+opacity+'">'
+          + '<div style="flex:0 0 50px;text-align:center;">'
+          + '<div style="font-size:0.7rem;color:'+c.muted+';">Key</div>'
+          + '<div style="font-weight:700;font-size:0.8rem;color:'+(isTop?'#3b82f6':c.text)+';">'+Math.round(s*100)+'%</div></div>'
+          + '<div style="flex:1;">'
+          + '<div style="font-weight:600;font-size:0.85rem;color:'+(isTop?'#3b82f6':c.text)+';">'+item.key+'</div>'
+          + '<div style="font-size:0.75rem;color:'+c.muted+';margin-top:0.2rem;">Value: '+item.val.slice(0,50)+'...</div>'
+          + '<div style="background:'+c.border+';height:4px;border-radius:2px;margin-top:0.3rem;">'
+          + '<div style="background:'+(isTop?'#3b82f6':'#94a3b8')+';height:100%;width:'+barW+'%;border-radius:2px;transition:width 0.4s;"></div></div>'
+          + '</div></div>';
+      }).join('');
+
+      infoEl.textContent = 'Query "'+q+'" 与每个 Key 匹配后，按权重从 Value 中提取信息。这就是 Attention。';
+      infoEl.style.color = '#3b82f6';
+    }
+
+    ['search-btn-1','search-btn-2','search-btn-3'].forEach((id, i) => {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener('click', () => search(['梯度消失','Transformer','KV Cache'][i]));
+    });
+  }
+
+  // ============ 3. QKV Flow Step-by-step ============
+  function initQKVFlow() {
+    const svg = document.getElementById('qkv-flow-svg');
+    const prev = document.getElementById('qkv-prev-btn');
+    const next = document.getElementById('qkv-next-btn');
+    const disp = document.getElementById('qkv-step-display');
+    const infoEl = document.getElementById('qkv-step-info');
+    if (!svg) return;
+
+    let step = 0;
+    const total = 7;
+    const words = ['工程师','在','加州','工作'];
+    const scores = [0.6, 0.1, 0.8, 0.5];
+    const exps = scores.map(s => Math.exp(s));
+    const sumE = exps.reduce((a,b) => a+b);
+    const alphas = exps.map(e => e/sumE);
+
+    const infos = [
+      {t:'输入序列',d:'4 个词各自有一个初始表示向量 x₁–x₄。目前这些向量还没有融合上下文信息。'},
+      {t:'生成 Query',d:'"工程师"的向量通过 W^Q 投影，生成 Query：q₁ = x₁·W^Q。这代表"工程师这个位置想了解什么"。'},
+      {t:'生成 Key',d:'所有位置的向量都通过 W^K 投影，生成 Key：kⱼ = xⱼ·W^K。Key 是"每个位置能匹配什么"。'},
+      {t:'生成 Value',d:'所有位置的向量同时通过 W^V 投影，生成 Value：vⱼ = xⱼ·W^V。Value 是"匹配后要传递的完整内容"。'},
+      {t:'计算匹配分数',d:'Query q₁ 与每个 Key kⱼ 做点积，得到原始分数。分数越大 = 越相关。"加州"得分最高。'},
+      {t:'Softmax → 权重',d:'对分数做 softmax，转化为概率分布 α。"加州"获得最高注意力权重 '+alphas[2].toFixed(2)+'。'},
+      {t:'加权求和 → 输出',d:'用权重 α 对所有 Value 加权求和，得到"工程师"位置的输出。这个输出已经融合了上下文信息。'},
+    ];
+
+    function draw() {
+      const c = C();
+      const w = 720, h = 400;
+      const colX = [100, 260, 420, 580];
+      const rowY = { input: 50, q: 130, k: 130, v: 210, score: 290, output: 360 };
+      const R = 24;
+
+      let s = '<defs><marker id="a2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="'+c.muted+'"/></marker></defs>';
+
+      // Input row
+      words.forEach((wd, i) => {
+        const x = colX[i];
+        s += '<rect x="'+(x-30)+'" y="'+(rowY.input-16)+'" width="60" height="32" rx="6" fill="'+c.node+'" stroke="'+c.nodeStroke+'" stroke-width="1.5"/>';
+        s += '<text x="'+x+'" y="'+(rowY.input+4)+'" text-anchor="middle" fill="'+c.text+'" font-size="12" font-weight="600">'+wd+'</text>';
+        s += '<text x="'+x+'" y="'+(rowY.input-22)+'" text-anchor="middle" fill="'+c.muted+'" font-size="9" font-family="monospace">x'+(i+1)+'</text>';
+      });
+
+      // Step >= 1: Query from position 0
+      if (step >= 1) {
+        const x = colX[0];
+        s += '<line x1="'+x+'" y1="'+(rowY.input+16)+'" x2="'+x+'" y2="'+(rowY.q-R)+'" stroke="'+c.pStrong+'" stroke-width="2" marker-end="url(#a2)"/>';
+        s += '<circle cx="'+x+'" cy="'+rowY.q+'" r="'+R+'" fill="'+c.pLight+'" stroke="'+c.pStrong+'" stroke-width="2"/>';
+        s += '<text x="'+x+'" y="'+(rowY.q+5)+'" text-anchor="middle" fill="'+c.pStrong+'" font-size="11" font-weight="700">Q₁</text>';
+        s += '<text x="'+(x+35)+'" y="'+(rowY.q-10)+'" fill="'+c.pStrong+'" font-size="8">×W^Q</text>';
+      }
+
+      // Step >= 2: Keys
+      if (step >= 2) {
+        words.forEach((wd, i) => {
+          const x = colX[i], y = rowY.k + (i === 0 ? 70 : 0);
+          if (i > 0) s += '<line x1="'+x+'" y1="'+(rowY.input+16)+'" x2="'+x+'" y2="'+(y-R)+'" stroke="'+c.warning+'" stroke-width="2" marker-end="url(#a2)"/>';
+          else s += '<line x1="'+(x+30)+'" y1="'+(rowY.q+R)+'" x2="'+(x+10)+'" y2="'+(y-R)+'" stroke="'+c.warning+'" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#a2)"/>';
+          s += '<circle cx="'+x+'" cy="'+y+'" r="'+R+'" fill="'+c.wLight+'" stroke="'+c.warning+'" stroke-width="2"/>';
+          s += '<text x="'+x+'" y="'+(y+5)+'" text-anchor="middle" fill="'+(isDark()?'#fbbf24':c.warning)+'" font-size="11" font-weight="700">K'+(i+1)+'</text>';
+        });
+        if (step === 2) s += '<text x="620" y="'+(rowY.k+5)+'" fill="'+c.warning+'" font-size="9">×W^K</text>';
+      }
+
+      // Step >= 3: Values
+      if (step >= 3) {
+        words.forEach((wd, i) => {
+          const x = colX[i];
+          s += '<circle cx="'+x+'" cy="'+rowY.v+'" r="'+R+'" fill="'+c.sLight+'" stroke="'+c.success+'" stroke-width="2"/>';
+          s += '<text x="'+x+'" y="'+(rowY.v+5)+'" text-anchor="middle" fill="'+c.success+'" font-size="11" font-weight="700">V'+(i+1)+'</text>';
+        });
+        if (step === 3) s += '<text x="620" y="'+(rowY.v+5)+'" fill="'+c.success+'" font-size="9">×W^V</text>';
+      }
+
+      // Step >= 4: Scores
+      if (step >= 4) {
+        words.forEach((wd, i) => {
+          const x = colX[i];
+          const kY = rowY.k + (i === 0 ? 70 : 0);
+          // Line from Q to K
+          if (i > 0) s += '<line x1="'+colX[0]+'" y1="'+(rowY.q+R)+'" x2="'+x+'" y2="'+(kY-R)+'" stroke="'+c.pStrong+'" stroke-width="1.5" opacity="0.5" stroke-dasharray="4,3"/>';
+          // Score badge
+          const badgeY = rowY.score - 20;
+          const sc = scores[i];
+          const isMax = i === 2;
+          s += '<rect x="'+(x-20)+'" y="'+badgeY+'" width="40" height="20" rx="4" fill="'+(isMax?c.pStrong:c.muted)+'" opacity="0.85"/>';
+          s += '<text x="'+x+'" y="'+(badgeY+14)+'" text-anchor="middle" fill="white" font-size="10" font-weight="600">'+sc.toFixed(1)+'</text>';
+        });
+      }
+
+      // Step >= 5: Alpha weights
+      if (step >= 5) {
+        words.forEach((wd, i) => {
+          const x = colX[i];
+          const a = alphas[i];
+          const badgeY = rowY.score + 5;
+          s += '<rect x="'+(x-24)+'" y="'+badgeY+'" width="48" height="20" rx="4" fill="'+c.pStrong+'" opacity="'+(0.3+a*0.7)+'"/>';
+          s += '<text x="'+x+'" y="'+(badgeY+14)+'" text-anchor="middle" fill="white" font-size="10" font-weight="600">α='+a.toFixed(2)+'</text>';
+        });
+      }
+
+      // Step >= 6: Output
+      if (step >= 6) {
+        const outX = 360, outY = rowY.output;
+        words.forEach((wd, i) => {
+          const x = colX[i];
+          const a = alphas[i];
+          s += '<line x1="'+x+'" y1="'+(rowY.v+R)+'" x2="'+outX+'" y2="'+(outY-16)+'" stroke="'+c.success+'" stroke-width="'+(1+a*4)+'" opacity="'+(0.2+a*0.8)+'"/>';
+        });
+        s += '<rect x="'+(outX-40)+'" y="'+(outY-16)+'" width="80" height="32" rx="8" fill="'+c.success+'" opacity="0.9"/>';
+        s += '<text x="'+outX+'" y="'+(outY+5)+'" text-anchor="middle" fill="white" font-size="12" font-weight="700">o₁</text>';
+        s += '<text x="'+(outX+55)+'" y="'+(outY+5)+'" fill="'+c.success+'" font-size="9">= Σ α·V</text>';
+      }
+
+      svg.innerHTML = s;
+      disp.textContent = step + ' / ' + (total - 1);
+      infoEl.innerHTML = '<strong>' + infos[step].t + '</strong>：' + infos[step].d;
+    }
+
+    function go(d) { step = Math.max(0, Math.min(total-1, step+d)); draw(); }
+    prev.addEventListener('click', () => go(-1));
+    next.addEventListener('click', () => go(1));
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight') go(1);
+      if (e.key === 'ArrowLeft') go(-1);
+    });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 4. Projection Demo ============
+  function initProjection() {
+    const svg = document.getElementById('projection-svg');
+    const btnsCtr = document.getElementById('projection-btns');
+    const infoEl = document.getElementById('projection-info');
+    if (!svg || !btnsCtr) return;
+
+    const words = ['工程师','在','加州','工作'];
+    words.forEach(w => {
+      const b = document.createElement('button');
+      b.textContent = w; b.className = 'attn-btn attn-btn-secondary'; b.style.margin = '0.2rem';
+      b.addEventListener('click', () => showProj(w));
+      btnsCtr.appendChild(b);
+    });
+
+    function showProj(word) {
+      const c = C();
+      const cx = 350, topY = 50;
+      const roles = [
+        { name: 'Query', label: 'q = x·W^Q', color: c.pStrong, desc: '"我想找什么"', y: 200, dx: -200 },
+        { name: 'Key', label: 'k = x·W^K', color: c.warning, desc: '"我能匹配什么"', y: 200, dx: 0 },
+        { name: 'Value', label: 'v = x·W^V', color: c.success, desc: '"我能提供什么"', y: 200, dx: 200 },
+      ];
+
+      let h = '';
+      // Source node
+      h += '<rect x="'+(cx-40)+'" y="'+(topY-18)+'" width="80" height="36" rx="8" fill="'+c.node+'" stroke="'+c.primary+'" stroke-width="2.5"/>';
+      h += '<text x="'+cx+'" y="'+(topY)+'" text-anchor="middle" fill="'+c.text+'" font-size="14" font-weight="700">'+word+'</text>';
+      h += '<text x="'+cx+'" y="'+(topY+16)+'" text-anchor="middle" fill="'+c.muted+'" font-size="10" font-family="monospace">x</text>';
+
+      // Three projections
+      roles.forEach(r => {
+        const tx = cx + r.dx;
+        // Arrow
+        h += '<line x1="'+cx+'" y1="'+(topY+18)+'" x2="'+tx+'" y2="'+(r.y-22)+'" stroke="'+r.color+'" stroke-width="2.5" opacity="0.7"/>';
+        // Label on arrow
+        const mx = (cx+tx)/2, my = (topY+18+r.y-22)/2;
+        h += '<text x="'+mx+'" y="'+(my-5)+'" text-anchor="middle" fill="'+r.color+'" font-size="9" font-weight="600">'+r.label+'</text>';
+        // Node
+        h += '<rect x="'+(tx-50)+'" y="'+(r.y-20)+'" width="100" height="40" rx="8" fill="'+r.color+'" opacity="0.15" stroke="'+r.color+'" stroke-width="2"/>';
+        h += '<text x="'+tx+'" y="'+(r.y-2)+'" text-anchor="middle" fill="'+r.color+'" font-size="12" font-weight="700">'+r.name+'</text>';
+        h += '<text x="'+tx+'" y="'+(r.y+13)+'" text-anchor="middle" fill="'+c.muted+'" font-size="9">'+r.desc+'</text>';
+        // Desc below
+        h += '<text x="'+tx+'" y="'+(r.y+35)+'" text-anchor="middle" fill="'+c.muted+'" font-size="10" font-style="italic">W^'+r.name[0]+' 决定解读方式</text>';
+      });
+
+      svg.innerHTML = h;
+      infoEl.textContent = '"'+word+'" 通过 3 个不同的投影矩阵，同时生成 Q、K、V 三种表示。';
+      infoEl.style.color = c.primary;
+    }
+  }
+
+  // ============ 5. Hard vs Soft Retrieval ============
+  function initRetrieval() {
+    const svg = document.getElementById('retrieval-svg');
+    const hardBtn = document.getElementById('mode-hard');
+    const softBtn = document.getElementById('mode-soft');
+    const infoEl = document.getElementById('retrieval-info');
+    if (!svg) return;
+
+    const tokens = ['工程师','在','加州','工作'];
+    const scores = [0.3, 0.05, 0.85, 0.4];
+    const exps = scores.map(s => Math.exp(s));
+    const sumE = exps.reduce((a,b) => a+b);
+    const softWeights = exps.map(e => e/sumE);
+    const hardWeights = scores.map((s, i) => i === 2 ? 1 : 0);
+    let mode = 'soft';
+
+    function draw() {
+      const c = C();
+      const weights = mode === 'soft' ? softWeights : hardWeights;
+      const sx = 100, gap = 150, qY = 40, kY = 120, vY = 200, outY = 260;
+
+      let h = '';
+      // Query
+      h += '<rect x="'+(360-35)+'" y="'+(qY-14)+'" width="70" height="28" rx="6" fill="'+c.pLight+'" stroke="'+c.pStrong+'" stroke-width="2"/>';
+      h += '<text x="360" y="'+(qY+4)+'" text-anchor="middle" fill="'+c.pStrong+'" font-size="12" font-weight="700">Query</text>';
+
+      tokens.forEach((t, i) => {
+        const x = sx + i * gap;
+        const w = weights[i];
+        const active = w > 0.01;
+        const kColor = active ? c.warning : c.muted;
+        const vColor = active ? c.success : c.muted;
+        const lineOp = mode === 'hard' ? (w > 0 ? 1 : 0.15) : (0.2 + w * 0.8);
+
+        // K node
+        h += '<circle cx="'+x+'" cy="'+kY+'" r="22" fill="'+(active?c.wLight:c.node)+'" stroke="'+kColor+'" stroke-width="2"/>';
+        h += '<text x="'+x+'" y="'+(kY+5)+'" text-anchor="middle" fill="'+kColor+'" font-size="11" font-weight="600">K'+(i+1)+'</text>';
+
+        // Q → K line
+        h += '<line x1="360" y1="'+(qY+14)+'" x2="'+x+'" y2="'+(kY-22)+'" stroke="'+c.pStrong+'" stroke-width="1.5" opacity="'+lineOp+'" stroke-dasharray="4,3"/>';
+
+        // Weight label
+        h += '<text x="'+x+'" y="'+(kY+38)+'" text-anchor="middle" fill="'+(w>0.3?c.pStrong:c.muted)+'" font-size="11" font-weight="700">α='+w.toFixed(2)+'</text>';
+
+        // V node
+        h += '<circle cx="'+x+'" cy="'+vY+'" r="22" fill="'+(active?c.sLight:c.node)+'" stroke="'+vColor+'" stroke-width="2" opacity="'+(active?1:0.3)+'"/>';
+        h += '<text x="'+x+'" y="'+(vY+5)+'" text-anchor="middle" fill="'+vColor+'" font-size="11" font-weight="600">V'+(i+1)+'</text>';
+
+        // V → Output line
+        if (active) {
+          h += '<line x1="'+x+'" y1="'+(vY+22)+'" x2="360" y2="'+(outY-12)+'" stroke="'+c.success+'" stroke-width="'+(1+w*4)+'" opacity="'+lineOp+'"/>';
+        }
+      });
+
+      // Output
+      h += '<rect x="325" y="'+(outY-12)+'" width="70" height="28" rx="8" fill="'+c.success+'" opacity="0.9"/>';
+      h += '<text x="360" y="'+(outY+6)+'" text-anchor="middle" fill="white" font-size="12" font-weight="700">output</text>';
+
+      svg.innerHTML = h;
+
+      if (mode === 'hard') {
+        infoEl.innerHTML = '<strong>硬检索 (argmax)</strong>：只取得分最高的 K₃ 对应的 V₃，其他位置的信息完全丢弃。<br/>不可微分 → 无法反向传播训练。';
+      } else {
+        infoEl.innerHTML = '<strong>软检索 (softmax)</strong>：所有位置都贡献信息，权重由相关性决定。V₃ 权重最大但 V₁、V₄ 也有贡献。<br/>可微分 → 端到端训练。';
+      }
+    }
+
+    hardBtn.addEventListener('click', () => { mode = 'hard'; draw(); hardBtn.className='attn-btn attn-btn-primary'; softBtn.className='attn-btn attn-btn-secondary'; });
+    softBtn.addEventListener('click', () => { mode = 'soft'; draw(); softBtn.className='attn-btn attn-btn-primary'; hardBtn.className='attn-btn attn-btn-secondary'; });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 6. Self-Attention Demo ============
+  function initSelfAttn() {
+    const svg = document.getElementById('self-attn-svg');
+    const qCtr = document.getElementById('self-attn-queries');
+    const infoEl = document.getElementById('self-attn-info');
+    if (!svg || !qCtr) return;
+
+    const words = ['工程师','在','加州','工作','十年'];
+    // Simulated self-attention weights [query_idx][key_idx]
+    const weights = [
+      [0.15, 0.05, 0.35, 0.30, 0.15],  // 工程师
+      [0.20, 0.10, 0.30, 0.25, 0.15],  // 在
+      [0.10, 0.15, 0.20, 0.25, 0.30],  // 加州
+      [0.40, 0.10, 0.15, 0.15, 0.20],  // 工作
+      [0.10, 0.05, 0.15, 0.35, 0.35],  // 十年
+    ];
+
+    words.forEach((w, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = w;
+      btn.className = 'attn-btn attn-btn-secondary';
+      btn.style.width = '100%';
+      btn.addEventListener('click', () => showAttn(i));
+      qCtr.appendChild(btn);
+    });
+
+    function showAttn(qi) {
+      const c = C();
+      const wt = weights[qi];
+      const maxW = Math.max(...wt);
+      const sx = 50, gap = 90, nodeY = 60, barBaseY = 180, barMaxH = 100;
+
+      let h = '';
+      // Title
+      h += '<text x="250" y="25" text-anchor="middle" fill="'+c.primary+'" font-size="12" font-weight="600">"'+words[qi]+'" (Q) 对所有位置的注意力</text>';
+
+      words.forEach((w, i) => {
+        const x = sx + i * gap;
+        const a = wt[i];
+        const isQuery = i === qi;
+        const isMax = a === maxW;
+
+        // Node
+        const fill = isQuery ? c.pLight : c.node;
+        const stroke = isQuery ? c.pStrong : (isMax ? c.pStrong : c.nodeStroke);
+        h += '<circle cx="'+x+'" cy="'+nodeY+'" r="22" fill="'+fill+'" stroke="'+stroke+'" stroke-width="2"/>';
+        h += '<text x="'+x+'" y="'+(nodeY+5)+'" text-anchor="middle" fill="'+c.text+'" font-size="12" font-weight="600">'+w+'</text>';
+        if (isQuery) h += '<text x="'+x+'" y="'+(nodeY+35)+'" text-anchor="middle" fill="'+c.pStrong+'" font-size="9" font-weight="600">← Query</text>';
+
+        // Bar
+        const barH = (a / maxW) * barMaxH;
+        const barColor = isMax ? c.pStrong : (a > 0.15 ? '#60a5fa' : c.muted);
+        h += '<rect x="'+(x-18)+'" y="'+(barBaseY-barH)+'" width="36" height="'+barH+'" rx="4" fill="'+barColor+'" opacity="'+(0.3+a/maxW*0.7)+'"><animate attributeName="height" from="0" to="'+barH+'" dur="0.3s" fill="freeze"/><animate attributeName="y" from="'+barBaseY+'" to="'+(barBaseY-barH)+'" dur="0.3s" fill="freeze"/></rect>';
+        h += '<text x="'+x+'" y="'+(barBaseY-barH-6)+'" text-anchor="middle" fill="'+c.text+'" font-size="10" font-weight="600">'+(a*100).toFixed(0)+'%</text>';
+        h += '<text x="'+x+'" y="'+(barBaseY+15)+'" text-anchor="middle" fill="'+c.muted+'" font-size="10" font-family="monospace">K'+(i+1)+'</text>';
+      });
+
+      svg.innerHTML = h;
+      const topIdx = wt.indexOf(maxW);
+      infoEl.textContent = '"'+words[qi]+'" 最关注 "'+words[topIdx]+'"（'+(maxW*100).toFixed(0)+'%），说明它在这个上下文中需要 "'+words[topIdx]+'" 的信息来丰富自己的表示。';
+      infoEl.style.color = c.primary;
+    }
+  }
+
+  // ============ Init ============
+  function init() {
+    initRoleCards();
+    initSearch();
+    initQKVFlow();
+    initProjection();
+    initRetrieval();
+    initSelfAttn();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+`}</script>
