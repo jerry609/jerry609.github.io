@@ -570,6 +570,8 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
 (function() {
   'use strict';
 
+  var NL = String.fromCharCode(10);
+
   // ============ Theme Helpers ============
   function C() {
     var d = document.documentElement;
@@ -628,7 +630,7 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
         h += '<text x="90" y="' + (l.y + 23) + '" fill="' + (isSel ? l.color : c.muted) + '" font-size="11" font-family="monospace">' + l.icon + '</text>';
         h += '<text x="130" y="' + (l.y + 24) + '" fill="' + (isSel ? l.color : c.text) + '" font-size="14" font-weight="' + (isSel ? '700' : '500') + '">' + l.label + '</text>';
 
-        var subtext = ['messages[] + Map<UUID>', 'VE() → HY5() → zY5() → 92%', 'wU2() → qH1() → AU2() → TW5()', 'tool_result → {role, content}'];
+        var subtext = ['messages[] + Map&lt;UUID&gt;', 'VE() → HY5() → zY5() → 92%', 'wU2() → qH1() → AU2() → TW5()', 'tool_result → {role, content}'];
         h += '<text x="130" y="' + (l.y + 43) + '" fill="' + c.muted + '" font-size="11" font-family="monospace">' + subtext[i] + '</text>';
       });
 
@@ -678,11 +680,11 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
         info: '<strong>Step 0</strong>：System 设定注入。包含 Agent 人设、工作目录、安全规则等。这条消息永远位于数组索引 0，<strong>压缩时绝对不会被触碰</strong>。' },
       { msg: '{ role: "user", content: "帮我修复 auth.py 的登录 bug" }', role: 'User', color: '#3b82f6',
         info: '<strong>Step 1</strong>：用户输入。人类在终端键入的原始需求，原封不动地存入 messages 数组。' },
-      { msg: '{ role: "assistant", content: [{\n    type: "tool_use",\n    name: "read_file",\n    input: { path: "auth.py" }\n  }] }', role: 'Assistant', color: '#10b981',
+      { msg: '{ role: "assistant", content: [{' + NL + '    type: "tool_use",' + NL + '    name: "read_file",' + NL + '    input: { path: "auth.py" }' + NL + '  }] }', role: 'Assistant', color: '#10b981',
         info: '<strong>Step 2</strong>：Assistant 返回工具调用意图。大模型"思考"后决定先读取文件。注意这是一个 tool_use block，它和下一条 tool_result <strong>构成不可分割的原子块</strong>。' },
-      { msg: '{ role: "tool", tool_use_id: "toolu_01abc",\n  content: "def login(user, pwd):\\n    ...\\n    # 1000 行代码" }', role: 'Tool', color: '#f59e0b',
+      { msg: '{ role: "tool", tool_use_id: "toolu_01abc",' + NL + '  content: "def login(user, pwd):...' + NL + '    # 1000 行代码" }', role: 'Tool', color: '#f59e0b',
         info: '<strong>Step 3</strong>：工具返回结果。文件内容被注入 messages 数组，同时附带 tG5 安全提醒（恶意代码检测）。这条消息往往很长——1000 行代码 = 大量 Token。' },
-      { msg: '{ role: "assistant", content: "发现 line 42 的\n  缩进错误，正在修复..." }', role: 'Assistant', color: '#10b981',
+      { msg: '{ role: "assistant", content: "发现 line 42 的' + NL + '  缩进错误，正在修复..." }', role: 'Assistant', color: '#10b981',
         info: '<strong>Step 4</strong>：大模型分析文件后给出结论。此时 messages 数组已有 5 条记录，Token 开始累积。随着后续的工具调用和文件读取，Token 会快速逼近 92% 阈值。' }
     ];
 
@@ -695,7 +697,7 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
       for (var i = 0; i < accumulated.length; i++) {
         var s = accumulated[i];
         var indent = '  ';
-        var msgLines = s.msg.split('\\n');
+        var msgLines = s.msg.split(NL);
         for (var j = 0; j < msgLines.length; j++) {
           lines.push(indent + msgLines[j]);
         }
@@ -705,7 +707,7 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
       lines.push('');
       lines.push('// Token 使用: ~' + (accumulated.length * 850) + ' / 200,000 (' + Math.round(accumulated.length * 850 / 2000) + '%)');
 
-      display.textContent = lines.join('\\n');
+      display.textContent = lines.join(NL);
 
       if (step >= 0 && step < steps.length) {
         infoEl.innerHTML = steps[step].info;
@@ -915,10 +917,10 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
         lines.push('');
         lines.push('// API Response: 200 OK');
         lines.push('// Token: 45,000 → 12,000 (节省 73%)');
-        infoEl.innerHTML = '<span style="color:#10b981;font-weight:700;">安全压缩！</span> 原子块 1-3（包含完整的 tool_use + tool_result 配对）被整体切片，用一段 <context_summary> 纯文本替换。头部的 System 和尾部的最近对话<strong>绝对保留</strong>。API 格式完整，零碎片。';
+        infoEl.innerHTML = '<span style="color:#10b981;font-weight:700;">安全压缩！</span> 原子块 1-3（包含完整的 tool_use + tool_result 配对）被整体切片，用一段 &lt;context_summary&gt; 纯文本替换。头部的 System 和尾部的最近对话<strong>绝对保留</strong>。API 格式完整，零碎片。';
       }
 
-      display.textContent = lines.join('\\n');
+      display.textContent = lines.join(NL);
     }
 
     randomBtn.addEventListener('click', function() { state = 'random'; draw(); });
@@ -1247,7 +1249,7 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
           '  { system: "You are Claude Code..." },',
           '  { user: "修复 auth.py 的 bug" },',
           '  { assistant: tool_use("read_file", "auth.py") },',
-          '  { tool: "def login(user, pwd):\\n    if check_creds(user, pwd):\\n        ...(1000 行)" },',
+          '  { tool: "def login(user, pwd):...check_creds...(1000 行)" },',
           '  { assistant: "line 42 有缩进错误" },',
           '  { assistant: tool_use("edit_file", ...) },',
           '  { tool: "success" },',
@@ -1302,7 +1304,7 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
           '  { assistant: "修复完成，准备验证" },',
           '  { user: "auth.py 第 50 行是什么？" },',
           '  { assistant: tool_use("read_file", "auth.py") },',
-          '  { tool: "def login(user, pwd):\\n    ...(重新拉取)" },',
+          '  { tool: "def login(user, pwd):...(重新拉取)" },',
           '  { assistant: "第 50 行是: return jwt.encode(payload)" },',
           ']',
           '',
@@ -1317,7 +1319,7 @@ CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能
 
     function draw() {
       if (step >= 0 && step < steps.length) {
-        display.textContent = steps[step].lines.join('\\n');
+        display.textContent = steps[step].lines.join(NL);
         infoEl.innerHTML = steps[step].info;
       } else {
         display.textContent = '// 点击"下一步"观察：压缩 → 信息丢失 → Re-fetch 恢复 的完整过程';
