@@ -1,0 +1,1867 @@
+---
+title: 'Agent 系统设计：LLM 的固有缺陷与 Harness 工程实践'
+description: '从精确计算盲区、幻觉、上下文窗口、Harness Engineering、Agent Loop 架构到工具设计——系统梳理 LLM 的固有局限，结合 Anthropic、OpenAI、LangChain 的一线工程实践，给出 Agent 系统的完整设计方案。'
+publishDate: '2026-03-17'
+tags: ['Agent', 'LLM', '系统设计', '工程实践', 'Harness']
+language: 'zh-CN'
+draft: false
+---
+
+<style>{`
+  .agent-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .agent-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .agent-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .agent-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .agent-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .agent-btn-primary:hover { opacity: 0.85; }
+  .agent-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .agent-btn-secondary:hover { opacity: 0.85; }
+  .agent-btn:disabled { opacity: 0.4; cursor: default; }
+  .agent-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .agent-code-block {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    color: hsl(var(--foreground));
+    margin: 1rem 0;
+  }
+  .agent-tab-bar {
+    display: flex; gap: 0; margin-bottom: 0;
+    border-bottom: 2px solid hsl(var(--border));
+  }
+  .agent-tab {
+    padding: 0.5rem 1.2rem; cursor: pointer;
+    border: none; background: none;
+    font-size: 0.85rem;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+  .agent-tab:hover { color: hsl(var(--foreground)); }
+  .agent-tab-active {
+    color: hsl(var(--primary));
+    border-bottom-color: hsl(var(--primary));
+    font-weight: 600;
+  }
+  .agent-tab-content { display: none; padding: 1rem 0; }
+  .agent-tab-content-active { display: block; }
+  .agent-highlight { color: hsl(var(--primary)); font-weight: 600; }
+  .agent-warn { color: #ef4444; font-weight: 600; }
+  .agent-ok { color: #10b981; font-weight: 600; }
+  .agent-tag {
+    display: inline-block; padding: 0.15rem 0.5rem;
+    border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+  }
+  .agent-tag-blue { background: #dbeafe; color: #1e40af; }
+  .agent-tag-green { background: #d1fae5; color: #065f46; }
+  .agent-tag-red { background: #fee2e2; color: #991b1b; }
+  .agent-tag-yellow { background: #fef3c7; color: #92400e; }
+  .agent-tag-purple { background: #ede9fe; color: #5b21b6; }
+  @media (prefers-color-scheme: dark) {
+    .agent-tag-blue { background: #1e3a5f; color: #93c5fd; }
+    .agent-tag-green { background: #064e3b; color: #6ee7b7; }
+    .agent-tag-red { background: #7f1d1d; color: #fca5a5; }
+    .agent-tag-yellow { background: #78350f; color: #fcd34d; }
+    .agent-tag-purple { background: #4c1d95; color: #c4b5fd; }
+  }
+  :root.dark .agent-tag-blue { background: #1e3a5f; color: #93c5fd; }
+  :root.dark .agent-tag-green { background: #064e3b; color: #6ee7b7; }
+  :root.dark .agent-tag-red { background: #7f1d1d; color: #fca5a5; }
+  :root.dark .agent-tag-yellow { background: #78350f; color: #fcd34d; }
+  :root.dark .agent-tag-purple { background: #4c1d95; color: #c4b5fd; }
+`}</style>
+
+> **Agent = Model + Harness。** LLM 不是万能的——它是概率采样器而非计算器，是文本生成器而非事实数据库。设计 Agent 系统的本质，就是在 LLM 擅长的推理能力和它的固有缺陷之间，用 **Harness 工程** 搭建一座桥。
+>
+> 本文综合 Anthropic、OpenAI、LangChain 等团队的一线工程实践，系统梳理 LLM 的核心局限与 Agent 系统的设计方法。一个核心发现：**LangChain 的 coding agent 在 Terminal Bench 2.0 上从 52.8% 跳到 66.5%（Top 30 → Top 5），改的不是模型，只是 harness。**
+
+---
+
+## 一、精确计算盲区
+
+LLM 通过 token 预测生成文本，本质上是概率采样器而非计算器。它不擅长数数、排序、精确算术——这些任务对人类来说"简单"，对 LLM 来说恰恰最不可靠。
+
+### 典型案例：代码编辑中的行号问题
+
+一个经典的反面设计是让 Agent 输出行号——"替换第 142-156 行"。Agent 经常数错行号，导致修改错位甚至破坏代码。
+
+<div class="agent-demo">
+  <div class="agent-demo-title">交互演示：行号替换 vs SEARCH_AND_REPLACE</div>
+  <span class="agent-demo-subtitle">点击切换两种编辑方式，观察 Agent 犯错时的后果差异</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="edit-line" class="agent-btn agent-btn-secondary" style="margin: 0.2rem;">行号替换（易出错）</button>
+    <button id="edit-search" class="agent-btn agent-btn-primary" style="margin: 0.2rem;">SEARCH_AND_REPLACE ✓</button>
+  </div>
+  <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 280px;">
+      <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Agent 的指令</div>
+      <div id="edit-instruction" class="agent-code-block" style="min-height: 80px;"></div>
+    </div>
+    <div style="flex: 1; min-width: 280px;">
+      <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">执行结果</div>
+      <div id="edit-result" class="agent-code-block" style="min-height: 80px;"></div>
+    </div>
+  </div>
+  <div id="edit-info" class="agent-step-info"></div>
+</div>
+
+正确的设计是**把定位的工作交给确定性工具，让 LLM 只负责生成内容**：
+
+| 方案 | 原理 | 适用场景 |
+|:-----|:-----|:---------|
+| **SEARCH_AND_REPLACE** | Agent 提供要替换的完整原文片段 + 新片段，底层脚本做精确匹配 | 通用场景，Claude Code 和 Codex 都采用 |
+| **AST 级替换** | Agent 指定 `函数名.参数名` 等语义锚点，底层用 AST parser 定位 | 结构化语言（Python/Go/Rego） |
+| **Patch 文件** | Agent 生成标准 unified diff，底层用 `patch` 命令应用 | Git 工作流 |
+
+Anthropic 的 [Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) 明确指出：**选择 LLM 能自然书写的输出格式**。写 diff 需要在生成新代码之前就算好 chunk header 的行数——LLM 做不到这种"先算后写"；写 JSON 需要转义换行和引号——增加了不必要的出错机会。SEARCH_AND_REPLACE 之所以胜出，因为 Agent 只需要"复制原文 + 写新代码"，这是训练数据中最常见的模式。
+
+### 代码实现：SEARCH_AND_REPLACE 工具
+
+```python
+import re
+
+def search_and_replace(file_path: str, old_text: str, new_text: str) -> dict:
+    """Agent-friendly 的代码编辑工具。
+
+    Agent 只需要提供：
+    1. old_text: 要被替换的原文（必须在文件中唯一匹配）
+    2. new_text: 替换后的新文本
+
+    定位工作由工具完成，不需要 Agent 提供行号。
+    """
+    with open(file_path, 'r') as f:
+        content = f.read()
+
+    # 精确匹配——Agent 不需要数行号
+    occurrences = content.count(old_text)
+
+    if occurrences == 0:
+        # Agent-friendly error: 告诉 Agent 怎么修，而不只是说"失败了"
+        # 尝试模糊匹配，给出修复建议
+        lines = content.split('\n')
+        candidates = []
+        for i, line in enumerate(lines):
+            if any(word in line for word in old_text.split()[:3]):
+                candidates.append(f"  Line {i+1}: {line.strip()}")
+
+        suggestion = "\n".join(candidates[:3]) if candidates else "No similar lines found."
+        return {
+            "success": False,
+            "error": f"old_text not found in {file_path}. "
+                     f"Did you mean one of these?\n{suggestion}\n"
+                     f"Re-read the file and provide the exact text to replace."
+        }
+
+    if occurrences > 1:
+        return {
+            "success": False,
+            "error": f"old_text matches {occurrences} locations in {file_path}. "
+                     f"Provide more surrounding context to make the match unique."
+        }
+
+    # 唯一匹配——执行替换
+    new_content = content.replace(old_text, new_text, 1)
+    with open(file_path, 'w') as f:
+        f.write(new_content)
+
+    return {"success": True, "message": f"Replaced 1 occurrence in {file_path}"}
+```
+
+### 通用原则：将精确计算卸载到外部工具
+
+| LLM 不擅长的 | 应该交给 | 示例 |
+|:-------------|:---------|:-----|
+| 算术 | Python 解释器 / calculator tool | `2^32 - 1 = ?` |
+| 排序 | `sort` 命令 / 数据库 `ORDER BY` | 按日期排序文件 |
+| 字符串计数 | `len()` / `wc` | "这段代码有多少行" |
+| 正则匹配 | `grep` / `ripgrep` | 查找所有 TODO 注释 |
+| 行号定位 | SEARCH_AND_REPLACE / AST | 修改第 142 行 |
+| Token 计算 | `tiktoken` / tokenizer | "这段文本有多少 token" |
+
+设计原则：**LLM 负责决策**（用什么工具、传什么参数），**工具负责执行**（精确计算）。这就是 ReAct 模式的核心——Reasoning 归 LLM，Acting 归 Tool。
+
+---
+
+## 二、幻觉（Hallucination）
+
+LLM 的优化目标是"下一个 token 的似然概率最高"，而非"事实正确"。这导致它会自信地编造不存在的 API、不存在的参数、不存在的事实。
+
+### 分层防御体系
+
+<div class="agent-demo">
+  <div class="agent-demo-title">交互演示：幻觉防御的四层堡垒</div>
+  <span class="agent-demo-subtitle">点击每一层，查看具体的防御机制和代码示例</span>
+  <svg id="defense-svg" viewBox="0 0 700 300" style="width: 100%; max-height: 300px;"></svg>
+  <div id="defense-info" class="agent-step-info"></div>
+</div>
+
+每一层的实现细节：
+
+**Layer 1: Schema 约束** — Function calling 使用严格 JSON Schema，只允许调用预定义的工具列表。Agent 无法"发明"新工具。
+
+```python
+# 工具定义的 JSON Schema —— Agent 只能在这个范围内操作
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_files",
+            "description": "Search for files matching a glob pattern",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern, e.g. '**/*.py'"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Directory to search in",
+                        "default": "."
+                    }
+                },
+                "required": ["pattern"],
+                # strict: true 阻止 Agent 添加未定义的参数
+                "additionalProperties": False
+            },
+            "strict": True  # 严格模式：Agent 不能发明新参数
+        }
+    }
+]
+```
+
+**Layer 2: 参数校验 + Agent-friendly Error** — Anthropic 在 [Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) 中强调：**错误信息应该告诉 Agent 怎么修复，而不只是说"失败了"**。
+
+```python
+def validate_and_execute(tool_name: str, params: dict) -> dict:
+    """校验工具参数，返回 agent-friendly 错误信息。"""
+
+    if tool_name == "schedule_event":
+        # 校验日期格式
+        if "start_date" in params:
+            if not re.match(r'\d{4}-\d{2}-\d{2}', params["start_date"]):
+                return {
+                    "error": "start_date must be YYYY-MM-DD format. "
+                             "Example: 2025-09-01. "
+                             "You provided: " + repr(params["start_date"]),
+                    "retry": True  # 明确告诉 Agent 可以重试
+                }
+
+        # 校验必填字段
+        if "project_id" not in params:
+            return {
+                "error": "project_id is required. "
+                         "Use list_projects tool first to find available project IDs.",
+                "retry": True
+            }
+
+    # 校验通过，执行工具
+    return execute_tool(tool_name, params)
+```
+
+**Layer 3: 运行时沙箱** — 代码执行在沙箱中（Docker/gVisor/E2B），即使幻觉也无法造成破坏。
+
+**Layer 4: 输出验证** — 不是"Agent 说成功了"就算成功，要验证**环境状态**。
+
+```python
+def verify_outcome(agent_claim: str, actual_state: dict) -> bool:
+    """Outcome > Narration: 验证环境状态，不信 Agent 的自述。"""
+
+    if agent_claim == "Tests pass":
+        # 不信 Agent 的话，自己跑测试
+        result = subprocess.run(["pytest", "--tb=short"], capture_output=True)
+        return result.returncode == 0
+
+    if agent_claim == "File created":
+        return os.path.exists(actual_state["expected_path"])
+
+    if agent_claim == "Bug fixed":
+        # 跑完整测试套件 + lint
+        test_ok = subprocess.run(["pytest"], capture_output=True).returncode == 0
+        lint_ok = subprocess.run(["ruff", "check", "."], capture_output=True).returncode == 0
+        return test_ok and lint_ok
+```
+
+### 量化与监控
+
+在生产环境中，幻觉需要被量化和持续监控：
+
+- **Intrinsic 指标**：SelfCheckGPT（对比同一问题的多次采样一致性）、token-level confidence scoring
+- **Extrinsic 指标**：与 ground truth 比对（ROUGE、BERTScore、exact match）
+- **生产方案**：[vLLM 团队的 HaluGate](https://blog.vllm.ai/2025/12/14/halugate.html)——token 级幻觉检测管道，125ms 延迟，可同步嵌入请求流
+- **人工校准**：定期抽样，human-in-the-loop 校准自动评分器的准确性
+
+---
+
+## 三、上下文窗口与 Context Engineering
+
+Anthropic 在 [Effective Context Engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) 中提出了一个核心原则：**找到最小的高信号 token 集合，最大化期望输出的似然概率。** Context Engineering 已经取代 Prompt Engineering 成为 Agent 系统设计的核心学科。
+
+### Context Rot：为什么更大的窗口 ≠ 更好的性能
+
+<div class="agent-demo">
+  <div class="agent-demo-title">交互演示：上下文压力与性能衰减</div>
+  <span class="agent-demo-subtitle">拖动滑块模拟上下文填充过程，观察性能变化和应对策略</span>
+  <div style="text-align: center; margin: 1rem 0;">
+    <label style="font-size: 0.85rem; color: hsl(var(--foreground));">
+      上下文使用率：<strong id="ctx-pct">20</strong>%
+    </label>
+    <br/>
+    <input type="range" id="ctx-slider" min="5" max="100" value="20" step="1" style="width: 80%; max-width: 500px; margin-top: 0.5rem;"/>
+  </div>
+  <svg id="ctx-svg" viewBox="0 0 700 260" style="width: 100%; max-height: 260px;"></svg>
+  <div id="ctx-info" class="agent-step-info"></div>
+</div>
+
+**关键数据**：OpenAI 发现**性能在上下文使用率超过 ~40% 后开始显著衰减**。这不是软件 bug，而是 Transformer 架构的固有特性——每个 token 都要 attend to 所有其他 token（$O(n^2)$ 关系），上下文越长，噪声越多。
+
+### 三大应对策略
+
+#### 策略 1：主动压缩（Compaction）
+
+对话历史接近窗口上限时，自动摘要压缩。OpenAI Codex 现在使用专门的 `/responses/compact` 端点，返回一个 `type=compaction` 项，用加密内容保留模型的潜在理解。
+
+```python
+class ContextManager:
+    """上下文管理器：自动压缩 + 分层加载。"""
+
+    def __init__(self, max_tokens: int = 200_000, compact_threshold: float = 0.4):
+        self.max_tokens = max_tokens
+        self.compact_threshold = compact_threshold  # OpenAI 发现 40% 是拐点
+        self.messages = []
+
+    def should_compact(self) -> bool:
+        """超过阈值就触发压缩。"""
+        current = self.estimate_tokens()
+        return current / self.max_tokens > self.compact_threshold
+
+    def compact(self):
+        """压缩策略：优先清理旧的工具输出。"""
+        # Step 1: 清理旧的工具输出（最大的 token 消耗源）
+        for msg in self.messages[:-10]:  # 保留最近 10 条
+            if msg.get("role") == "tool":
+                msg["content"] = self._summarize(msg["content"])
+
+        # Step 2: 如果还是太大，摘要早期对话
+        if self.should_compact():
+            early = self.messages[:len(self.messages)//2]
+            summary = self._summarize_conversation(early)
+            self.messages = [
+                {"role": "system", "content": f"Earlier conversation summary:\n{summary}"}
+            ] + self.messages[len(self.messages)//2:]
+
+    def _summarize(self, content: str) -> str:
+        """截断长工具输出，保留关键信息。"""
+        if len(content) > 2000:
+            return content[:1000] + "\n...[truncated]...\n" + content[-500:]
+        return content
+```
+
+> **缓存与压缩的矛盾**：Prompt caching 要求前缀完全一致才能命中缓存；压缩会改变历史消息，破坏缓存。构建 Agent 需要在两者之间找到平衡。OpenAI 的做法是把静态内容（指令、工具定义）放在最前面，变化的消息追加在末尾，尽量保留前缀不变。
+
+#### 策略 2：外部记忆（Artifact-based Memory）
+
+关键信息应该即时持久化到文件，而不是依赖对话历史：
+
+```python
+# Claude 打 Pokemon 的实践：通过 NOTES.md 跨 context reset 保持精确状态
+class ExternalMemory:
+    def __init__(self, path="NOTES.md"):
+        self.path = path
+
+    def save_progress(self, task_id: str, status: str, findings: list[str]):
+        """每完成一步就写文件——context reset 后仍可恢复。"""
+        with open(self.path, 'a') as f:
+            f.write(f"\n## Task {task_id}: {status}\n")
+            for finding in findings:
+                f.write(f"- {finding}\n")
+
+    def load_progress(self) -> str:
+        """新会话开始时，先读取之前的进度。"""
+        if os.path.exists(self.path):
+            with open(self.path) as f:
+                return f.read()
+        return ""
+```
+
+#### 策略 3：JIT 上下文检索（按需加载）
+
+最好的 Agent 不会预加载所有信息。它们保持轻量引用，运行时动态获取：
+
+```
+Progressive Disclosure 策略
+├── L0: 全局地图（文件树 + 模块摘要）     < 2K tokens   ← 始终在 context 里
+├── L1: 当前任务相关文件列表              < 5K tokens   ← 任务开始时加载
+└── L2: 具体代码片段（只读相关函数）       < 30K tokens  ← 按需检索
+```
+
+Claude Code 就是这样做的：启动时加载 `CLAUDE.md`，然后用 `glob` 和 `grep` 按需探索文件。
+
+### "Lost in the Middle" 问题
+
+[研究表明](https://arxiv.org/abs/2307.03172) LLM 对 context 中间部分的信息关注度最低。系统设计对策：
+
+| 位置 | 应该放什么 | 原因 |
+|:-----|:-----------|:-----|
+| **开头** | System prompt、AGENTS.md、核心规则 | 关注度最高 |
+| **中间** | 参考材料、工具输出、历史对话 | 允许部分丢失 |
+| **结尾** | 当前任务指令、关键约束 | 关注度次高 |
+
+关键规则应该**双重强化**：同时写在 system prompt 和工具输出中。
+
+---
+
+## 四、Harness Engineering
+
+> **"当 Agent 失败时，不要调 prompt——调 harness。"** — OpenAI Harness 团队
+
+这是近半年 Agent 工程领域最重要的认知转变。OpenAI 的 Harness 团队在 5 个月内让 Agent 生成了约 100 万行代码、~1500 个 PR，**零手写代码**。瓶颈从来不是 Agent 写代码的能力，而是**缺少结构、工具和反馈机制**。
+
+### 核心原则
+
+<div class="agent-demo">
+  <div class="agent-demo-title">交互演示：Harness Engineering 核心原则</div>
+  <span class="agent-demo-subtitle">点击每个原则卡片查看详细说明和案例</span>
+  <div id="harness-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 1rem;"></div>
+  <div id="harness-info" class="agent-step-info"></div>
+</div>
+
+#### 原则 1：机械化执行 > 文档约束
+
+告诉 Agent "不要做 X"是**建议**；让 X 触发构建失败是**规则**。
+
+OpenAI 最精妙的创新：**linter 错误信息兼做修复指令**。当 Agent 违反架构约束时，错误消息直接告诉它怎么修复——工具在工作的同时"教"Agent：
+
+```python
+# 自定义 linter 规则：强制分层架构
+# OpenAI 的做法：每个 domain 内代码只能 "forward" 依赖
+# Types -> Config -> Repo -> Service -> Runtime -> UI
+
+LAYER_ORDER = ["types", "config", "repo", "service", "runtime", "ui"]
+
+def check_import(importing_file: str, imported_module: str) -> str | None:
+    """检查导入是否违反分层架构。"""
+    importer_layer = get_layer(importing_file)
+    imported_layer = get_layer(imported_module)
+
+    if LAYER_ORDER.index(imported_layer) < LAYER_ORDER.index(importer_layer):
+        # 反向依赖——违规！
+        return (
+            f"ERROR: {importing_file} (layer: {importer_layer}) "
+            f"cannot import from {imported_module} (layer: {imported_layer}).\n"
+            f"FIX: Move shared types to the 'types' layer, "
+            f"or use the Provider interface for cross-cutting concerns.\n"
+            f"SEE: docs/architecture/layering.md"
+        )  # ← 这条错误信息就是给 Agent 看的修复指令
+    return None
+```
+
+#### 原则 2：深度优先解决问题
+
+当 Agent 卡住时，**不要替它写代码**。诊断缺少什么能力（工具、护栏、抽象、文档），然后让 Agent 自己把这个能力编码进仓库。每个编码的能力都变成未来所有 Agent 任务的基础设施，复利效应随时间累积。
+
+#### 原则 3：仓库即文档
+
+所有团队知识必须以版本化、共存的制品形式存在于仓库中。Slack 讨论、Google Docs、口头默契对 Agent 来说**不存在**。如果在仓库里搜不到，Agent 就不知道。
+
+OpenAI 最初尝试把所有信息塞进一个巨大的 AGENTS.md 文件——失败了。更好的方案是 [ARCHITECTURE.md 模式](https://matklad.github.io/2021/02/06/ARCHITECTURE.md.html)（matklad, 2021）：
+
+```
+repo/
+├── ARCHITECTURE.md        # 高层架构概览（< 500 行）
+├── docs/
+│   ├── architecture/
+│   │   ├── layering.md    # 分层规则
+│   │   └── providers.md   # 跨切面接口
+│   └── decisions/
+│       ├── 001-use-react.md   # ADR: 为什么用 React
+│       └── 002-auth-flow.md   # ADR: 认证流程
+└── CLAUDE.md              # Agent 专用指令
+```
+
+#### 原则 4：Codebase Readiness
+
+让仓库对 Agent 友好的具体措施：
+
+- **Architecture Decision Records (ADRs)** — 每个架构决策的背景和理由
+- **Golden Path Templates** — 标准化的服务/模块/管道模板
+- **统一入口** — `make test`、`make lint`、`make ci`
+- **机器可读的 ownership 映射** — 目录级别的 CODEOWNERS
+
+### LangChain 的中间件架构
+
+LangChain 把 harness 设计成可组合的中间件管道：
+
+```python
+class AgentHarness:
+    """LangChain 风格的中间件管道。"""
+
+    def __init__(self):
+        self.middlewares = [
+            LocalContextMiddleware(),    # 映射工作环境
+            LoopDetectionMiddleware(),   # 防止重复失败
+            ReasoningSandwichMiddleware(), # 推理三明治
+            PreCompletionChecklistMiddleware(), # 完成前检查
+        ]
+
+    async def run(self, task: str) -> str:
+        context = {"task": task, "messages": []}
+        for mw in self.middlewares:
+            context = await mw.process(context)
+        return context["result"]
+
+
+class LocalContextMiddleware:
+    """映射工作环境，避免 Agent 浪费时间探索。"""
+
+    async def process(self, ctx: dict) -> dict:
+        # 自动注入：目录结构、可用工具、Python 版本等
+        env_info = {
+            "cwd": os.getcwd(),
+            "python_version": sys.version,
+            "available_tools": list_tools(),
+            "directory_structure": get_tree(".", max_depth=2),
+        }
+        ctx["messages"].insert(0, {
+            "role": "system",
+            "content": f"Environment:\n{json.dumps(env_info, indent=2)}"
+        })
+        return ctx
+
+
+class LoopDetectionMiddleware:
+    """检测并阻断重复失败的循环。"""
+
+    def __init__(self, max_retries: int = 3):
+        self.action_history = []
+        self.max_retries = max_retries
+
+    async def process(self, ctx: dict) -> dict:
+        last_action = ctx.get("last_action")
+        if last_action:
+            same_count = sum(1 for a in self.action_history[-5:] if a == last_action)
+            if same_count >= self.max_retries:
+                ctx["messages"].append({
+                    "role": "system",
+                    "content": f"LOOP DETECTED: You've tried '{last_action}' "
+                               f"{same_count} times and it keeps failing. "
+                               f"Try a completely different approach."
+                })
+            self.action_history.append(last_action)
+        return ctx
+
+
+class ReasoningSandwichMiddleware:
+    """推理三明治：关键决策用高推理，执行用低推理。
+
+    LangChain 发现：xhigh 推理全程用反而得分低（53.9%，超时太多），
+    high 推理得 63.6%。最佳策略是 xhigh-high-xhigh（三明治）：
+    - 规划阶段：xhigh reasoning（仔细想）
+    - 执行阶段：high reasoning（快速做）
+    - 验证阶段：xhigh reasoning（仔细查）
+    """
+
+    async def process(self, ctx: dict) -> dict:
+        phase = ctx.get("phase", "plan")
+        if phase in ("plan", "verify"):
+            ctx["reasoning_effort"] = "high"    # 关键决策用高推理
+        else:
+            ctx["reasoning_effort"] = "medium"  # 执行阶段用快速推理
+        return ctx
+```
+
+---
+
+## 五、Agent Loop 架构
+
+OpenAI 在 [Unrolling the Codex Agent Loop](https://openai.com/index/unrolling-the-codex-agent-loop/) 中公开了 Agent 循环的完整技术蓝图。
+
+### 核心循环
+
+<div class="agent-demo">
+  <div class="agent-demo-title">交互演示：Agent Loop 逐步执行</div>
+  <span class="agent-demo-subtitle">点击 "下一步" 逐步观察 Agent 循环的每个阶段</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="loop-prev" class="agent-btn agent-btn-secondary">上一步</button>
+    <button id="loop-next" class="agent-btn agent-btn-primary" style="margin: 0 0.5rem;">下一步</button>
+    <button id="loop-reset" class="agent-btn agent-btn-secondary">重置</button>
+    <span id="loop-counter" style="margin-left: 1rem; font-size: 0.85rem; color: hsl(var(--muted-foreground));"></span>
+  </div>
+  <svg id="loop-svg" viewBox="0 0 700 320" style="width: 100%; max-height: 320px;"></svg>
+  <div id="loop-info" class="agent-step-info"></div>
+</div>
+
+```python
+async def agent_loop(user_input: str, tools: list, max_iterations: int = 50):
+    """Agent 核心循环——用户输入到最终回复。
+
+    来源：OpenAI Codex Agent Loop 架构。
+    关键：每次 API 请求都带完整对话历史（stateless），
+    支持 Zero Data Retention 合规。
+    """
+    messages = build_initial_messages(user_input)  # system + tools + user
+
+    for i in range(max_iterations):
+        # 1. 调用模型（streaming）
+        response = await client.responses.create(
+            model="claude-sonnet-4-6",
+            input=messages,
+            tools=tools,
+            stream=True
+        )
+
+        # 2. 检查终止条件
+        if response.stop_reason == "end_turn":
+            # Agent 认为任务完成，返回最终消息
+            return response.content
+
+        if response.stop_reason == "tool_use":
+            # 3. 提取工具调用
+            tool_calls = extract_tool_calls(response)
+
+            for call in tool_calls:
+                # 4. 执行工具（在沙箱中）
+                result = await execute_in_sandbox(call.name, call.arguments)
+
+                # 5. 追加结果到消息历史
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({
+                    "role": "tool",
+                    "tool_use_id": call.id,
+                    "content": truncate(result, max_tokens=25_000)  # 截断长输出
+                })
+
+            # 6. 回到步骤 1（循环继续）
+            continue
+
+    # 达到最大迭代次数
+    return "Max iterations reached. Progress saved to NOTES.md."
+```
+
+### Prompt 结构与缓存优化
+
+Codex API 会重排 prompt 组件的顺序以最大化缓存命中率：
+
+```
+请求结构（按优先级递减）：
+┌─────────────────────────────────────────┐
+│ Server System Message (最高优先级)       │  ← 静态，缓存友好
+│ Tool Definitions                        │  ← 静态，缓存友好
+│ Client Instructions (CLAUDE.md 等)      │  ← 较静态，缓存友好
+├─────────────────────────────────────────┤
+│ Message History                         │  ← 变化的部分
+│   ├── User Message 1                    │     只追加不修改
+│   ├── Assistant Response 1              │     以保留前缀
+│   ├── Tool Result 1                     │
+│   ├── ...                               │
+│   └── User Message N (最新)             │
+└─────────────────────────────────────────┘
+
+缓存命中条件：前缀完全一致。
+所以：静态内容在前，变化内容追加在后。
+```
+
+> **实现选择**：Codex CLI 用 Rust 编写，目标是大规模运行时的毫秒级性能。超过 90% 的 Codex 应用代码由 Codex 自身生成。
+
+---
+
+## 六、规划能力不稳定
+
+Agent 执行多步任务时，经常"跑偏"或忘记原始目标。这不是 prompt 写得不好，而是 LLM 在长程推理中的固有弱点。
+
+### 外部计划 + 逐步验证
+
+OpenAI Codex 团队在生产中总结的四个关键机制：
+
+1. **外部计划文件** — Agent 不靠"记住计划"，而是每步都重读 `exec-plan`
+2. **逐步验证** — 每完成一个 work slice，运行测试/lint/boundary check。不通过 = 立即修复，不继续下一步
+3. **Done-when routine** — Agent 不自行判断"做完了"，由外部 grader/checklist 判断
+4. **强制 shutdown** — 到了 context budget 阈值就必须停，更新 progress → 提交 → 新会话接手
+
+### Plan-Act-Reflect 循环
+
+<div class="agent-demo">
+  <div class="agent-demo-title">交互演示：Plan-Act-Reflect 循环</div>
+  <span class="agent-demo-subtitle">点击循环中的每个阶段，查看详细机制</span>
+  <svg id="par-svg" viewBox="0 0 700 280" style="width: 100%; max-height: 280px;"></svg>
+  <div id="par-info" class="agent-step-info"></div>
+</div>
+
+Harness 层面的保障：用 structured output 强制 Agent 在每步输出三元组：
+
+```python
+# 强制 Agent 输出结构化的思考-行动-观察三元组
+step_schema = {
+    "type": "object",
+    "properties": {
+        "thought": {
+            "type": "string",
+            "description": "你的推理过程：当前状态分析 + 下一步计划"
+        },
+        "action": {
+            "type": "string",
+            "enum": ["search_code", "read_file", "edit_file", "run_test",
+                     "run_lint", "commit", "ask_human", "done"],
+            "description": "要执行的动作"
+        },
+        "action_input": {
+            "type": "object",
+            "description": "动作的参数"
+        },
+        "confidence": {
+            "type": "number",
+            "minimum": 0, "maximum": 1,
+            "description": "对当前方向的信心分数"
+        }
+    },
+    "required": ["thought", "action", "action_input", "confidence"]
+}
+
+# 当信心分数低于阈值时，强制 Agent 回到 Plan 阶段
+if step["confidence"] < 0.3:
+    messages.append({
+        "role": "system",
+        "content": "LOW CONFIDENCE DETECTED. Re-read the exec-plan and "
+                   "reconsider your approach before continuing."
+    })
+```
+
+### LangChain 的 Pre-Completion Checklist
+
+Agent 最常见的失败模式：**写完代码 → 重读自己的代码 → 觉得没问题 → 结束。** 实际上代码有 bug。
+
+```python
+class PreCompletionChecklistMiddleware:
+    """在 Agent 宣布"完成"之前，强制执行检查清单。"""
+
+    async def process(self, ctx: dict) -> dict:
+        if ctx.get("agent_wants_to_finish"):
+            checklist = [
+                ("tests_pass", "Run ALL tests, not just the ones you wrote"),
+                ("lint_clean", "Run linter on changed files"),
+                ("spec_match", "Re-read the original task spec and verify each requirement"),
+                ("no_debug_code", "Remove any debug prints or temporary code"),
+                ("edge_cases", "Test at least 2 edge cases"),
+            ]
+
+            failed = []
+            for check_id, instruction in checklist:
+                result = await self.run_check(check_id, ctx)
+                if not result["pass"]:
+                    failed.append(f"FAILED: {instruction}\n  Reason: {result['reason']}")
+
+            if failed:
+                ctx["agent_wants_to_finish"] = False
+                ctx["messages"].append({
+                    "role": "system",
+                    "content": "COMPLETION BLOCKED. Fix these issues:\n" +
+                               "\n".join(failed)
+                })
+        return ctx
+```
+
+---
+
+## 七、自我偏见（Self-Bias）
+
+### 确认偏误
+
+在同一个 context window 内，Agent 对自己生成的代码有**确认偏误**——它"记得"自己为什么这样写，所以倾向于认为是对的。就像作者校对自己刚写的稿子，总是看不到错误。
+
+### Writer/Reviewer 分离
+
+解决方案：用**全新 context window** 的独立 Agent 做 review，打破确认偏误。
+
+```python
+async def agent_code_review(pr_diff: str, spec: str) -> dict:
+    """独立 Reviewer Agent：全新 context，没有 Writer 的记忆。"""
+
+    review_prompt = f"""Review this code change against the spec.
+
+SPEC: {spec}
+
+DIFF:
+{pr_diff}
+
+Check for:
+1. Does the change actually satisfy the spec? (not just "looks reasonable")
+2. Are there edge cases not handled?
+3. Are there security issues (injection, XSS, etc.)?
+4. Are there performance issues?
+
+Be specific. If you find issues, show the exact line and explain why."""
+
+    # 关键：这是一个全新的 context window
+    # Reviewer 不知道 Writer 的推理过程，只看代码本身
+    response = await client.messages.create(
+        model="claude-sonnet-4-6",
+        messages=[{"role": "user", "content": review_prompt}],
+        max_tokens=4096
+    )
+
+    return parse_review(response.content)
+```
+
+OpenAI 的实践：他们把几乎所有 code review 都推给了 agent-to-agent 循环，人类只在 2 轮 review 后仍有分歧时才介入。
+
+---
+
+## 八、工具调用设计（ACI）
+
+Anthropic 在 [Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) 中提出了一个核心类比：**在 ACI（Agent-Computer Interface）上投入的精力应该和 HCI（Human-Computer Interface）一样多。** 为人类开发者设计的工具，直接给 Agent 用往往效果很差。
+
+### 设计原则
+
+<div class="agent-demo">
+  <div class="agent-demo-title">交互演示：工具设计对比——好的 vs 坏的</div>
+  <span class="agent-demo-subtitle">点击切换不同的设计原则，对比好的和坏的工具设计</span>
+  <div class="agent-tab-bar" id="tool-tabs">
+    <button class="agent-tab agent-tab-active" data-tab="naming">命名清晰</button>
+    <button class="agent-tab" data-tab="errors">错误即指令</button>
+    <button class="agent-tab" data-tab="params">参数最小化</button>
+    <button class="agent-tab" data-tab="output">输出格式</button>
+  </div>
+  <div id="tool-tab-naming" class="agent-tab-content agent-tab-content-active"></div>
+  <div id="tool-tab-errors" class="agent-tab-content"></div>
+  <div id="tool-tab-params" class="agent-tab-content"></div>
+  <div id="tool-tab-output" class="agent-tab-content"></div>
+</div>
+
+完整的设计原则清单（综合 Anthropic + OpenAI）：
+
+1. **命名清晰**：工具名 = 动作 + 对象（`search_files`、`create_user`）
+2. **参数最小化**：必填参数越少越好，可选参数有合理默认值
+3. **输出结构化**：返回 JSON，不返回自由文本
+4. **错误即指令**：报错信息告诉 Agent 怎么修，不只是说"失败了"
+5. **幂等安全**：同一个调用执行多次结果一样（Agent 可能重试）
+6. **不暴露内部状态**：工具是黑盒，Agent 不需要理解实现
+7. **Token 效率**：默认截断长响应，返回续取指令（Claude Code 限制工具响应 25,000 tokens）
+8. **提供输入示例**：复杂工具在定义中附带合法输入的具体例子
+9. **合并任务单元**：`schedule_event` 一步完成候选搜索 + 可用性检查 + 创建，不要拆成 3 个工具
+10. **避免让 LLM 做 LLM 不擅长的事**
+
+### 完整的工具定义示例
+
+```python
+# 一个设计良好的搜索工具——遵循所有 10 条原则
+search_tool = {
+    "type": "function",
+    "function": {
+        "name": "search_codebase",  # 原则 1: 动作 + 对象
+        "description": (
+            "Search for code patterns in the repository. "
+            "Returns matching file paths and line numbers. "
+            "Use this instead of reading entire files — it's faster and "
+            "uses less context."  # 告诉 Agent 什么时候用这个工具
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "description": (
+                        "Regex pattern to search for. "
+                        "Examples: 'def process_payment', 'class.*Handler', "
+                        "'TODO|FIXME|HACK'"  # 原则 8: 提供输入示例
+                    )
+                },
+                "file_type": {
+                    "type": "string",
+                    "description": "Filter by file extension",
+                    "enum": ["py", "ts", "js", "go", "rs", "java", "all"],
+                    "default": "all"  # 原则 2: 可选参数有默认值
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max results to return (default 20, max 100)",
+                    "default": 20,
+                    "maximum": 100  # 原则 7: 控制输出大小
+                }
+            },
+            "required": ["pattern"],  # 原则 2: 最少必填参数
+            "additionalProperties": False
+        },
+        "strict": True
+    }
+}
+```
+
+### MCP vs 原生 CLI
+
+| 场景 | 推荐 | 原因 |
+|:-----|:-----|:-----|
+| `git`、`docker`、`kubectl` | **CLI 优先** | 可组合（pipe）、训练数据丰富、不需要额外服务 |
+| 私有 API（无 CLI） | **MCP** | 没有现成的 CLI 工具 |
+| 认证的内部服务 | **MCP** | 需要 token 管理和 session 保持 |
+| 只包装了 CLI 的 MCP | **直接用 CLI** | [多此一举](https://www.humanlayer.dev/blog/skill-issue-harness-engineering-for-coding-agents) |
+
+---
+
+## 九、架构模式选择
+
+Anthropic 在 [Building Effective Agents](https://www.anthropic.com/research/building-effective-agents) 中识别了五种基本模式。指导哲学：**只在简单方案明显不足时才增加复杂度。**
+
+### 五种模式对比
+
+| 模式 | 适用场景 | 不适用场景 |
+|:-----|:---------|:-----------|
+| **Prompt Chaining** | 明确的顺序阶段（内容生成、多步转换） | 步骤无法预先确定 |
+| **Parallelization** | 独立子任务（文件分析、测试生成）或投票提高置信度 | 子任务之间有依赖 |
+| **Routing** | 不同输入类型需要不同处理路径 | 简单的单路径工作流 |
+| **Orchestrator-Worker** | 复杂、步数不固定的任务 | 线性工作流；会乘以成本 |
+| **Evaluator-Optimizer** | 需要迭代改进的任务（代码审查、内容优化） | 一次性任务 |
+
+### Plan-then-Execute 跨切面模式
+
+将**规划**（用强推理模型）和**执行**（用快速便宜模型）解耦，大幅减少对主 LLM 的调用次数：
+
+```python
+async def plan_then_execute(task: str):
+    """规划用 Opus，执行用 Sonnet。"""
+
+    # Phase 1: 规划（高推理模型）
+    plan = await client.messages.create(
+        model="claude-opus-4-6",  # 强推理
+        messages=[{"role": "user", "content": f"Plan steps to: {task}"}],
+        max_tokens=2048
+    )
+    steps = parse_plan(plan.content)
+
+    # Phase 2: 逐步执行（快速模型）
+    results = []
+    for step in steps:
+        result = await client.messages.create(
+            model="claude-sonnet-4-6",  # 快速执行
+            messages=[{
+                "role": "user",
+                "content": f"Execute this step:\n{step}\n\nContext:\n{results[-3:]}"
+            }],
+            tools=tools
+        )
+        results.append(result)
+
+    return results
+```
+
+### 多 Agent 扩展：Google 的发现
+
+[Google 2026 年 3 月的研究](https://www.infoq.com/news/2026/03/google-multi-agent/)发现三个关键效应：
+
+1. **工具协调权衡** — 需要多工具协作的任务，多 Agent 的开销反而降低性能
+2. **能力饱和** — 增加 Agent 数量的收益在某个阈值后急剧递减
+3. **通信开销非线性增长** — Agent 间通信成本随数量指数级上升
+
+子 Agent 的正确用法不是"角色扮演"（前端工程师 + 后端工程师），而是**上下文隔离**：父 Agent 只看到子 Agent 的 prompt 和最终结果，中间的工具调用、工具输出都不会污染父 Agent 的 context window。
+
+---
+
+## 十、评估与可观测性
+
+Agent 系统的评估不能只看最终输出对不对。一个"碰巧正确"的结果和一个"稳定正确"的过程，价值完全不同。
+
+### 五层评估体系
+
+| 评估层次 | 方法 | 示例指标 |
+|:---------|:-----|:---------|
+| **结果正确性** | End-state check | 测试通过率、环境状态匹配 |
+| **过程质量** | Agent trace analysis | 步骤合理性、无效循环次数 |
+| **效率** | 资源消耗 | Token 消耗、工具调用次数、完成时间 |
+| **鲁棒性** | 多次 trial | 同一任务多次运行的一致性 |
+| **安全性** | 边界检测 | 权限越界、危险操作拦截率 |
+
+核心观点：**Agent 的 narration（"我完成了"）不能作为验证依据。** 必须检查环境状态——Anthropic 称之为 **"outcome beats narration"**。
+
+### Trace-based Debugging
+
+传统日志对 Agent 的非确定性、多步流程无效——同一输入可能产生完全不同的执行路径。LangChain 使用 trace 级别的可视化：
+
+```python
+import langsmith
+
+@langsmith.traceable(name="bug_fix_agent")
+async def fix_bug(issue: str):
+    """每个工具调用、LLM 调用、状态转换都被 trace。"""
+
+    # 这些调用会自动记录到 LangSmith trace
+    files = await search_code(issue)       # trace: search_code
+    context = await read_files(files[:3])   # trace: read_files
+    fix = await generate_fix(context)       # trace: generate_fix (LLM call)
+    result = await apply_and_test(fix)      # trace: apply_and_test
+
+    return result
+
+# 事后分析：
+# - 哪些步骤耗时最长？
+# - 哪些工具调用失败了？
+# - Agent 是否进入了无效循环？
+# - Token 消耗分布如何？
+```
+
+### 迭代改进工具
+
+Anthropic 的实践：**用 Agent 自己来改进工具**。
+
+1. 搭建快速原型工具
+2. 本地测试
+3. 跑全面评估
+4. **把评估日志批量喂给 Claude Code，让它改进工具定义**
+
+> 用 Claude 协作改进 Slack 和 Asana MCP 工具的准确率，比人工手写的工具定义更高。
+
+### 关键基准数据
+
+| 指标 | 数据 | 来源 |
+|:-----|:-----|:-----|
+| Harness-only 提升 | 52.8% → 66.5% (Terminal Bench 2.0) | LangChain |
+| 失败率降低 | 62% | LangChain |
+| 推理三明治 vs 全程高推理 | 63.6% vs 53.9%（后者超时太多） | LangChain |
+| 上下文性能拐点 | ~40% 使用率 | OpenAI |
+| Agent 生成代码量 | ~100 万行、~1500 PR、0 手写 | OpenAI Harness |
+| Context Engineering 提升 | 最高 54% benchmark 改进 | Anthropic |
+
+---
+
+## 十一、安全与信任
+
+### Zero Trust for Agents
+
+每个 Agent 都应被视为**非人类身份（NHI）**，拥有独立的权限体系：
+
+- **每个任务使用临时的、窄范围的凭证**，而非长期静态 API key
+- **工具不应全局可用**——按 Agent 或按任务限定工具访问范围
+- **Agent 生成的代码应像新员工的代码一样对待**——同样严格的 code review、lint、测试
+
+### TDD with Agents
+
+Anthropic 推荐的 [Claude Code 最佳实践](https://www.anthropic.com/engineering/claude-code-best-practices)中特别强调 TDD 工作流：
+
+```bash
+# Step 1: 让 Agent 写测试（明确禁止写实现）
+claude "Write failing tests for the payment retry logic.
+       DO NOT write any implementation code."
+
+# Step 2: 提交测试
+git add tests/ && git commit -m "Add payment retry tests"
+
+# Step 3: 让 Agent 写实现（明确禁止改测试）
+claude "Write code to make all tests pass.
+       DO NOT modify any test files."
+```
+
+TDD 在 Agent 场景下比人类场景更强大，因为它提供了**机械化的验证循环**——Agent 不需要主观判断"写完了没有"，测试结果会客观地告诉它。
+
+---
+
+## 十二、综合实战：自主修复 Bug 的 Agent 系统
+
+把前面所有原则综合起来，设计一个端到端的 bug 修复 Agent：
+
+```python
+async def bug_fix_pipeline(issue_url: str):
+    """端到端 Bug 修复 Agent——综合运用所有设计原则。"""
+
+    # ===== 阶段 1: 理解 =====
+    issue = await fetch_issue(issue_url)
+
+    # 用 code search 工具，不让 Agent 猜路径 (§1 精确计算)
+    related_files = await search_codebase(
+        pattern=extract_keywords(issue.body),
+        file_type=detect_language(issue)
+    )
+
+    # 复现 bug——验证确实失败 (§2 幻觉防御)
+    repro_result = await run_tests(filter=issue.labels)
+    assert not repro_result.all_pass, "Bug not reproduced, investigate further"
+
+    # ===== 阶段 2: 定位 =====
+    # 只加载相关代码，最小化 context 占用 (§3 上下文)
+    context = await read_files(
+        related_files[:5],  # 最多 5 个文件
+        sections="relevant_functions_only"  # 只读相关函数
+    )
+
+    # 生成假设，写入外部计划 (§6 规划)
+    plan = await generate_plan(issue, context)
+    await save_to_file("exec-plan.md", plan)
+
+    # ===== 阶段 3: 修复 =====
+    # 用 SEARCH_AND_REPLACE，不用行号 (§1)
+    fix = await generate_fix(plan, context)
+    await apply_search_and_replace(fix.file, fix.old_text, fix.new_text)
+
+    # 逐步验证 (§4 Harness)
+    test_result = await run_tests()
+    if not test_result.all_pass:
+        # 不继续下一步，立即修复
+        await retry_fix(test_result.failures, plan)
+
+    lint_result = await run_lint()
+    assert lint_result.clean, f"Lint violations: {lint_result.issues}"
+
+    # ===== 阶段 4: 验证 =====
+    # Outcome > Narration: 验证环境状态 (§10 评估)
+    final_tests = await run_tests(full_suite=True)
+    assert final_tests.all_pass, "Full test suite must pass"
+
+    # ===== 阶段 5: 提交 =====
+    pr = await create_pr(issue, fix)
+
+    # 独立 Reviewer Agent (§7 自我偏见)
+    review = await agent_code_review(pr.diff, issue.body)
+
+    if review.approved:
+        return pr.url
+    elif review.round < 2:
+        # 根据 review 反馈修改，再次提交
+        await address_review_comments(review.comments)
+        return await resubmit_pr(pr)
+    else:
+        # 2 轮不过 → 升级给人类 (§11 安全)
+        await escalate_to_human(pr, review)
+```
+
+### 关键设计决策回溯
+
+| 代码中的决策 | 对应原则 |
+|:-------------|:---------|
+| `search_codebase()` 而非猜路径 | §1 精确计算 |
+| `SEARCH_AND_REPLACE` 而非行号 | §1 精确计算 |
+| `run_tests()` 验证而非信 Agent | §2 幻觉防御 + §10 评估 |
+| 只加载 5 个相关文件 | §3 上下文管理 |
+| linter 错误兼做修复指令 | §4 Harness Engineering |
+| 写入 `exec-plan.md` | §6 规划稳定 |
+| 独立 Reviewer Agent | §7 自我偏见 |
+| 2 轮后升级给人类 | §11 安全 |
+
+---
+
+## 总结：核心原则速查表
+
+| 原则 | 在系统中的体现 | 来源 |
+|:-----|:---------------|:-----|
+| **LLM 负责推理，工具负责执行** | 不让 LLM 数数/算术/精确匹配 | ReAct 模式 |
+| **Outcome > Narration** | 用环境状态验证，不信 Agent 自述 | Anthropic |
+| **机械化执行 > 文档约束** | 规则写在 CI/linter 里，不只是 docs | OpenAI Harness |
+| **外部记忆 > 对话历史** | progress 文件、exec-plan、git history | Anthropic Context Engineering |
+| **分离 > 集中** | 写和审分开、规划和执行分开 | OpenAI Agent-to-Agent |
+| **Agent 失败 = 环境 bug** | 调 harness，不只调 prompt | LangChain |
+| **40% 上下文拐点** | 超过 40% 使用率后性能衰减 | OpenAI |
+| **推理三明治** | 关键决策高推理，执行快推理 | LangChain |
+| **子 Agent 是上下文隔离** | 不是角色扮演，是 context firewall | HumanLayer |
+| **TDD > 主观判断** | 测试是 Agent 的机械化验证循环 | Anthropic |
+
+---
+
+## References
+
+- [Anthropic: Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents)
+- [Anthropic: Effective Context Engineering for AI Agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [Anthropic: Building Effective Agents](https://www.anthropic.com/research/building-effective-agents)
+- [Anthropic: Claude Code Best Practices](https://www.anthropic.com/engineering/claude-code-best-practices)
+- [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/)
+- [OpenAI: Unrolling the Codex Agent Loop](https://openai.com/index/unrolling-the-codex-agent-loop/)
+- [HumanLayer: Skill Issue — Harness Engineering for Coding Agents](https://www.humanlayer.dev/blog/skill-issue-harness-engineering-for-coding-agents)
+- [LangChain: Improving Deep Agents with Harness Engineering](https://blog.langchain.com/improving-deep-agents-with-harness-engineering/)
+- [LangChain: The Anatomy of an Agent Harness](https://blog.langchain.com/the-anatomy-of-an-agent-harness/)
+- [Google: Scaling Principles for Agentic Architectures](https://www.infoq.com/news/2026/03/google-multi-agent/)
+- [Building AI Coding Agents for the Terminal (arXiv)](https://arxiv.org/html/2603.05344v1)
+- [Lost in the Middle: How Language Models Use Long Contexts](https://arxiv.org/abs/2307.03172)
+- [vLLM: HaluGate — Token-level Hallucination Detection](https://blog.vllm.ai/2025/12/14/halugate.html)
+- [The Emerging Harness Engineering Playbook](https://www.ignorance.ai/p/the-emerging-harness-engineering)
+- [Fighting Context Rot (Inkeep)](https://inkeep.com/blog/fighting-context-rot)
+
+<script>{`
+(function() {
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+  function C() {
+    var d = isDark();
+    return {
+      text: d ? '#e2e8f0' : '#334155',
+      muted: d ? '#94a3b8' : '#64748b',
+      primary: d ? '#7dd3fc' : '#3b82f6',
+      pStrong: '#3b82f6',
+      pLight: d ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981', sLight: d ? '#064e3b' : '#d1fae5',
+      warning: '#f59e0b', wLight: d ? '#78350f' : '#fef3c7',
+      danger: '#ef4444', dLight: d ? '#7f1d1d' : '#fee2e2',
+      purple: '#8b5cf6', purpleLight: d ? '#4c1d95' : '#ede9fe',
+      border: d ? '#334155' : '#e2e8f0',
+      node: d ? '#1e293b' : '#ffffff',
+      nodeStroke: d ? '#475569' : '#cbd5e1',
+      cardBg: d ? '#1e293b' : '#f8fafc',
+    };
+  }
+  function onTheme(fn) {
+    new MutationObserver(fn).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // ============ 1. SEARCH_AND_REPLACE vs Line Numbers Demo ============
+  function initEditDemo() {
+    var instrEl = document.getElementById('edit-instruction');
+    var resultEl = document.getElementById('edit-result');
+    var infoEl = document.getElementById('edit-info');
+    var lineBtn = document.getElementById('edit-line');
+    var searchBtn = document.getElementById('edit-search');
+    if (!instrEl) return;
+
+    var sourceCode = [
+      'def calculate_total(items):',
+      '    total = 0',
+      '    for item in items:',
+      '        total += item.price',
+      '    return total',
+      '',
+      'def apply_discount(total, rate):',
+      '    return total * (1 - rate)',
+      '',
+      'def process_order(items, discount):',
+      '    total = calculate_total(items)',
+      '    final = apply_discount(total, discount)',
+      '    return final'
+    ];
+
+    function showLineMode() {
+      lineBtn.className = 'agent-btn agent-btn-primary';
+      searchBtn.className = 'agent-btn agent-btn-secondary';
+
+      instrEl.innerHTML = '<span style="color:#ef4444;font-weight:600;">Agent 指令（行号模式）:</span>\\n\\n'
+        + '"替换第 <span style="color:#ef4444;">4</span> 行为:\\n'
+        + '        total += item.price * item.quantity"\\n\\n'
+        + '<span style="color:#f59e0b;">问题：Agent 数错了行号！</span>\\n'
+        + '<span style="color:#94a3b8;">实际第 4 行是 total += item.price</span>\\n'
+        + '<span style="color:#94a3b8;">但 Agent 可能从 0 开始数，</span>\\n'
+        + '<span style="color:#94a3b8;">或者把空行也算进去...</span>';
+
+      var result = sourceCode.slice();
+      result[3] = '<span style="color:#ef4444;text-decoration:line-through;">    total += item.price</span>';
+      result.splice(3, 1, '    total += item.price * item.quantity');
+      // 但如果 Agent 数错了，可能改到第 3 行或第 5 行
+      resultEl.innerHTML = '<span style="color:#ef4444;font-weight:600;">可能的错误结果（Agent 数错行号）:</span>\\n\\n';
+      var wrong = sourceCode.slice();
+      wrong[2] = '<span style="color:#ef4444;">        total += item.price * item.quantity  // 改错行了!</span>';
+      resultEl.innerHTML += wrong.map(function(l,i) {
+        return '<span style="color:#94a3b8;">' + (i+1).toString().padStart(2) + '</span> ' + l;
+      }).join('\\n');
+
+      infoEl.innerHTML = '<strong style="color:#ef4444;">行号模式的问题</strong>：Agent 经常数错行号（从 0 还是 1 开始？空行算不算？注释算不算？）。数错一行就会修改到错误的位置，甚至破坏代码结构。这个 bug 极难调试。';
+    }
+
+    function showSearchMode() {
+      searchBtn.className = 'agent-btn agent-btn-primary';
+      lineBtn.className = 'agent-btn agent-btn-secondary';
+
+      instrEl.innerHTML = '<span style="color:#10b981;font-weight:600;">Agent 指令（SEARCH_AND_REPLACE）:</span>\\n\\n'
+        + '<span style="color:#94a3b8;">old_text:</span>\\n'
+        + '        total += item.price\\n\\n'
+        + '<span style="color:#94a3b8;">new_text:</span>\\n'
+        + '        total += item.price * item.quantity\\n\\n'
+        + '<span style="color:#10b981;">Agent 只需要复制原文 + 写新代码</span>\\n'
+        + '<span style="color:#10b981;">定位由工具完成，不需要数行号</span>';
+
+      var result = sourceCode.slice();
+      resultEl.innerHTML = '<span style="color:#10b981;font-weight:600;">正确结果（精确匹配替换）:</span>\\n\\n';
+      resultEl.innerHTML += result.map(function(l,i) {
+        if (i === 3) {
+          return '<span style="color:#94a3b8;">' + (i+1).toString().padStart(2) + '</span> <span style="color:#10b981;font-weight:600;">        total += item.price * item.quantity</span>';
+        }
+        return '<span style="color:#94a3b8;">' + (i+1).toString().padStart(2) + '</span> ' + l;
+      }).join('\\n');
+
+      infoEl.innerHTML = '<strong style="color:#10b981;">SEARCH_AND_REPLACE 的优势</strong>：Agent 只需要"看到原文 → 写出新文本"，这是训练数据中最常见的模式。工具在底层做精确字符串匹配定位——如果匹配不唯一，工具会返回错误并要求提供更多上下文。<strong>定位的工作交给确定性工具，LLM 只负责生成内容。</strong>';
+    }
+
+    lineBtn.addEventListener('click', showLineMode);
+    searchBtn.addEventListener('click', showSearchMode);
+    showSearchMode();
+  }
+
+  // ============ 2. Hallucination Defense Layers ============
+  function initDefense() {
+    var svg = document.getElementById('defense-svg');
+    var infoEl = document.getElementById('defense-info');
+    if (!svg) return;
+
+    var layers = [
+      { id: 'schema', label: 'Layer 1: Schema 约束', y: 30, color: '#3b82f6',
+        desc: '<strong>JSON Schema 严格模式</strong>：Agent 只能调用预定义的工具，不能发明新工具。additionalProperties: false 阻止 Agent 添加未定义的参数。这是第一道防线——从源头限制 Agent 的行为空间。' },
+      { id: 'validate', label: 'Layer 2: 参数校验', y: 98, color: '#f59e0b',
+        desc: '<strong>Agent-friendly Error</strong>：工具接收到调用后先校验参数。关键：错误信息要告诉 Agent <em>怎么修</em>，不只是说"失败了"。例如："start_date must be YYYY-MM-DD. Example: 2025-09-01." Anthropic 发现标准化错误模板可以大幅提高重试成功率。' },
+      { id: 'sandbox', label: 'Layer 3: 运行时沙箱', y: 166, color: '#8b5cf6',
+        desc: '<strong>隔离执行环境</strong>：代码在 Docker/gVisor/E2B 沙箱中执行。即使 Agent 幻觉出了破坏性命令（rm -rf /），也不会影响宿主系统。沙箱是"最坏情况保险"——前两层挡住大部分问题，这一层兜底。' },
+      { id: 'verify', label: 'Layer 4: 输出验证', y: 234, color: '#10b981',
+        desc: '<strong>Outcome > Narration</strong>：不是 Agent 说"成功了"就算成功。必须检查环境状态——运行测试、检查文件是否存在、验证数据库状态。这是 Anthropic 反复强调的核心原则：验证环境状态，不信 Agent 的自述。' }
+    ];
+
+    var selected = -1;
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var lx = 50, lw = 600, lh = 52;
+
+      layers.forEach(function(layer, i) {
+        var isSel = i === selected;
+        var opacity = isSel ? 1 : (selected >= 0 ? 0.4 : 0.8);
+
+        // Layer rectangle
+        h += '<rect x="' + lx + '" y="' + layer.y + '" width="' + lw + '" height="' + lh + '" rx="8" '
+          + 'fill="' + layer.color + '" opacity="' + (opacity * 0.15) + '" '
+          + 'stroke="' + layer.color + '" stroke-width="' + (isSel ? 2.5 : 1) + '" '
+          + 'style="cursor:pointer;" data-idx="' + i + '"/>';
+
+        // Shield icon
+        var sx = lx + 25, sy = layer.y + lh/2;
+        h += '<text x="' + sx + '" y="' + (sy + 5) + '" text-anchor="middle" fill="' + layer.color + '" font-size="18" style="pointer-events:none;">'
+          + ['🛡️', '✅', '📦', '🔍'][i] + '</text>';
+
+        // Label
+        h += '<text x="' + (lx + 50) + '" y="' + (sy + 5) + '" fill="' + (isSel ? layer.color : c.text) + '" '
+          + 'font-size="13" font-weight="' + (isSel ? '700' : '500') + '" style="pointer-events:none;">'
+          + layer.label + '</text>';
+
+        // Arrow between layers
+        if (i < layers.length - 1) {
+          var arrowY = layer.y + lh + 5;
+          h += '<text x="' + (lx + lw/2) + '" y="' + (arrowY + 14) + '" text-anchor="middle" fill="' + c.muted + '" font-size="14" style="pointer-events:none;">↓</text>';
+        }
+      });
+
+      // Side label
+      h += '<text x="' + (lx + lw + 15) + '" y="' + (150) + '" fill="' + c.muted + '" font-size="10" '
+        + 'transform="rotate(90,' + (lx + lw + 15) + ',150)" text-anchor="middle">纵深防御（Defense in Depth）</text>';
+
+      svg.innerHTML = h;
+
+      // Click handlers
+      svg.querySelectorAll('rect[data-idx]').forEach(function(rect) {
+        rect.addEventListener('click', function() {
+          selected = parseInt(rect.getAttribute('data-idx'));
+          draw();
+        });
+      });
+
+      if (selected >= 0) {
+        infoEl.innerHTML = layers[selected].desc;
+      } else {
+        infoEl.innerHTML = '点击任意一层，查看具体的防御机制和实现方式。四层防御从外到内：限制行为空间 → 校验参数 → 隔离执行 → 验证结果。';
+      }
+    }
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 3. Context Pressure Visualizer ============
+  function initContext() {
+    var svg = document.getElementById('ctx-svg');
+    var slider = document.getElementById('ctx-slider');
+    var pctEl = document.getElementById('ctx-pct');
+    var infoEl = document.getElementById('ctx-info');
+    if (!svg || !slider) return;
+
+    function draw() {
+      var c = C();
+      var pct = parseInt(slider.value);
+      pctEl.textContent = pct;
+
+      var h = '';
+      var barX = 60, barW = 520, barH = 40, barY = 30;
+
+      // Context window bar (background)
+      h += '<rect x="' + barX + '" y="' + barY + '" width="' + barW + '" height="' + barH + '" rx="6" fill="' + c.border + '" opacity="0.3"/>';
+
+      // Filled portion
+      var fillW = barW * pct / 100;
+      var fillColor = pct < 40 ? c.success : (pct < 70 ? c.warning : c.danger);
+      h += '<rect x="' + barX + '" y="' + barY + '" width="' + fillW + '" height="' + barH + '" rx="6" fill="' + fillColor + '" opacity="0.6"/>';
+
+      // Sections inside
+      var sections = [
+        { pct: 5, label: 'System', color: c.pStrong },
+        { pct: 8, label: 'Tools', color: c.purple },
+        { pct: Math.min(pct - 13, 12), label: 'CLAUDE.md', color: c.success },
+      ];
+      if (pct > 25) sections.push({ pct: Math.min(pct - 25, pct * 0.6), label: 'History + Tool Results', color: c.warning });
+
+      var sx = barX;
+      sections.forEach(function(sec) {
+        if (sec.pct <= 0) return;
+        var w = barW * sec.pct / 100;
+        if (sx + w > barX + fillW) w = barX + fillW - sx;
+        if (w <= 0) return;
+        h += '<rect x="' + sx + '" y="' + barY + '" width="' + w + '" height="' + barH + '" fill="' + sec.color + '" opacity="0.25"/>';
+        if (w > 40) {
+          h += '<text x="' + (sx + w/2) + '" y="' + (barY + barH/2 + 4) + '" text-anchor="middle" fill="' + c.text + '" font-size="9" style="pointer-events:none;">' + sec.label + '</text>';
+        }
+        sx += w;
+      });
+
+      // 40% threshold line
+      var threshX = barX + barW * 0.4;
+      h += '<line x1="' + threshX + '" y1="' + (barY - 5) + '" x2="' + threshX + '" y2="' + (barY + barH + 5) + '" stroke="' + c.danger + '" stroke-width="2" stroke-dasharray="4,3"/>';
+      h += '<text x="' + threshX + '" y="' + (barY - 10) + '" text-anchor="middle" fill="' + c.danger + '" font-size="10" font-weight="600">40% 拐点</text>';
+
+      // Percentage label
+      h += '<text x="' + (barX + barW + 15) + '" y="' + (barY + barH/2 + 5) + '" fill="' + fillColor + '" font-size="14" font-weight="700">' + pct + '%</text>';
+
+      // Performance curve
+      var cy = 110, ch = 120, cw = barW;
+      h += '<text x="' + barX + '" y="' + (cy + 5) + '" fill="' + c.muted + '" font-size="10">模型性能</text>';
+      h += '<text x="' + (barX + cw) + '" y="' + (cy + ch + 15) + '" text-anchor="end" fill="' + c.muted + '" font-size="10">上下文使用率</text>';
+
+      // Performance line (degrades after 40%)
+      var points = [];
+      for (var x = 0; x <= 100; x += 2) {
+        var perf;
+        if (x <= 40) {
+          perf = 95 - x * 0.1;
+        } else {
+          perf = 91 - (x - 40) * 0.8;
+        }
+        perf = Math.max(perf, 20);
+        var px = barX + cw * x / 100;
+        var py = cy + ch * (1 - perf / 100);
+        points.push(px + ',' + py);
+      }
+      h += '<polyline points="' + points.join(' ') + '" fill="none" stroke="' + c.pStrong + '" stroke-width="2"/>';
+
+      // Current position dot
+      var curPerf;
+      if (pct <= 40) { curPerf = 95 - pct * 0.1; }
+      else { curPerf = 91 - (pct - 40) * 0.8; }
+      curPerf = Math.max(curPerf, 20);
+      var dotX = barX + cw * pct / 100;
+      var dotY = cy + ch * (1 - curPerf / 100);
+      h += '<circle cx="' + dotX + '" cy="' + dotY + '" r="6" fill="' + fillColor + '"/>';
+      h += '<text x="' + (dotX + 10) + '" y="' + (dotY + 4) + '" fill="' + fillColor + '" font-size="11" font-weight="600">' + curPerf.toFixed(0) + '%</text>';
+
+      // 40% line on curve
+      h += '<line x1="' + (barX + cw * 0.4) + '" y1="' + cy + '" x2="' + (barX + cw * 0.4) + '" y2="' + (cy + ch) + '" stroke="' + c.danger + '" stroke-width="1" stroke-dasharray="3,3"/>';
+
+      // Strategy indicators
+      var stratY = cy + ch + 25;
+      var strategies = [];
+      if (pct < 40) {
+        strategies.push({ icon: '✅', text: '安全区：正常工作', color: c.success });
+      } else if (pct < 60) {
+        strategies.push({ icon: '⚠️', text: '警告区：考虑压缩旧消息', color: c.warning });
+        strategies.push({ icon: '📝', text: '关键信息写入外部文件', color: c.warning });
+      } else if (pct < 80) {
+        strategies.push({ icon: '🔄', text: '启动 Compaction：摘要早期对话', color: c.danger });
+        strategies.push({ icon: '🔀', text: '分拆子 Agent：上下文隔离', color: c.purple });
+      } else {
+        strategies.push({ icon: '🛑', text: '即将溢出：提交进度 → 新会话', color: c.danger });
+        strategies.push({ icon: '💾', text: '写 progress.md → git commit → 新会话接手', color: c.danger });
+      }
+
+      strategies.forEach(function(s, i) {
+        h += '<text x="' + (barX + 20) + '" y="' + (stratY + i * 18) + '" fill="' + s.color + '" font-size="11">' + s.icon + ' ' + s.text + '</text>';
+      });
+
+      svg.innerHTML = h;
+
+      var msgs = {
+        low: '上下文使用率 ' + pct + '%（安全区）。模型性能稳定在 ~' + curPerf.toFixed(0) + '%。可以正常工作，不需要特殊措施。',
+        mid: '上下文使用率 ' + pct + '%（警告区，已超过 40% 拐点）。模型性能开始下降到 ~' + curPerf.toFixed(0) + '%。建议：开始压缩旧工具输出，关键信息即时写入文件。',
+        high: '上下文使用率 ' + pct + '%（危险区）。模型性能已降至 ~' + curPerf.toFixed(0) + '%。应该启动 Compaction 压缩对话历史，或分拆子 Agent 做上下文隔离。',
+        critical: '上下文使用率 ' + pct + '%（即将溢出）。模型性能严重衰减到 ~' + curPerf.toFixed(0) + '%。必须立即停止当前任务，写入 progress.md，git commit，启动新会话接手。'
+      };
+
+      if (pct < 40) infoEl.innerHTML = msgs.low;
+      else if (pct < 60) infoEl.innerHTML = msgs.mid;
+      else if (pct < 80) infoEl.innerHTML = msgs.high;
+      else infoEl.innerHTML = msgs.critical;
+    }
+
+    slider.addEventListener('input', draw);
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 4. Harness Engineering Cards ============
+  function initHarness() {
+    var container = document.getElementById('harness-cards');
+    var infoEl = document.getElementById('harness-info');
+    if (!container) return;
+
+    var principles = [
+      { icon: '🔧', title: '机械化 > 文档', short: 'Linter 错误 = 修复指令',
+        detail: '<strong>OpenAI 的做法</strong>：自定义 linter 规则强制分层架构（Types → Config → Repo → Service → Runtime → UI）。最精妙的创新：linter 错误信息兼做 Agent 的修复指令——违反约束时，错误直接告诉 Agent 怎么修。工具在工作的同时"教"Agent。' },
+      { icon: '🌊', title: '深度优先', short: 'Agent 卡住 = 环境缺能力',
+        detail: '<strong>当 Agent 卡住时不要替它写代码。</strong>诊断缺少什么能力（工具、护栏、抽象、文档），然后让 Agent 自己把这个能力编码进仓库。每个编码的能力都变成未来所有 Agent 任务的基础设施，复利效应累积。' },
+      { icon: '📦', title: '仓库即文档', short: 'Slack 里的知识 = 不存在',
+        detail: '<strong>所有知识必须在仓库里。</strong>Slack 讨论、Google Docs、口头默契对 Agent 不存在。OpenAI 最初把所有信息塞进一个巨大的 AGENTS.md 文件——失败了。正确做法：ARCHITECTURE.md（高层概览）+ docs/ 目录（详细文档）+ ADRs（决策记录）。' },
+      { icon: '🔄', title: '中间件管道', short: '环境映射 → 循环检测 → 推理三明治',
+        detail: '<strong>LangChain 的中间件架构</strong>：LocalContextMiddleware（映射环境）→ LoopDetectionMiddleware（防止重复失败）→ ReasoningSandwichMiddleware（关键决策高推理，执行快推理）→ PreCompletionChecklistMiddleware（完成前强制检查）。' },
+      { icon: '📐', title: '仓库就绪度', short: 'ADR + 模板 + 统一入口',
+        detail: '<strong>让仓库对 Agent 友好</strong>：Architecture Decision Records（每个决策的背景和理由）、Golden Path Templates（标准化模板）、统一入口（make test / make lint / make ci）、机器可读的目录 ownership 映射。' },
+      { icon: '⚡', title: '快速反馈循环', short: '快编译 + 快测试 = 高产能',
+        detail: '<strong>Anthropic 特别强调</strong>：快速编译和快速测试是 Agent 高产能的前提。Agent 靠频繁迭代和快速验证工作——如果 build 需要 5 分钟、测试需要 10 分钟，Agent 的效率会急剧下降。' },
+    ];
+
+    function draw() {
+      var c = C();
+      container.innerHTML = '';
+
+      principles.forEach(function(p, i) {
+        var card = document.createElement('div');
+        card.style.cssText = 'background:' + c.cardBg + ';border:1px solid ' + c.border + ';border-radius:8px;padding:0.75rem;cursor:pointer;transition:all 0.2s;';
+        card.innerHTML = '<div style="font-size:1.2rem;text-align:center;">' + p.icon + '</div>'
+          + '<div style="font-size:0.8rem;font-weight:700;text-align:center;margin:0.3rem 0;color:' + c.text + ';">' + p.title + '</div>'
+          + '<div style="font-size:0.7rem;text-align:center;color:' + c.muted + ';">' + p.short + '</div>';
+        card.addEventListener('click', function() {
+          infoEl.innerHTML = p.detail;
+          container.querySelectorAll('div').forEach(function(d) { d.style.borderColor = c.border; });
+          card.style.borderColor = c.pStrong;
+        });
+        card.addEventListener('mouseenter', function() { card.style.borderColor = c.pStrong; });
+        card.addEventListener('mouseleave', function() { card.style.borderColor = c.border; });
+        container.appendChild(card);
+      });
+    }
+
+    draw();
+    onTheme(draw);
+    infoEl.innerHTML = '点击任意卡片查看详细说明。这些原则来自 OpenAI、LangChain、Anthropic 的一线 Agent 工程实践。';
+  }
+
+  // ============ 5. Agent Loop Stepped Visualization ============
+  function initLoop() {
+    var svg = document.getElementById('loop-svg');
+    var infoEl = document.getElementById('loop-info');
+    var prevBtn = document.getElementById('loop-prev');
+    var nextBtn = document.getElementById('loop-next');
+    var resetBtn = document.getElementById('loop-reset');
+    var counterEl = document.getElementById('loop-counter');
+    if (!svg) return;
+
+    var step = -1;
+    var steps = [
+      { active: ['user'], highlight: 'user', label: '用户输入',
+        desc: '用户提交任务："修复 login 函数的空指针 bug"。系统构建初始消息列表：system prompt + tool definitions + user message。' },
+      { active: ['user', 'prompt'], highlight: 'prompt', label: '构建 Prompt',
+        desc: 'Prompt 按优先级排列：Server System Message（最高）→ Tool Definitions → Client Instructions (CLAUDE.md) → Message History。<strong>静态内容在前以最大化缓存命中。</strong>' },
+      { active: ['user', 'prompt', 'api'], highlight: 'api', label: 'API 调用',
+        desc: '发送完整对话历史到 API（stateless 模型——每次请求都带全部 history）。模型以 streaming 方式返回 tokens。' },
+      { active: ['user', 'prompt', 'api', 'check'], highlight: 'check', label: '检查终止条件',
+        desc: 'stop_reason == "end_turn"？→ 返回最终回复。stop_reason == "tool_use"？→ 进入工具执行循环。' },
+      { active: ['user', 'prompt', 'api', 'check', 'tool'], highlight: 'tool', label: '执行工具',
+        desc: '提取工具调用 → 在沙箱中执行 → 截断长输出（Claude Code 限制 25,000 tokens）。例如：search_codebase("def login") → 返回匹配的文件和行号。' },
+      { active: ['user', 'prompt', 'api', 'check', 'tool', 'append'], highlight: 'append', label: '追加结果',
+        desc: '将 assistant 消息和 tool result 追加到消息历史。<strong>只追加不修改</strong>——保留前缀不变以命中 prompt 缓存。然后回到 API 调用步骤（循环）。' },
+      { active: ['user', 'prompt', 'api', 'check'], highlight: 'check', label: '循环终止',
+        desc: '经过多轮工具调用后，模型返回 stop_reason="end_turn"。Agent 输出最终回复："已修复 login 函数的空指针 bug，测试全部通过。" 但记住——<strong>Outcome > Narration</strong>，还需要验证环境状态。' },
+    ];
+
+    function draw() {
+      var c = C();
+      var h = '';
+
+      var nodes = [
+        { id: 'user', x: 60, y: 150, w: 80, h: 36, label: '用户输入', shape: 'rounded' },
+        { id: 'prompt', x: 180, y: 150, w: 90, h: 36, label: '构建 Prompt', shape: 'rect' },
+        { id: 'api', x: 310, y: 150, w: 90, h: 36, label: 'API 调用', shape: 'rect' },
+        { id: 'check', x: 440, y: 150, w: 90, h: 40, label: '终止？', shape: 'diamond' },
+        { id: 'tool', x: 440, y: 50, w: 90, h: 36, label: '执行工具', shape: 'rect' },
+        { id: 'append', x: 310, y: 50, w: 90, h: 36, label: '追加结果', shape: 'rect' },
+        { id: 'done', x: 590, y: 150, w: 70, h: 36, label: '输出', shape: 'rounded' },
+      ];
+
+      var edges = [
+        { from: 'user', to: 'prompt' },
+        { from: 'prompt', to: 'api' },
+        { from: 'api', to: 'check' },
+        { from: 'check', to: 'tool', label: 'tool_use' },
+        { from: 'tool', to: 'append' },
+        { from: 'append', to: 'api', label: 'loop' },
+        { from: 'check', to: 'done', label: 'end_turn' },
+      ];
+
+      var activeNodes = step >= 0 && step < steps.length ? steps[step].active : [];
+      var highlightNode = step >= 0 && step < steps.length ? steps[step].highlight : '';
+
+      // Draw edges
+      edges.forEach(function(e) {
+        var fromN = nodes.find(function(n) { return n.id === e.from; });
+        var toN = nodes.find(function(n) { return n.id === e.to; });
+        var fx, fy, tx, ty;
+
+        if (e.from === 'check' && e.to === 'tool') {
+          fx = fromN.x + fromN.w/2; fy = fromN.y;
+          tx = toN.x + toN.w/2; ty = toN.y + toN.h;
+        } else if (e.from === 'append' && e.to === 'api') {
+          fx = toN.x + toN.w/2; fy = fromN.y + fromN.h/2;
+          tx = toN.x + toN.w/2; ty = toN.y;
+        } else if (e.from === 'check' && e.to === 'done') {
+          fx = fromN.x + fromN.w; fy = fromN.y + fromN.h/2;
+          tx = toN.x; ty = toN.y + toN.h/2;
+        } else {
+          fx = fromN.x + fromN.w; fy = fromN.y + fromN.h/2;
+          tx = toN.x; ty = toN.y + toN.h/2;
+        }
+
+        var isActive = activeNodes.indexOf(e.from) >= 0 && activeNodes.indexOf(e.to) >= 0;
+        var eColor = isActive ? c.pStrong : c.border;
+
+        if (e.from === 'append' && e.to === 'api') {
+          h += '<path d="M ' + (fromN.x) + ' ' + (fromN.y + fromN.h/2) + ' L ' + (toN.x + toN.w/2 - 20) + ' ' + (fromN.y + fromN.h/2) + ' L ' + (toN.x + toN.w/2 - 20) + ' ' + (toN.y) + '" fill="none" stroke="' + eColor + '" stroke-width="' + (isActive ? 2 : 1.5) + '" marker-end="url(#arrow)"/>';
+        } else {
+          h += '<line x1="' + fx + '" y1="' + fy + '" x2="' + tx + '" y2="' + ty + '" stroke="' + eColor + '" stroke-width="' + (isActive ? 2 : 1.5) + '" marker-end="url(#arrow)"/>';
+        }
+
+        if (e.label) {
+          var lx = (fx + tx) / 2, ly = (fy + ty) / 2 - 6;
+          if (e.from === 'append') { lx = fromN.x - 15; ly = fromN.y + fromN.h/2 + 4; }
+          if (e.label === 'end_turn') { ly = fy - 6; lx = (fx + tx) / 2; }
+          if (e.label === 'tool_use') { lx = fx + 15; }
+          h += '<text x="' + lx + '" y="' + ly + '" fill="' + c.muted + '" font-size="9" text-anchor="middle" font-family="monospace">' + e.label + '</text>';
+        }
+      });
+
+      // Arrow marker
+      h = '<defs><marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="' + c.muted + '"/></marker></defs>' + h;
+
+      // Draw nodes
+      nodes.forEach(function(n) {
+        var isActive = activeNodes.indexOf(n.id) >= 0;
+        var isHighlight = n.id === highlightNode;
+        var fillColor = isHighlight ? c.pLight : (isActive ? c.cardBg : c.node);
+        var strokeColor = isHighlight ? c.pStrong : (isActive ? c.pStrong : c.nodeStroke);
+        var sw = isHighlight ? 2.5 : 1.5;
+
+        if (n.shape === 'diamond') {
+          var cx = n.x + n.w/2, cy2 = n.y + n.h/2;
+          h += '<polygon points="' + cx + ',' + n.y + ' ' + (n.x + n.w) + ',' + cy2 + ' ' + cx + ',' + (n.y + n.h) + ' ' + n.x + ',' + cy2 + '" fill="' + fillColor + '" stroke="' + strokeColor + '" stroke-width="' + sw + '"/>';
+          h += '<text x="' + cx + '" y="' + (cy2 + 4) + '" text-anchor="middle" fill="' + c.text + '" font-size="11" font-weight="' + (isHighlight ? '700' : '500') + '">' + n.label + '</text>';
+        } else {
+          var rx = n.shape === 'rounded' ? 18 : 6;
+          h += '<rect x="' + n.x + '" y="' + n.y + '" width="' + n.w + '" height="' + n.h + '" rx="' + rx + '" fill="' + fillColor + '" stroke="' + strokeColor + '" stroke-width="' + sw + '"/>';
+          h += '<text x="' + (n.x + n.w/2) + '" y="' + (n.y + n.h/2 + 4) + '" text-anchor="middle" fill="' + c.text + '" font-size="11" font-weight="' + (isHighlight ? '700' : '500') + '">' + n.label + '</text>';
+        }
+      });
+
+      // Step indicator
+      if (step >= 0 && step < steps.length) {
+        h += '<text x="350" y="240" text-anchor="middle" fill="' + c.pStrong + '" font-size="13" font-weight="700">Step ' + (step + 1) + ': ' + steps[step].label + '</text>';
+      } else {
+        h += '<text x="350" y="240" text-anchor="middle" fill="' + c.muted + '" font-size="12">点击"下一步"开始逐步演示 Agent Loop</text>';
+      }
+
+      // Progress dots
+      var dotY = 270;
+      steps.forEach(function(s, i) {
+        var dx = 350 - (steps.length * 12) / 2 + i * 16;
+        h += '<circle cx="' + dx + '" cy="' + dotY + '" r="4" fill="' + (i === step ? c.pStrong : (i < step ? c.success : c.border)) + '"/>';
+      });
+
+      svg.innerHTML = h;
+      counterEl.textContent = step >= 0 ? (step + 1) + ' / ' + steps.length : '';
+
+      if (step >= 0 && step < steps.length) {
+        infoEl.innerHTML = steps[step].desc;
+      } else if (step >= steps.length) {
+        infoEl.innerHTML = '<strong>循环完成！</strong>Agent Loop 的核心就是这个 while 循环：API 调用 → 检查终止 → 执行工具 → 追加结果 → 重复。每一"turn"可能包含多轮工具调用迭代。';
+      } else {
+        infoEl.innerHTML = '这是 OpenAI Codex Agent Loop 的核心架构。点击"下一步"逐步观察每个阶段的工作方式。';
+      }
+
+      prevBtn.disabled = step <= -1;
+      nextBtn.disabled = step >= steps.length;
+    }
+
+    nextBtn.addEventListener('click', function() { if (step < steps.length) { step++; draw(); } });
+    prevBtn.addEventListener('click', function() { if (step > -1) { step--; draw(); } });
+    resetBtn.addEventListener('click', function() { step = -1; draw(); });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 6. Tool Design Comparison ============
+  function initToolTabs() {
+    var tabBar = document.getElementById('tool-tabs');
+    if (!tabBar) return;
+
+    var content = {
+      naming: {
+        bad: '// 坏的命名\\n"do_stuff"           // 不知道做什么\\n"handler"            // 太泛了\\n"process"            // 处理什么？\\n"util"               // 万能垃圾桶',
+        good: '// 好的命名（动作 + 对象）\\n"search_files"       // 搜索文件\\n"create_user"        // 创建用户\\n"read_file"          // 读取文件\\n"run_tests"          // 运行测试',
+        tip: 'Anthropic 原则：工具名应该是 <strong>动作 + 对象</strong> 的组合。如果一个人类工程师看到工具名也不确定它干什么，Agent 更不会知道。'
+      },
+      errors: {
+        bad: '// 坏的错误信息\\n{"error": "Invalid input"}\\n{"error": "Operation failed"}\\n{"error": "400 Bad Request"}\\n// Agent 收到这些信息后只能盲目重试',
+        good: '// 好的错误信息（错误即指令）\\n{\\n  "error": "start_date must be YYYY-MM-DD.\\n    Example: 2025-09-01.\\n    You provided: \\"next monday\\"",\\n  "retry": true,\\n  "fix_hint": "Use ISO date format"\\n}',
+        tip: '<strong>Anthropic 核心原则</strong>：错误信息应该告诉 Agent <em>怎么修复</em>，而不只是说"失败了"。标准化错误模板可以大幅提高重试成功率。OpenAI 更进一步：linter 错误信息直接兼做修复指令。'
+      },
+      params: {
+        bad: '// 坏的：太多必填参数\\n"parameters": {\\n  "required": [\\n    "query", "file_type", "max_results",\\n    "sort_by", "include_hidden",\\n    "case_sensitive", "encoding"\\n  ]\\n}\\n// Agent 经常猜错可选参数的值',
+        good: '// 好的：最少必填 + 合理默认\\n"parameters": {\\n  "required": ["query"],  // 只有 1 个必填\\n  "properties": {\\n    "query": {"type": "string"},\\n    "file_type": {\\n      "type": "string",\\n      "default": "all"  // 合理默认\\n    },\\n    "max_results": {\\n      "type": "integer",\\n      "default": 20,\\n      "maximum": 100\\n    }\\n  }\\n}',
+        tip: '<strong>参数最小化原则</strong>：必填参数越少越好，可选参数必须有合理的默认值。Agent 不需要理解所有参数——大多数情况下用默认值就够了。'
+      },
+      output: {
+        bad: '// 坏的：自由文本输出\\n"Found 3 files: main.py contains the\\nlogin function at line 42, also\\nauth.py has related code near the\\ntop of the file, and utils.py has\\nsome helper functions..."\\n// Agent 需要解析自由文本——容易出错',
+        good: '// 好的：结构化 JSON 输出\\n{\\n  "matches": [\\n    {"file": "main.py", "line": 42,\\n     "preview": "def login(user, pwd):"},\\n    {"file": "auth.py", "line": 8,\\n     "preview": "class AuthHandler:"},\\n    {"file": "utils.py", "line": 15,\\n     "preview": "def hash_password(pwd):"}\\n  ],\\n  "total": 3,\\n  "truncated": false\\n}',
+        tip: '<strong>输出结构化原则</strong>：返回 JSON，不返回自由文本。结构化输出让 Agent 可以精确提取需要的信息，不需要"理解"自由文本。同时要控制输出大小——Claude Code 限制工具响应 25,000 tokens，超出部分截断并返回续取指令。'
+      }
+    };
+
+    var tabs = tabBar.querySelectorAll('.agent-tab');
+
+    function showTab(tabId) {
+      tabs.forEach(function(t) {
+        t.classList.remove('agent-tab-active');
+        if (t.getAttribute('data-tab') === tabId) t.classList.add('agent-tab-active');
+      });
+
+      Object.keys(content).forEach(function(id) {
+        var el = document.getElementById('tool-tab-' + id);
+        if (el) {
+          el.className = 'agent-tab-content' + (id === tabId ? ' agent-tab-content-active' : '');
+          if (id === tabId) {
+            var c = content[id];
+            el.innerHTML = '<div style="display:flex;gap:1rem;flex-wrap:wrap;">'
+              + '<div style="flex:1;min-width:250px;">'
+              + '<div style="font-size:0.8rem;font-weight:600;color:#ef4444;margin-bottom:0.5rem;">❌ 不推荐</div>'
+              + '<div class="agent-code-block">' + c.bad + '</div></div>'
+              + '<div style="flex:1;min-width:250px;">'
+              + '<div style="font-size:0.8rem;font-weight:600;color:#10b981;margin-bottom:0.5rem;">✅ 推荐</div>'
+              + '<div class="agent-code-block">' + c.good + '</div></div></div>'
+              + '<div class="agent-step-info" style="margin-top:0.75rem;">' + c.tip + '</div>';
+          }
+        }
+      });
+    }
+
+    tabs.forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        showTab(tab.getAttribute('data-tab'));
+      });
+    });
+
+    showTab('naming');
+  }
+
+  // ============ 7. Plan-Act-Reflect Cycle ============
+  function initPAR() {
+    var svg = document.getElementById('par-svg');
+    var infoEl = document.getElementById('par-info');
+    if (!svg) return;
+
+    var phases = [
+      { id: 'plan', label: 'Plan', x: 350, y: 40, color: '#3b82f6', icon: '📋',
+        desc: '<strong>Plan 阶段</strong>：Agent 读取 spec → 分析当前状态 → 生成步骤列表 → 写入外部 exec-plan 文件。关键：计划不存在于 Agent 的"记忆"中，而是持久化到文件里。每次执行前都会重新读取。' },
+      { id: 'act', label: 'Act', x: 530, y: 180, color: '#10b981', icon: '⚡',
+        desc: '<strong>Act 阶段</strong>：执行计划中的一步 → 调用工具。Harness 强制 Agent 输出结构化三元组：{"thought": "推理过程", "action": "search_code", "confidence": 0.8}。信心分数低于阈值时，强制回到 Plan。' },
+      { id: 'observe', label: 'Observe', x: 350, y: 230, color: '#f59e0b', icon: '👁️',
+        desc: '<strong>Observe 阶段</strong>：读取工具输出 → 对比预期。这一步是 ReAct 模式的关键——Agent 不是盲目执行，而是观察每步结果并评估是否符合预期。' },
+      { id: 'reflect', label: 'Reflect', x: 170, y: 180, color: '#8b5cf6', icon: '🔄',
+        desc: '<strong>Reflect 阶段</strong>：如果观察结果偏离计划 → 回到 Plan 重新评估。LangChain 的 PreCompletionChecklistMiddleware 就在这个阶段工作——Agent 想结束时，强制执行检查清单。' },
+    ];
+
+    var selected = -1;
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var cx = 350, cy = 155, r = 80;
+
+      // Center circle
+      h += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + c.border + '" stroke-width="1" stroke-dasharray="6,4"/>';
+
+      // Center text
+      h += '<text x="' + cx + '" y="' + (cy - 5) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">ReAct +</text>';
+      h += '<text x="' + cx + '" y="' + (cy + 10) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">Reflexion</text>';
+
+      // Curved arrows between phases
+      var arrowPairs = [
+        { from: 0, to: 1 }, { from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 0 }
+      ];
+
+      arrowPairs.forEach(function(pair) {
+        var f = phases[pair.from], t = phases[pair.to];
+        var isActive = selected === pair.from;
+        h += '<line x1="' + f.x + '" y1="' + f.y + '" x2="' + t.x + '" y2="' + t.y + '" stroke="' + (isActive ? f.color : c.border) + '" stroke-width="' + (isActive ? 2 : 1) + '" opacity="0.5" marker-end="url(#parArrow)"/>';
+      });
+
+      h = '<defs><marker id="parArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="' + c.muted + '"/></marker></defs>' + h;
+
+      // Draw phase nodes
+      phases.forEach(function(p, i) {
+        var isSel = i === selected;
+        var nodeR = 32;
+
+        h += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + nodeR + '" fill="' + p.color + '" opacity="' + (isSel ? 0.25 : 0.1) + '" stroke="' + p.color + '" stroke-width="' + (isSel ? 2.5 : 1.5) + '" style="cursor:pointer;" data-idx="' + i + '"/>';
+        h += '<text x="' + p.x + '" y="' + (p.y - 5) + '" text-anchor="middle" font-size="16" style="pointer-events:none;">' + p.icon + '</text>';
+        h += '<text x="' + p.x + '" y="' + (p.y + 14) + '" text-anchor="middle" fill="' + (isSel ? p.color : c.text) + '" font-size="12" font-weight="' + (isSel ? '700' : '500') + '" style="pointer-events:none;">' + p.label + '</text>';
+      });
+
+      svg.innerHTML = h;
+
+      svg.querySelectorAll('circle[data-idx]').forEach(function(circle) {
+        circle.addEventListener('click', function() {
+          selected = parseInt(circle.getAttribute('data-idx'));
+          draw();
+        });
+      });
+
+      if (selected >= 0) {
+        infoEl.innerHTML = phases[selected].desc;
+      } else {
+        infoEl.innerHTML = '点击循环中的任意阶段查看详细机制。这是 ReAct + Reflexion 的组合——Harness 在每个阶段提供结构化保障，防止 Agent "跑偏"。';
+      }
+    }
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ Init ============
+  function init() {
+    initEditDemo();
+    initDefense();
+    initContext();
+    initHarness();
+    initLoop();
+    initToolTabs();
+    initPAR();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+`}</script>
