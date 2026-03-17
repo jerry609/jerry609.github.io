@@ -1,0 +1,1198 @@
+---
+title: 'Harness Engineering：LangChain 不换模型、只改环境，从 Top 30 到 Top 5'
+description: '拆解 LangChain 在 Terminal Bench 2.0 上从 52.8% 到 66.5% 的全部技术细节——5 个失败模式、4 层中间件、推理三明治策略，以及 OpenAI 和 Anthropic 同时得出的相同结论。'
+publishDate: '2026-03-17'
+tags: ['Agent', 'Harness', 'LangChain', 'OpenAI', 'Anthropic', '工程实践']
+language: 'zh-CN'
+draft: false
+---
+
+<style>{`
+  .hw-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .hw-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .hw-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .hw-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .hw-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .hw-btn-primary:hover { opacity: 0.85; }
+  .hw-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .hw-btn-secondary:hover { opacity: 0.85; }
+  .hw-btn:disabled { opacity: 0.4; cursor: default; }
+  .hw-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .hw-code {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    color: hsl(var(--foreground));
+    margin: 1rem 0;
+  }
+  .hw-quote {
+    border-left: 3px solid hsl(var(--primary));
+    padding-left: 1rem;
+    margin: 1.5rem 0;
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+  }
+  .hw-metric {
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    font-family: monospace;
+  }
+  .hw-metric-up { background: #d1fae5; color: #065f46; }
+  .hw-metric-down { background: #fee2e2; color: #991b1b; }
+  .hw-metric-neutral { background: #dbeafe; color: #1e40af; }
+  :root.dark .hw-metric-up { background: #064e3b; color: #6ee7b7; }
+  :root.dark .hw-metric-down { background: #7f1d1d; color: #fca5a5; }
+  :root.dark .hw-metric-neutral { background: #1e3a5f; color: #93c5fd; }
+`}</style>
+
+> **"如果 2025 年是 AI Agent 证明自己能写代码的一年，那 2026 年就是我们意识到 Agent 不是难点——Harness 才是。"** — LangChain
+
+LangChain 的 coding agent **deepagents-cli** 在 Terminal Bench 2.0 上的成绩从 <span class="hw-metric hw-metric-down">52.8%</span> 飙升到 <span class="hw-metric hw-metric-up">66.5%</span>，从排行榜 30 名开外直接跻身 **Top 5**。
+
+关键事实：**他们从头到尾用的都是同一个模型（GPT-5.2-Codex）**。每一个百分点的提升都来自 harness 的改动——系统提示词、工具配置、中间件钩子。模型一行没改。
+
+与此同时，OpenAI 的 Harness 团队用 3-7 人在 5 个月内让 Codex 生成了**约 100 万行代码、~1500 个 PR、零手写代码**。Anthropic 在 Context Engineering 文章中得出了相同结论。
+
+三个独立团队，同一个发现：**Agent = Model + Harness，而 Harness 才是真正的杠杆。**
+
+本文完整拆解 LangChain 的每一步技术细节，并将 OpenAI 和 Anthropic 的平行发现编织进来。
+
+---
+
+## 一、什么是 Harness Engineering
+
+<div class="hw-quote">
+Agent = Model + Harness。裸模型不是 Agent。它在被 harness 赋予状态、工具执行、反馈循环和可执行约束后，才成为 Agent。
+</div>
+
+Harness 是**模型以外的所有东西**：
+
+| 组成部分 | 示例 |
+|:---------|:-----|
+| **System Prompt** | 行为指令、问题解决流程、时间管理提示 |
+| **Tools** | Bash、文件操作、代码搜索、测试运行 |
+| **Middleware** | 环境映射、循环检测、推理预算控制、完成前检查 |
+| **Repository Structure** | AGENTS.md、ARCHITECTURE.md、ADRs、linter 规则 |
+| **CI/CD** | 测试、lint、类型检查、安全扫描 |
+
+LangChain 把优化空间压缩到**三个旋钮**：System Prompts、Tools、Middleware。所有改进都在这三个维度上进行。
+
+---
+
+## 二、基准：Terminal Bench 2.0
+
+Terminal Bench 2.0 是 **ICLR 2026** 收录的 coding agent 基准测试：
+
+- **89 个任务**，横跨 10 个技术领域（软件工程、ML、调试、安全、数据科学等）
+- 由 93 位贡献者众包提交（229 个候选，筛选出 89 个）
+- 每个任务包含：**容器化环境 + 任务说明 + 程序化测试 + 参考解法**
+- 严格的超时限制
+
+<div class="hw-demo">
+  <div class="hw-demo-title">交互演示：各配置的得分对比</div>
+  <span class="hw-demo-subtitle">点击不同配置查看详情，观察 harness 改动带来的分数变化</span>
+  <svg id="score-svg" viewBox="0 0 700 320" style="width: 100%; max-height: 320px;"></svg>
+  <div id="score-info" class="hw-step-info"></div>
+</div>
+
+关键数据：
+
+| 配置 | 得分 | 说明 |
+|:-----|:-----|:-----|
+| Baseline（最小 harness） | 52.8% | Top 30 开外 |
+| 全程 xhigh 推理 | 53.9% | **反而更差**——超时太多 |
+| 全程 high 推理 | 63.6% | 大幅提升 |
+| **最终 harness（推理三明治 + 全部中间件）** | **66.5%** | **Top 5** |
+
+> 对比排行榜顶端：ForgeCode（GPT-5.4）得分 81.8%。Codex CLI（GPT-5.2）平均 63%。LangChain 用同一个 GPT-5.2 做到了 66.5%。
+
+---
+
+## 三、五个失败模式
+
+LangChain 用 **LangSmith traces** 作为主要调试工具，对每轮 benchmark 的失败案例做系统分析。他们的方法论类似**机器学习中的 Boosting**——专注于上一轮失败的样本，针对性优化。
+
+<div class="hw-demo">
+  <div class="hw-demo-title">交互演示：五个失败模式详解</div>
+  <span class="hw-demo-subtitle">点击每个失败模式，查看具体表现、trace 示例和修复方案</span>
+  <div id="failure-cards" style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-top: 1rem;"></div>
+  <div id="failure-info" class="hw-step-info"></div>
+</div>
+
+### 失败模式 1：过早自我批准
+
+Agent 写完代码后，重读自己的代码，觉得"看起来不错"，然后**直接宣布完成**，没有实际运行测试。LangChain 的描述："almost comically human — just vibes"（像人类一样，纯靠感觉）。
+
+这是最常见的失败模式。Agent 对自己生成的第一个看似合理的方案有强烈的偏向性。
+
+**修复**：PreCompletionChecklistMiddleware + 系统提示中强调验证流程。
+
+### 失败模式 2：Doom Loop（死循环）
+
+Agent 陷入对同一个坏方案的微调——在 trace 中可以看到对同一个文件做了 **10+ 次细微修改**，每次都只是小变化。一旦 Agent 决定了一个方向，就变得视野狭窄，不会退后重新思考。
+
+**修复**：LoopDetectionMiddleware。
+
+### 失败模式 3：环境发现错误
+
+Agent 浪费大量时间和 token 去探索自己的工作环境——目录结构在哪、Python 装在哪、有什么工具可用。上下文发现和搜索本身就容易出错。
+
+**修复**：LocalContextMiddleware。
+
+### 失败模式 4：评估理解偏差（Slop Buildup）
+
+Agent 不自然地理解"代码会被程序化测试评估"这件事。它写的代码在 happy path 上看起来正确，但 edge case 全挂。小错误随时间累积——LangChain 称之为 **"slop buildup"**（渣滓堆积）。
+
+**修复**：系统提示中明确告知"你的代码会被程序化测试评估"，强调按任务 spec 中的路径精确操作，压力测试 edge case。
+
+### 失败模式 5：时间管理失败
+
+Terminal Bench 有严格的超时限制。Agent **不擅长估算时间**，会无限迭代而不收敛。
+
+**修复**：注入时间预算警告，在时间快到时引导 Agent 从"迭代"切换到"验证并提交"。
+
+---
+
+## 四、修复方案：四层中间件架构
+
+LangChain 在 [The Anatomy of an Agent Harness](https://blog.langchain.com/the-anatomy-of-an-agent-harness/) 中公开了完整的中间件架构。
+
+<div class="hw-demo">
+  <div class="hw-demo-title">交互演示：中间件管道逐层穿越</div>
+  <span class="hw-demo-subtitle">点击 "下一步" 观察请求如何穿过每一层中间件</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="mw-prev" class="hw-btn hw-btn-secondary">上一步</button>
+    <button id="mw-next" class="hw-btn hw-btn-primary" style="margin: 0 0.5rem;">下一步</button>
+    <button id="mw-reset" class="hw-btn hw-btn-secondary">重置</button>
+    <span id="mw-counter" style="margin-left: 1rem; font-size: 0.85rem; color: hsl(var(--muted-foreground));"></span>
+  </div>
+  <svg id="mw-svg" viewBox="0 0 700 300" style="width: 100%; max-height: 300px;"></svg>
+  <div id="mw-info" class="hw-step-info"></div>
+</div>
+
+中间件执行顺序：
+
+```
+Agent Request
+  → LocalContextMiddleware      # 映射工作环境（before_model）
+  → LoopDetectionMiddleware     # 检测重复失败（wrap_tool_call）
+  → ReasoningSandwichMiddleware # 控制推理预算（modify_model_request）
+  → PreCompletionChecklistMiddleware # 完成前检查（after_model）
+Agent Response
+```
+
+这套架构基于 LangChain 1.0 的中间件系统，工作方式类似 Express.js 或 Django middleware：入站路径正序执行（`before_model` → `modify_model_request`），出站路径逆序执行（`after_model`）。
+
+### 三种核心 Hook
+
+| Hook | 执行时机 | 用途 |
+|:-----|:---------|:-----|
+| `before_model` | LLM 调用前，正序执行 | 注入上下文、条件路由 |
+| `modify_model_request` | `before_model` 之后，正序 | 临时修改请求参数（推理预算等） |
+| `after_model` | LLM 响应后、工具执行前，**逆序**执行 | 输出验证、强制继续 |
+
+另外还有两种包装式 Hook：`wrap_model_call`（包裹整个 LLM 调用）和 `wrap_tool_call`（包裹每次工具调用），用 decorator 或子类方式定义。
+
+---
+
+### 4.1 LocalContextMiddleware
+
+**解决的问题**：环境发现错误（失败模式 3）。
+
+**执行时机**：Agent 启动时（第一次 model call 之前）。
+
+**做了什么**：
+
+```python
+class LocalContextMiddleware(AgentMiddleware):
+    """在 Agent 启动时映射工作环境，避免浪费 token 探索。"""
+
+    @before_model
+    async def inject_environment(self, ctx):
+        env_info = {
+            # 目录结构
+            "cwd": os.getcwd(),
+            "tree": run_cmd("find . -maxdepth 2 -type f | head -100"),
+
+            # 可用工具
+            "python": run_cmd("which python3 && python3 --version"),
+            "node": run_cmd("which node && node --version"),
+            "git": run_cmd("git rev-parse --is-inside-work-tree 2>/dev/null"),
+
+            # 项目信息
+            "package_files": glob.glob("**/package.json") + glob.glob("**/pyproject.toml"),
+            "test_commands": detect_test_runner(),
+        }
+
+        ctx.messages.insert(0, {
+            "role": "system",
+            "content": f"# Environment Map (pre-loaded)\n{format_env(env_info)}\n"
+                       f"Do NOT waste time exploring. Use this map."
+        })
+```
+
+**为什么有效**：上下文发现和搜索本身就容易出错。Agent 可能花 3-5 轮工具调用去 `ls`、`which`、`cat package.json`，每一步都有出错机会。预注入这些信息后，Agent 可以直接开始工作——相当于给新员工一份 onboarding 文档而不是让他自己摸索。
+
+### 4.2 LoopDetectionMiddleware
+
+**解决的问题**：Doom Loop（失败模式 2）。
+
+**机制**：
+
+```python
+class LoopDetectionMiddleware(AgentMiddleware):
+    """检测并打断 Agent 对同一文件的重复编辑。"""
+
+    def __init__(self, max_edits_per_file: int = 5):
+        self.edit_counts: dict[str, int] = {}
+        self.max_edits = max_edits_per_file
+
+    @wrap_tool_call
+    async def check_loop(self, tool_call, ctx):
+        # 跟踪每个文件的编辑次数
+        if tool_call.name in ("edit_file", "write_file"):
+            file_path = tool_call.args.get("path", "")
+            self.edit_counts[file_path] = self.edit_counts.get(file_path, 0) + 1
+
+            if self.edit_counts[file_path] >= self.max_edits:
+                # 注入"退后重新思考"的指令
+                ctx.messages.append({
+                    "role": "system",
+                    "content": (
+                        f"LOOP DETECTED: You've edited '{file_path}' "
+                        f"{self.edit_counts[file_path]} times. "
+                        f"This pattern suggests your current approach is not working.\n\n"
+                        f"STOP editing this file. Instead:\n"
+                        f"1. Re-read the original task spec\n"
+                        f"2. Consider a fundamentally different approach\n"
+                        f"3. Check if you misunderstood the requirements"
+                    )
+                })
+
+        # 继续执行工具调用
+        return await tool_call.execute()
+```
+
+**局限性**：LangChain 坦承模型可以**忽略这个建议**继续原来的方向。这是一个启发式护栏，不是硬约束。但在实测中它大幅减少了死循环。
+
+**设计哲学**：Harness 应该设计成**可拆卸的（rippable）**。随着模型变强，有些今天需要的护栏未来可以移除。中间件的模块化特性天然支持这一点。
+
+### 4.3 ReasoningSandwichMiddleware（推理三明治）
+
+**解决的问题**：推理预算的最优分配。
+
+这是 LangChain 最具洞察力的发现。GPT-5.2-Codex 有 4 个推理档位：low、medium、high、xhigh。更高的推理更准确但消耗 **2 倍以上的 token 和时间**。Terminal Bench 有严格超时，所以这是一个真实的权衡。
+
+<div class="hw-demo">
+  <div class="hw-demo-title">交互演示：推理三明治 vs 其他策略</div>
+  <span class="hw-demo-subtitle">点击不同策略查看推理分配和得分对比</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="rs-all-xhigh" class="hw-btn hw-btn-secondary" style="margin: 0.2rem;">全程 xhigh</button>
+    <button id="rs-all-high" class="hw-btn hw-btn-secondary" style="margin: 0.2rem;">全程 high</button>
+    <button id="rs-sandwich" class="hw-btn hw-btn-primary" style="margin: 0.2rem;">推理三明治 ✓</button>
+  </div>
+  <svg id="rs-svg" viewBox="0 0 700 220" style="width: 100%; max-height: 220px;"></svg>
+  <div id="rs-info" class="hw-step-info"></div>
+</div>
+
+**反直觉发现**：
+
+| 策略 | 得分 | 问题 |
+|:-----|:-----|:-----|
+| 全程 xhigh | 53.9% | 超时太多，反而比 baseline 更差 |
+| 全程 high | 63.6% | 好很多，但规划阶段质量不够 |
+| **xhigh-high-xhigh（三明治）** | **66.5%** | 最优——关键决策深思，执行快速，验证严格 |
+
+```python
+class ReasoningSandwichMiddleware(AgentMiddleware):
+    """推理三明治：规划和验证用 xhigh，执行用 high。
+
+    核心洞察：最大化推理并不等于最优。
+    Terminal Bench 上全程 xhigh 得分 53.9%（超时太多），
+    全程 high 得分 63.6%。
+    三明治策略 xhigh-high-xhigh 得分 66.5%——
+    关键在于把推理预算花在刀刃上。
+    """
+
+    @modify_model_request
+    async def set_reasoning_budget(self, request, ctx):
+        phase = self._detect_phase(ctx)
+
+        if phase == "planning":
+            # 规划阶段：充分理解问题
+            # Terminal Bench 的任务可以非常复杂
+            request.reasoning_effort = "xhigh"
+
+        elif phase == "implementation":
+            # 执行阶段：不需要最大推理，节省时间和 token
+            request.reasoning_effort = "high"
+
+        elif phase == "verification":
+            # 验证阶段：在提交前捕获错误
+            request.reasoning_effort = "xhigh"
+
+        return request
+
+    def _detect_phase(self, ctx) -> str:
+        """基于对话历史推断当前阶段。"""
+        messages = ctx.messages
+        tool_calls = [m for m in messages if m.get("role") == "tool"]
+
+        if len(tool_calls) == 0:
+            return "planning"        # 还没调用任何工具
+
+        last_msgs = messages[-5:]
+        has_test_run = any("test" in str(m) for m in last_msgs)
+        has_verification = any("verify" in str(m) or "check" in str(m) for m in last_msgs)
+
+        if has_test_run or has_verification:
+            return "verification"    # 在跑测试或检查
+
+        return "implementation"      # 在写代码
+```
+
+**与自适应推理的对比**：Claude 和 Gemini 使用模型内部的"自适应推理"，由模型自己决定花多少计算。LangChain 的方案是**从 harness 外部控制**推理预算。在多模型架构中，这可以表现为规划用大模型、执行用小模型。
+
+### 4.4 PreCompletionChecklistMiddleware
+
+**解决的问题**：过早自我批准（失败模式 1）。
+
+这是 LangChain 所说的 **"Ralph Wiggum Loop"**——源自 Geoffrey Huntley 提出的概念：一个在 Agent 试图退出时强制它继续执行的钩子。
+
+```python
+class PreCompletionChecklistMiddleware(AgentMiddleware):
+    """在 Agent 宣布完成之前，强制执行验证检查清单。
+
+    名称来源：Ralph Wiggum Loop —— "perpetually confused,
+    always making mistakes, but never stopping."
+    核心：Agent 不能自己判断'做完了'，必须过检查清单。
+    """
+
+    @after_model
+    async def enforce_checklist(self, response, ctx):
+        if not self._agent_wants_to_finish(response):
+            return response  # 还在工作，不拦截
+
+        # Agent 想结束了——拦截并强制检查
+        checklist = [
+            "Did you run the ACTUAL tests (not just re-read your code)?",
+            "Did you verify against the ORIGINAL task spec (not your interpretation)?",
+            "Did you test edge cases, not just the happy path?",
+            "Did you check that file paths match the spec exactly?",
+            "Are there any debug prints or temporary code left?",
+        ]
+
+        # 注入检查清单，强制 Agent 继续
+        ctx.messages.append({
+            "role": "system",
+            "content": (
+                "COMPLETION BLOCKED. Before you can finish, verify:\n\n"
+                + "\n".join(f"- [ ] {item}" for item in checklist)
+                + "\n\nRun verification NOW. Do not just re-read your code."
+            )
+        })
+
+        # 返回 None 或修改后的 response，迫使 Agent 继续
+        return None  # Agent 被强制进入下一轮
+```
+
+**为什么有效**：模型对自己的第一个方案有偏向性（confirmation bias）。没有这个中间件，Agent 会写代码、扫一眼、觉得没问题、结束。检查清单**强制真正的验证步骤**——不是"看起来对不对"，而是"测试通不通过"。
+
+---
+
+## 五、系统提示工程
+
+LangChain 的系统提示被描述为"detailed and example-heavy, modeled on Claude Code's approach"。
+
+### Build-Verify 四步循环
+
+系统提示中强调的问题解决流程：
+
+```
+1. Plan   — 理解任务，分解子问题
+2. Build  — 实现方案，包括写测试
+3. Verify — 对照任务 spec 验证（不是重读代码！）
+4. Fix    — 修复验证中发现的问题
+```
+
+### Prompt 分层组装
+
+```
+最终 Prompt = 用户自定义提示（可选）
+            + BASE_AGENT_PROMPT（核心指令）
+            + 各中间件注入的指令
+```
+
+### 一个有趣的细节：Todo List 工具
+
+Claude Code 使用的 Todo list 工具本质上是一个 **no-op**——它不做任何实际功能性的事情。它纯粹是一个**上下文工程策略**——通过强制 Agent 将计划外化到文件中，让 Agent 保持方向感。LangChain 也借鉴了这个思路。
+
+---
+
+## 六、Trace-based 迭代改进
+
+LangChain 的 harness 优化方法论：
+
+```
+第 1 轮：跑 benchmark（52.8%）
+  → 收集 LangSmith traces（每个 Agent 动作都记录：延迟、token 数、成本）
+  → 用 "Trace Analyzer Skill" 自动分析失败模式
+  → 发现：过早自我批准 + Doom Loop 是最大问题
+
+第 2 轮：加入 PreCompletionChecklist + LoopDetection
+  → 跑 benchmark（提升到 ~58%）
+  → 分析新的 trace，发现环境发现错误
+
+第 3 轮：加入 LocalContext
+  → 跑 benchmark（提升到 ~61%）
+  → 发现推理预算分配不优
+
+第 4 轮：加入推理三明治
+  → 全程 high = 63.6%，三明治 = 66.5%
+  → Top 5 ✓
+```
+
+这个方法的精妙之处在于它**像 Boosting 一样聚焦于失败案例**。每一轮不是泛泛地"改进 prompt"，而是从 trace 中识别最高频的失败模式，然后针对性地添加一层中间件来修复。
+
+---
+
+## 七、OpenAI 的平行发现
+
+OpenAI 的 Harness 团队在独立的实验中得出了惊人相似的结论。
+
+### 100 万行零手写代码
+
+3-7 人的小团队，5 个月，让 Codex 生成：
+
+- ~1,000,000 行代码（应用逻辑、测试、CI 配置、文档、可观测性、工具）
+- ~1,500 个合并的 PR
+- 工程师平均 **3.5 PR/天**
+- 单次 Codex 运行可以连续工作 **长达 6 小时**（工程师睡觉时 Codex 还在干活）
+- 估算约为手动开发时间的 **1/10**
+
+### 核心原则的对应关系
+
+| LangChain 的发现 | OpenAI 的平行发现 |
+|:-----------------|:-----------------|
+| LocalContextMiddleware（预注入环境） | **AGENTS.md 作为目录**（~100 行，指向 docs/ 目录） |
+| LoopDetectionMiddleware（打断死循环） | **Custom linter 错误信息兼做修复指令** |
+| PreCompletionChecklist（强制验证） | **Ralph Wiggum Loop**（agent-to-agent review 循环） |
+| 推理三明治（计算分配） | **Boring Technology 原则**（用训练数据中常见的技术） |
+| Trace-based 迭代 | **深度优先问题解决**（Agent 卡住 = 环境缺能力） |
+
+### Linter 错误信息 = Agent 教学工具
+
+OpenAI 最精妙的创新：自定义 linter 不只检测违规，还**在错误信息中写入修复指令**——工具在工作的同时"教"Agent：
+
+```python
+# OpenAI 的做法：强制分层架构
+# Types -> Config -> Repo -> Service -> Runtime -> UI
+
+LAYER_ORDER = ["types", "config", "repo", "service", "runtime", "ui"]
+
+def check_import(importing_file: str, imported_module: str) -> str | None:
+    importer_layer = get_layer(importing_file)
+    imported_layer = get_layer(imported_module)
+
+    if LAYER_ORDER.index(imported_layer) < LAYER_ORDER.index(importer_layer):
+        return (
+            # 这条错误信息就是给 Agent 看的修复指令
+            f"ARCHITECTURE VIOLATION: {importing_file} ({importer_layer}) "
+            f"cannot import from {imported_module} ({imported_layer}).\n"
+            f"\n"
+            f"ALLOWED: Code can only depend forward: "
+            f"Types → Config → Repo → Service → Runtime → UI\n"
+            f"\n"
+            f"FIX OPTIONS:\n"
+            f"1. Move shared types to the 'types' layer\n"
+            f"2. Use a Provider interface for cross-cutting concerns\n"
+            f"3. See: docs/architecture/layering.md for examples\n"
+        )
+    return None
+```
+
+注意这条 linter 错误信息的设计：
+
+1. **说清了什么规则被违反**（架构分层）
+2. **列出了允许的方向**（只能正向依赖）
+3. **给出了具体修复选项**（移到 types 层 / 用 Provider / 看文档）
+4. **指向了更多信息**（docs/architecture/layering.md）
+
+Agent 读到这条错误，不需要查任何文档就知道怎么修。这就是 OpenAI 说的 **"机械化执行 > 文档约束"**。
+
+### AGENTS.md ≠ 百科全书
+
+OpenAI 最初尝试把所有信息塞进一个巨大的 AGENTS.md 文件——**失败了**。问题：
+
+- 挤占了任务上下文（代码和文档被 AGENTS.md 挤出 context window）
+- Agent 倾向于本地模式匹配而不是有意识地导航
+- 信息快速腐烂
+- 无法机械化验证
+
+正确做法：AGENTS.md 是**目录（Table of Contents）**，不是百科全书：
+
+```
+AGENTS.md（~100 行，始终注入 context）
+  ├── 指向 docs/design/         — 设计文档
+  ├── 指向 docs/architecture/   — 架构文档
+  ├── 指向 docs/quality/        — 质量评估
+  └── 指向 docs/plans/          — 执行计划
+
+具体知识存在 docs/ 目录下，按需加载。
+```
+
+**Codex 的 AGENTS.md 加载机制**：从 Git 根目录向下遍历到当前工作目录，每个目录最多加载一个 AGENTS.md（优先 `AGENTS.override.md`），子目录的文件覆盖父目录的指导。总大小上限 **32 KiB**。
+
+### 合并哲学：修正便宜，等待昂贵
+
+当 Agent 高速产出代码时，传统的合并门槛成为瓶颈。OpenAI 的做法：
+
+- 最小化阻塞性合并门槛
+- 短生命周期 PR
+- 测试不稳定就重跑，不阻塞
+- 原则：**"Corrections are cheap, waiting is expensive. Optimize for throughput."**
+
+---
+
+## 八、Anthropic 的平行发现
+
+Anthropic 在 [Effective Context Engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) 和 [Claude Code Best Practices](https://www.anthropic.com/engineering/claude-code-best-practices) 中给出了高度一致的实践。
+
+### CLAUDE.md 的最佳实践
+
+- Claude Code 的系统提示已经包含 **~50 条独立指令**——接近模型能可靠遵循的上限的 1/3
+- CLAUDE.md 应该**尽量短**（推荐 < 300 行，有些团队 < 60 行）
+- 任务特定指令放在单独的 markdown 文件里，不要塞进 CLAUDE.md
+- 用多个 CLAUDE.md：根目录放通用规则，子目录放特定规则
+
+### Writer/Reviewer 分离
+
+Anthropic 版的 Ralph Wiggum Loop：
+
+1. 一个 Claude session 写测试（明确禁止写实现）
+2. 提交测试
+3. **全新的** Claude session 写代码通过测试（明确禁止改测试）
+
+全新的 context window 消除了作者偏见——Reviewer 不知道 Writer 为什么这样写，只看代码本身。
+
+### Context Engineering 核心原则
+
+> **找到最小的高信号 token 集合，最大化期望输出的似然概率。**
+
+Anthropic 发现系统化的上下文管理在 benchmark 上可以带来**最高 54% 的提升**。这和 LangChain 的 52.8% → 66.5%（26% 相对提升）量级一致。
+
+### 40% 上下文拐点
+
+OpenAI 发现性能在上下文使用率超过 **~40%** 后开始显著衰减。Anthropic 的应对：
+
+- 工具响应截断到 25,000 tokens
+- 旧工具输出优先清理（最大的 token 消耗源）
+- 关键信息即时写入文件（不依赖对话历史）
+
+---
+
+## 九、三家公司的收敛
+
+五个独立团队——**OpenAI、Anthropic、LangChain、Geoffrey Huntley、HumanLayer**——在没有协调的情况下得出了相同的结论：
+
+<div class="hw-demo">
+  <div class="hw-demo-title">交互演示：行业收敛——三家公司的相同发现</div>
+  <span class="hw-demo-subtitle">点击每个主题查看三家公司的平行实践</span>
+  <div id="convergence-tabs" style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-top: 1rem;">
+    <button class="hw-btn hw-btn-primary" data-topic="constraint" style="font-size: 0.8rem;">约束 > 自由</button>
+    <button class="hw-btn hw-btn-secondary" data-topic="verify" style="font-size: 0.8rem;">验证 > 自述</button>
+    <button class="hw-btn hw-btn-secondary" data-topic="memory" style="font-size: 0.8rem;">外部记忆</button>
+    <button class="hw-btn hw-btn-secondary" data-topic="separation" style="font-size: 0.8rem;">写审分离</button>
+    <button class="hw-btn hw-btn-secondary" data-topic="iterate" style="font-size: 0.8rem;">迭代方法论</button>
+  </div>
+  <div id="convergence-info" class="hw-step-info"></div>
+</div>
+
+| 收敛发现 | LangChain | OpenAI | Anthropic |
+|:---------|:----------|:-------|:----------|
+| **约束提升性能** | Middleware 管道限制行为空间 | Linter + 分层架构 | CLAUDE.md < 300 行 |
+| **验证 > 自述** | PreCompletionChecklist | Ralph Wiggum Loop | "Outcome > Narration" |
+| **外部记忆** | Trace 数据库 | docs/ + exec-plan | progress.md + git |
+| **写审分离** | Trace Analyzer Skill | Agent-to-agent review | Writer/Reviewer 分离 |
+| **迭代方法论** | Boosting 式 trace 分析 | 深度优先问题解决 | 用 Agent 改进工具定义 |
+
+---
+
+## 十、实操手册：如何为你的 Agent 做 Harness Engineering
+
+### Step 1：建立基线
+
+```bash
+# 跑一轮 benchmark，收集 traces
+deepagents run --benchmark your-eval --trace langsmith
+```
+
+不需要复杂的 benchmark。10-20 个代表性任务 + 程序化测试就够了。关键是**可重复运行**和**可自动评分**。
+
+### Step 2：分析失败模式
+
+```python
+# LangChain 的方法：用 Agent 分析 Agent 的 trace
+from langsmith import Client
+
+client = Client()
+runs = client.list_runs(project_name="my-agent-eval", is_root=True)
+
+# 按失败原因分类
+failure_categories = {}
+for run in runs:
+    if run.status == "error" or not run.outputs.get("pass"):
+        category = classify_failure(run.trace)  # 人工或 LLM 分类
+        failure_categories.setdefault(category, []).append(run)
+
+# 找到最高频的失败模式
+for cat, runs in sorted(failure_categories.items(), key=lambda x: -len(x[1])):
+    print(f"{cat}: {len(runs)} failures")
+```
+
+### Step 3：针对性添加中间件
+
+```python
+# 每次只加一层，测量效果
+middlewares = [
+    LocalContextMiddleware(),   # 先解决环境发现问题
+]
+
+# 跑 benchmark → 看提升了多少 → 分析新的 top 失败模式
+# 然后加下一层
+
+middlewares.append(LoopDetectionMiddleware(max_edits=5))
+# 再跑 benchmark → 测量 → 分析...
+
+middlewares.append(ReasoningSandwichMiddleware())
+middlewares.append(PreCompletionChecklistMiddleware())
+```
+
+### Step 4：让 Harness 可拆卸
+
+```python
+class RippableMiddleware(AgentMiddleware):
+    """每个中间件都应该可以被单独移除，不影响其他部分。"""
+
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+
+    @before_model
+    async def process(self, ctx):
+        if not self.enabled:
+            return  # 完全跳过
+
+        # ... 实际逻辑
+```
+
+随着模型变强，有些今天需要的护栏未来可以关掉。中间件的模块化特性天然支持这一点——LangChain 称之为 **"rippable design"**。
+
+---
+
+## 十一、Cross-Model 观察
+
+LangChain 的一个重要发现：**不同模型需要不同的 harness。**
+
+| 模型 | 得分 | 说明 |
+|:-----|:-----|:-----|
+| GPT-5.2-Codex + 最终 harness | **66.5%** | 针对该模型优化的 harness |
+| Claude Opus 4.6 + 早期 harness | 59.6% | 有竞争力但 harness 未针对优化 |
+| Claude Sonnet 4.5 + Deep Agents | ~42.5% | 与 Claude Code 本身持平 |
+
+Claude Opus 4.6 得分低于 GPT-5.2 不是因为模型差，而是因为 **harness 没有针对 Opus 跑过同样的优化迭代**。如果对 Opus 做同样的 trace 分析 + 中间件迭代，预期得分会显著提升。
+
+这印证了核心论点：**Harness 是针对特定模型的调优产物。** 通用的"好 harness"不存在，只有针对特定模型 + 特定任务优化的 harness。
+
+---
+
+## 十二、未来方向
+
+LangChain 列出的研究方向：
+
+1. **多模型系统**——组合 Codex、Gemini、Claude 的各自优势
+2. **记忆原语**——让 Agent 从历史任务中持续学习
+3. **Agent 自我分析 trace**——Agent 自己识别和修复 harness 级别的失败模式
+4. **动态 harness 组装**——根据任务类型 JIT 加载对应的工具和上下文
+5. **编排数百个并行 Agent**——在共享代码库上协同工作
+
+<div class="hw-quote">
+Build harnesses to be "rippable." 随着模型越来越强，今天 harness 中的一部分会被模型本身吸收。模型会原生地变得更擅长规划、自我验证、长程一致性。但正如 prompt engineering 仍然有价值，harness engineering 也将持续重要。
+</div>
+
+---
+
+## 总结：一张表记住核心要点
+
+| 发现 | 数据 | 启示 |
+|:-----|:-----|:-----|
+| Harness-only 提升 | 52.8% → 66.5% | 模型没变，只改环境 |
+| 全程最大推理反而更差 | xhigh=53.9% < high=63.6% | 更多思考 ≠ 更好结果 |
+| 推理三明治是最优策略 | 66.5% > 63.6% | 把预算花在刀刃上 |
+| 最常见失败：过早自我批准 | — | Agent 的"vibes check"不可靠 |
+| 不同模型需要不同 harness | Opus 59.6% vs Codex 66.5% | Harness 是模型特异性的 |
+| 上下文 40% 拐点 | OpenAI 发现 | 更大窗口 ≠ 更好性能 |
+| 零手写代码 | ~100 万行 / 5 个月 | 工程师的工作 = 设计环境 |
+
+**Agent 不是难点——Harness 才是。**
+
+---
+
+## References
+
+- [LangChain: Improving Deep Agents with Harness Engineering](https://blog.langchain.com/improving-deep-agents-with-harness-engineering/)
+- [LangChain: The Anatomy of an Agent Harness](https://blog.langchain.com/the-anatomy-of-an-agent-harness/)
+- [LangChain: Evaluating DeepAgents CLI on Terminal Bench 2.0](https://blog.langchain.com/evaluating-deepagents-cli-on-terminal-bench-2-0/)
+- [LangChain: Agent Middleware](https://blog.langchain.com/agent-middleware/)
+- [OpenAI: Harness Engineering](https://openai.com/index/harness-engineering/)
+- [OpenAI: Unrolling the Codex Agent Loop](https://openai.com/index/unrolling-the-codex-agent-loop/)
+- [OpenAI: Unlocking the Codex Harness — App Server](https://openai.com/index/unlocking-the-codex-harness/)
+- [Anthropic: Effective Context Engineering for AI Agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [Anthropic: Claude Code Best Practices](https://www.anthropic.com/engineering/claude-code-best-practices)
+- [Anthropic: Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents)
+- [HumanLayer: Skill Issue — Harness Engineering for Coding Agents](https://www.humanlayer.dev/blog/skill-issue-harness-engineering-for-coding-agents)
+- [The Emerging Harness Engineering Playbook](https://www.ignorance.ai/p/the-emerging-harness-engineering)
+- [Martin Fowler: Harness Engineering](https://martinfowler.com/articles/exploring-gen-ai/harness-engineering.html)
+- [Terminal Bench 2.0 (ICLR 2026)](https://arxiv.org/abs/2601.11868)
+- [Deep Agents — GitHub (MIT License)](https://github.com/langchain-ai/deepagents)
+
+<script>{`
+(function() {
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+  function C() {
+    var d = isDark();
+    return {
+      text: d ? '#e2e8f0' : '#334155',
+      muted: d ? '#94a3b8' : '#64748b',
+      primary: d ? '#7dd3fc' : '#3b82f6',
+      pStrong: '#3b82f6',
+      pLight: d ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981', sLight: d ? '#064e3b' : '#d1fae5',
+      warning: '#f59e0b', wLight: d ? '#78350f' : '#fef3c7',
+      danger: '#ef4444', dLight: d ? '#7f1d1d' : '#fee2e2',
+      purple: '#8b5cf6', purpleLight: d ? '#4c1d95' : '#ede9fe',
+      border: d ? '#334155' : '#e2e8f0',
+      node: d ? '#1e293b' : '#ffffff',
+      nodeStroke: d ? '#475569' : '#cbd5e1',
+      cardBg: d ? '#1e293b' : '#f8fafc',
+    };
+  }
+  function onTheme(fn) {
+    new MutationObserver(fn).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // ============ 1. Score Comparison ============
+  function initScore() {
+    var svg = document.getElementById('score-svg');
+    var infoEl = document.getElementById('score-info');
+    if (!svg) return;
+
+    var configs = [
+      { label: 'Baseline', score: 52.8, color: '#94a3b8', desc: '<strong>Baseline（52.8%）</strong>：GPT-5.2-Codex + 最小 harness。Top 30 开外。这是起点——模型已经有能力，但缺少结构化的反馈和约束。' },
+      { label: '全程 xhigh', score: 53.9, color: '#ef4444', desc: '<strong>全程 xhigh 推理（53.9%）</strong>：每一步都用最大推理预算。<span style="color:#ef4444;">反而比 baseline 更差！</span>原因：Terminal Bench 有严格超时，xhigh 消耗 2x+ 时间/token，导致大量任务超时未完成。更多思考 ≠ 更好结果。' },
+      { label: '全程 high', score: 63.6, color: '#f59e0b', desc: '<strong>全程 high 推理（63.6%）</strong>：大幅提升。快速执行避免了超时，但规划阶段缺乏深度思考，某些复杂任务的方案质量不够。' },
+      { label: '推理三明治', score: 66.5, color: '#10b981', desc: '<strong>推理三明治 + 全部中间件（66.5%）</strong>：<span style="color:#10b981;">Top 5！</span>xhigh 规划 → high 执行 → xhigh 验证。加上 LocalContext、LoopDetection、PreCompletionChecklist 三层中间件。从 baseline 到这里，模型没有任何改变。' },
+    ];
+
+    var selected = -1;
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var barX = 180, barMaxW = 380, barH = 42, gap = 58, startY = 30;
+
+      configs.forEach(function(cfg, i) {
+        var y = startY + i * gap;
+        var w = barMaxW * cfg.score / 100;
+        var isSel = i === selected;
+
+        // Label
+        h += '<text x="' + (barX - 10) + '" y="' + (y + barH/2 + 4) + '" text-anchor="end" fill="' + (isSel ? cfg.color : c.text) + '" font-size="12" font-weight="' + (isSel ? '700' : '400') + '" style="cursor:pointer;" data-idx="' + i + '">' + cfg.label + '</text>';
+
+        // Bar
+        h += '<rect x="' + barX + '" y="' + y + '" width="' + w + '" height="' + barH + '" rx="6" fill="' + cfg.color + '" opacity="' + (isSel ? 0.8 : 0.5) + '" style="cursor:pointer;" data-idx="' + i + '"/>';
+
+        // Score
+        h += '<text x="' + (barX + w + 10) + '" y="' + (y + barH/2 + 5) + '" fill="' + cfg.color + '" font-size="14" font-weight="700" font-family="monospace">' + cfg.score + '%</text>';
+
+        // Delta from baseline
+        if (i > 0) {
+          var delta = (cfg.score - 52.8).toFixed(1);
+          var deltaColor = cfg.score > 52.8 ? c.success : c.danger;
+          var sign = cfg.score > 52.8 ? '+' : '';
+          h += '<text x="' + (barX + w + 60) + '" y="' + (y + barH/2 + 5) + '" fill="' + deltaColor + '" font-size="10" font-family="monospace">' + sign + delta + '</text>';
+        }
+      });
+
+      // Reference line at 52.8%
+      var refX = barX + barMaxW * 52.8 / 100;
+      h += '<line x1="' + refX + '" y1="' + (startY - 5) + '" x2="' + refX + '" y2="' + (startY + configs.length * gap - 15) + '" stroke="' + c.muted + '" stroke-width="1" stroke-dasharray="4,3"/>';
+      h += '<text x="' + refX + '" y="' + (startY + configs.length * gap) + '" text-anchor="middle" fill="' + c.muted + '" font-size="9">baseline</text>';
+
+      svg.innerHTML = h;
+
+      svg.querySelectorAll('[data-idx]').forEach(function(el) {
+        el.addEventListener('click', function() {
+          selected = parseInt(el.getAttribute('data-idx'));
+          draw();
+        });
+      });
+
+      if (selected >= 0) {
+        infoEl.innerHTML = configs[selected].desc;
+      } else {
+        infoEl.innerHTML = '点击任意配置查看详情。注意：全程 xhigh 推理反而比 baseline 更差——这是 harness engineering 最反直觉的发现之一。';
+      }
+    }
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 2. Failure Mode Explorer ============
+  function initFailures() {
+    var container = document.getElementById('failure-cards');
+    var infoEl = document.getElementById('failure-info');
+    if (!container) return;
+
+    var failures = [
+      { id: 1, icon: '✅', label: '过早自我批准', color: '#ef4444',
+        detail: '<strong>失败模式 1：过早自我批准</strong>——最常见的失败。<br><br><strong>Trace 中的表现</strong>：Agent 写完代码 → 执行 read_file 重读自己的代码 → 输出"looks good, all done" → 结束。全程没有运行任何测试。<br><br>LangChain："almost comically human — just vibes."<br><br><strong>修复</strong>：PreCompletionChecklistMiddleware 拦截 Agent 的"完成"信号，强制执行验证清单。' },
+      { id: 2, icon: '🔄', label: 'Doom Loop', color: '#f59e0b',
+        detail: '<strong>失败模式 2：Doom Loop</strong>——Trace 中可以看到对同一个文件做了 <strong>10+ 次细微修改</strong>，每次只改一两行。Agent 锁定在一个方向上，不会退后重新审视。<br><br><strong>根因</strong>：一旦 Agent 投入了多轮 token 在某个方案上，它的 context 中充满了这个方案的细节，形成了确认偏误。<br><br><strong>修复</strong>：LoopDetectionMiddleware 在同一文件被编辑 N 次后注入"退后重新思考"的系统消息。' },
+      { id: 3, icon: '🗺️', label: '环境发现错误', color: '#3b82f6',
+        detail: '<strong>失败模式 3：环境发现错误</strong>——Agent 花 3-5 轮工具调用去探索环境：ls、which python、cat package.json。每一步都有出错机会。<br><br><strong>Trace 中的表现</strong>：Agent 运行 "which python" → 得到 /usr/bin/python3.9 → 但项目需要 pyproject.toml 中指定的 3.11 → Agent 没注意到 → 后续代码用了 3.9 不支持的语法 → 失败。<br><br><strong>修复</strong>：LocalContextMiddleware 在 Agent 启动时预注入环境地图。' },
+      { id: 4, icon: '📉', label: 'Slop Buildup', color: '#8b5cf6',
+        detail: '<strong>失败模式 4：评估理解偏差（Slop Buildup）</strong>——Agent 不理解代码会被程序化测试评估。它写的代码在 happy path 上正确，但 edge case 全挂。小错误随时间累积。<br><br><strong>修复</strong>：系统提示中明确告知"你的代码会被程序化测试评估"，强调按 spec 的文件路径精确操作，压力测试 edge case。' },
+      { id: 5, icon: '⏱️', label: '时间管理失败', color: '#94a3b8',
+        detail: '<strong>失败模式 5：时间管理失败</strong>——Terminal Bench 有严格超时限制。Agent 不擅长估算时间，会在迭代中无限循环。<br><br><strong>Trace 中的表现</strong>：Agent 在 60 分钟限制内前 55 分钟都在迭代代码修改，只在最后 5 分钟才开始测试 → 发现问题 → 来不及修 → 超时。<br><br><strong>修复</strong>：注入时间预算警告，在时间快到时引导 Agent 从"迭代"切换到"验证并提交"。' },
+    ];
+
+    function draw() {
+      var c = C();
+      container.innerHTML = '';
+
+      failures.forEach(function(f) {
+        var card = document.createElement('button');
+        card.className = 'hw-btn hw-btn-secondary';
+        card.style.cssText = 'font-size:0.8rem;padding:0.4rem 0.8rem;';
+        card.innerHTML = f.icon + ' ' + f.label;
+        card.addEventListener('click', function() {
+          infoEl.innerHTML = f.detail;
+          container.querySelectorAll('button').forEach(function(b) { b.className = 'hw-btn hw-btn-secondary'; b.style.cssText = 'font-size:0.8rem;padding:0.4rem 0.8rem;'; });
+          card.className = 'hw-btn hw-btn-primary';
+          card.style.cssText = 'font-size:0.8rem;padding:0.4rem 0.8rem;';
+        });
+        container.appendChild(card);
+      });
+    }
+
+    draw();
+    onTheme(draw);
+    infoEl.innerHTML = '点击任意失败模式查看 trace 中的具体表现和修复方案。这些是 LangChain 通过 LangSmith trace 分析系统性识别出的 Top 5 失败模式。';
+  }
+
+  // ============ 3. Middleware Pipeline ============
+  function initMiddleware() {
+    var svg = document.getElementById('mw-svg');
+    var infoEl = document.getElementById('mw-info');
+    var prevBtn = document.getElementById('mw-prev');
+    var nextBtn = document.getElementById('mw-next');
+    var resetBtn = document.getElementById('mw-reset');
+    var counterEl = document.getElementById('mw-counter');
+    if (!svg) return;
+
+    var step = -1;
+    var layers = [
+      { label: 'Agent Request', y: 10, h: 30, color: '#94a3b8',
+        desc: 'Agent 收到用户任务。请求即将进入中间件管道——入站路径正序执行（从上到下）。' },
+      { label: 'LocalContextMiddleware', y: 50, h: 45, color: '#3b82f6',
+        desc: '<strong>LocalContextMiddleware（before_model）</strong><br>映射工作环境：目录结构、Python 版本、可用工具、项目配置文件。注入为系统消息，Agent 不需要花 token 探索。<br><br>Hook: <code>before_model</code>（正序第 1 个执行）' },
+      { label: 'LoopDetectionMiddleware', y: 105, h: 45, color: '#f59e0b',
+        desc: '<strong>LoopDetectionMiddleware（wrap_tool_call）</strong><br>跟踪每个文件的编辑次数。超过阈值后注入"退后重新思考"的系统消息。<br><br>Hook: <code>wrap_tool_call</code>（包裹每次工具调用）' },
+      { label: 'ReasoningSandwichMiddleware', y: 160, h: 45, color: '#8b5cf6',
+        desc: '<strong>ReasoningSandwichMiddleware（modify_model_request）</strong><br>根据当前阶段（规划/执行/验证）动态调整推理预算。规划和验证用 xhigh，执行用 high。<br><br>Hook: <code>modify_model_request</code>（临时修改请求参数）' },
+      { label: 'PreCompletionChecklistMiddleware', y: 215, h: 45, color: '#10b981',
+        desc: '<strong>PreCompletionChecklistMiddleware（after_model）</strong><br>拦截 Agent 的"完成"信号，强制执行验证清单。如果 Agent 没跑测试就想结束，直接阻止。<br><br>Hook: <code>after_model</code>（逆序执行——这个最后加入但第一个拦截 Agent 的输出）' },
+      { label: 'Agent Response', y: 270, h: 30, color: '#10b981',
+        desc: '所有中间件通过。Agent 的最终响应返回给用户。从 52.8% 到 66.5% 的提升，全部来自这四层中间件 + 推理三明治。' },
+    ];
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var lx = 100, lw = 500;
+
+      layers.forEach(function(layer, i) {
+        var isCurrent = i === step;
+        var isPast = i < step;
+        var opacity = isCurrent ? 1 : (isPast ? 0.7 : 0.3);
+        if (step < 0) opacity = 0.6;
+
+        h += '<rect x="' + lx + '" y="' + layer.y + '" width="' + lw + '" height="' + layer.h + '" rx="8" '
+          + 'fill="' + layer.color + '" opacity="' + (opacity * 0.15) + '" '
+          + 'stroke="' + layer.color + '" stroke-width="' + (isCurrent ? 2.5 : 1) + '"/>';
+
+        h += '<text x="' + (lx + lw/2) + '" y="' + (layer.y + layer.h/2 + 5) + '" text-anchor="middle" '
+          + 'fill="' + (isCurrent ? layer.color : c.text) + '" font-size="' + (i === 0 || i === 5 ? '11' : '12') + '" '
+          + 'font-weight="' + (isCurrent ? '700' : '500') + '">' + layer.label + '</text>';
+
+        // Arrow
+        if (i < layers.length - 1) {
+          var arrowY = layer.y + layer.h + 3;
+          h += '<text x="' + (lx + lw/2) + '" y="' + (arrowY + 9) + '" text-anchor="middle" fill="' + (isPast || isCurrent ? layer.color : c.muted) + '" font-size="12">↓</text>';
+        }
+
+        // Hook label
+        if (i >= 1 && i <= 4) {
+          var hooks = ['before_model', 'wrap_tool_call', 'modify_model_request', 'after_model'];
+          h += '<text x="' + (lx + lw + 10) + '" y="' + (layer.y + layer.h/2 + 4) + '" fill="' + c.muted + '" font-size="9" font-family="monospace">' + hooks[i-1] + '</text>';
+        }
+
+        // Pass indicator
+        if (isPast) {
+          h += '<text x="' + (lx - 10) + '" y="' + (layer.y + layer.h/2 + 5) + '" text-anchor="end" fill="' + c.success + '" font-size="14">✓</text>';
+        }
+        if (isCurrent) {
+          h += '<text x="' + (lx - 10) + '" y="' + (layer.y + layer.h/2 + 5) + '" text-anchor="end" fill="' + layer.color + '" font-size="14">→</text>';
+        }
+      });
+
+      svg.innerHTML = h;
+      counterEl.textContent = step >= 0 ? (step + 1) + ' / ' + layers.length : '';
+
+      if (step >= 0 && step < layers.length) {
+        infoEl.innerHTML = layers[step].desc;
+      } else {
+        infoEl.innerHTML = '点击"下一步"观察请求如何穿过每一层中间件。入站正序执行（上→下），出站逆序（下→上）。';
+      }
+
+      prevBtn.disabled = step <= -1;
+      nextBtn.disabled = step >= layers.length - 1;
+    }
+
+    nextBtn.addEventListener('click', function() { if (step < layers.length - 1) { step++; draw(); } });
+    prevBtn.addEventListener('click', function() { if (step > -1) { step--; draw(); } });
+    resetBtn.addEventListener('click', function() { step = -1; draw(); });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 4. Reasoning Sandwich ============
+  function initSandwich() {
+    var svg = document.getElementById('rs-svg');
+    var infoEl = document.getElementById('rs-info');
+    if (!svg) return;
+
+    var strategies = {
+      'all-xhigh': {
+        phases: [
+          { label: 'Plan', level: 'xhigh', w: 0.3 },
+          { label: 'Build', level: 'xhigh', w: 0.4 },
+          { label: 'Verify', level: 'xhigh', w: 0.3 },
+        ],
+        score: 53.9,
+        desc: '<strong>全程 xhigh（53.9%）</strong>：每一步都用最大推理预算。<span style="color:#ef4444;">反而比 baseline 更差。</span>原因：xhigh 消耗 2x+ 时间和 token。Terminal Bench 有严格超时，大量任务因为"想太久"而没来得及完成。教训：<strong>更多思考 ≠ 更好结果。</strong>'
+      },
+      'all-high': {
+        phases: [
+          { label: 'Plan', level: 'high', w: 0.3 },
+          { label: 'Build', level: 'high', w: 0.4 },
+          { label: 'Verify', level: 'high', w: 0.3 },
+        ],
+        score: 63.6,
+        desc: '<strong>全程 high（63.6%）</strong>：好得多。快速执行避免超时。但规划阶段缺乏深度分析——Terminal Bench 有些任务非常复杂，需要 xhigh 级别的推理才能正确理解问题。'
+      },
+      'sandwich': {
+        phases: [
+          { label: 'Plan', level: 'xhigh', w: 0.3 },
+          { label: 'Build', level: 'high', w: 0.4 },
+          { label: 'Verify', level: 'xhigh', w: 0.3 },
+        ],
+        score: 66.5,
+        desc: '<strong>推理三明治 xhigh-high-xhigh（66.5%）</strong>：<span style="color:#10b981;">最优策略。</span>规划阶段深度思考（理解复杂问题），执行阶段快速（避免超时），验证阶段再次深度思考（在提交前捕获错误）。高推理"三明治面包"夹着低推理"填料"。'
+      }
+    };
+
+    var current = 'sandwich';
+
+    var levelColors = {
+      'xhigh': '#8b5cf6',
+      'high': '#3b82f6',
+      'medium': '#f59e0b',
+      'low': '#94a3b8'
+    };
+
+    var levelHeights = { 'xhigh': 100, 'high': 65, 'medium': 40, 'low': 25 };
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var strategy = strategies[current];
+      var barX = 80, barMaxW = 500, barY = 30, maxH = 120;
+
+      // Draw phases
+      var x = barX;
+      strategy.phases.forEach(function(phase) {
+        var w = barMaxW * phase.w;
+        var phH = levelHeights[phase.level];
+        var y = barY + maxH - phH;
+        var col = levelColors[phase.level];
+
+        h += '<rect x="' + x + '" y="' + y + '" width="' + (w - 4) + '" height="' + phH + '" rx="6" fill="' + col + '" opacity="0.5"/>';
+        h += '<text x="' + (x + w/2 - 2) + '" y="' + (y + phH/2 - 5) + '" text-anchor="middle" fill="' + c.text + '" font-size="12" font-weight="600">' + phase.label + '</text>';
+        h += '<text x="' + (x + w/2 - 2) + '" y="' + (y + phH/2 + 12) + '" text-anchor="middle" fill="' + col + '" font-size="10" font-weight="700">' + phase.level + '</text>';
+
+        x += w;
+      });
+
+      // Baseline
+      h += '<line x1="' + barX + '" y1="' + (barY + maxH) + '" x2="' + (barX + barMaxW) + '" y2="' + (barY + maxH) + '" stroke="' + c.border + '" stroke-width="1"/>';
+
+      // Score
+      var scoreColor = strategy.score >= 66 ? '#10b981' : (strategy.score >= 60 ? '#f59e0b' : '#ef4444');
+      h += '<text x="' + (barX + barMaxW + 20) + '" y="' + (barY + maxH/2) + '" fill="' + scoreColor + '" font-size="24" font-weight="700" font-family="monospace">' + strategy.score + '%</text>';
+
+      // Y axis labels
+      h += '<text x="' + (barX - 10) + '" y="' + (barY + maxH - levelHeights.xhigh + 10) + '" text-anchor="end" fill="' + c.muted + '" font-size="9">xhigh</text>';
+      h += '<text x="' + (barX - 10) + '" y="' + (barY + maxH - levelHeights.high + 10) + '" text-anchor="end" fill="' + c.muted + '" font-size="9">high</text>';
+
+      // Cost indicator
+      var totalCost = strategy.phases.reduce(function(sum, p) {
+        return sum + p.w * (p.level === 'xhigh' ? 2.5 : 1);
+      }, 0);
+      h += '<text x="' + (barX + barMaxW/2) + '" y="' + (barY + maxH + 20) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">相对 token 成本: ' + totalCost.toFixed(1) + 'x</text>';
+
+      svg.innerHTML = h;
+      infoEl.innerHTML = strategy.desc;
+    }
+
+    // Button handlers
+    ['all-xhigh', 'all-high', 'sandwich'].forEach(function(id) {
+      var btn = document.getElementById('rs-' + id);
+      if (btn) btn.addEventListener('click', function() {
+        current = id;
+        document.querySelectorAll('#rs-all-xhigh,#rs-all-high,#rs-sandwich').forEach(function(b) { b.className = 'hw-btn hw-btn-secondary'; });
+        btn.className = 'hw-btn hw-btn-primary';
+        draw();
+      });
+    });
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 5. Industry Convergence ============
+  function initConvergence() {
+    var tabsEl = document.getElementById('convergence-tabs');
+    var infoEl = document.getElementById('convergence-info');
+    if (!tabsEl) return;
+
+    var topics = {
+      constraint: {
+        title: '约束提升性能',
+        content: '<strong>约束 > 自由：三家独立发现限制 Agent 的行为空间反而提升性能。</strong><br><br>'
+          + '<strong>LangChain</strong>：中间件管道限制 Agent 的行为——不能无限循环、不能跳过验证、推理预算受控。<br><br>'
+          + '<strong>OpenAI</strong>：分层架构（Types → Config → Repo → Service → Runtime → UI）+ 自定义 linter 强制执行。Agent 被约束在正确的依赖方向上。<br><br>'
+          + '<strong>Anthropic</strong>：CLAUDE.md < 300 行。System prompt 已有 ~50 条指令——接近模型可靠遵循上限的 1/3。更多规则不等于更好效果。<br><br>'
+          + '共同洞察：<em>"When an agent can generate anything, it wastes tokens exploring dead ends. Constraining the solution space makes agents more productive, not less."</em>'
+      },
+      verify: {
+        title: '验证 > 自述',
+        content: '<strong>验证环境状态，不信 Agent 的自述。</strong><br><br>'
+          + '<strong>LangChain</strong>：PreCompletionChecklistMiddleware 在 Agent 说"完成"时强制跑测试。Agent 的 "vibes check" 不可靠。<br><br>'
+          + '<strong>OpenAI</strong>：Ralph Wiggum Loop——Agent-to-agent review 循环。Agent 写完 → 自己 review → 请求其他 Codex 实例 review → 迭代直到所有 reviewer 满意。人类只在 2 轮后才介入。<br><br>'
+          + '<strong>Anthropic</strong>："Outcome beats narration" ——Claude 说"我完成了"没有工程价值。只有自动化验证（测试通过、lint clean）才算数。<br><br>'
+          + '共同洞察：<em>Agent 的 narration 不能作为验证依据。必须检查环境状态。</em>'
+      },
+      memory: {
+        title: '外部记忆',
+        content: '<strong>关键信息持久化到文件，不依赖对话历史。</strong><br><br>'
+          + '<strong>LangChain</strong>：LangSmith trace 数据库记录每个 Agent 动作。Trace Analyzer Skill 自动分析失败模式。<br><br>'
+          + '<strong>OpenAI</strong>：docs/ 目录 + exec-plan 文件。计划不存在于对话历史中，而是版本化文件。包括设计文档、架构文档、质量评估、执行计划。<br><br>'
+          + '<strong>Anthropic</strong>：progress.md 跨会话传递状态。Claude 打 Pokemon 靠 NOTES.md 跨 context reset 保持精确状态。关键信息即时写入文件。<br><br>'
+          + '共同洞察：<em>对话历史会被压缩或丢失。只有持久化到文件的信息才是可靠的。</em>'
+      },
+      separation: {
+        title: '写审分离',
+        content: '<strong>Writer 和 Reviewer 必须在不同的 context window 中。</strong><br><br>'
+          + '<strong>LangChain</strong>：Trace Analyzer Skill 是独立的分析 Agent，用全新 context 审视其他 Agent 的 trace。<br><br>'
+          + '<strong>OpenAI</strong>：Agent-to-agent review。Agent A 写代码 → Agent B（全新 context）review → 反馈 → Agent A 修改 → 循环。<br><br>'
+          + '<strong>Anthropic</strong>：Writer/Reviewer 分离模式。一个 session 写测试，全新 session 写实现。全新 context 消除作者偏见。<br><br>'
+          + '共同洞察：<em>同一个 context window 中，Agent 对自己的输出有确认偏误。分离 context 是打破偏误的唯一可靠方式。</em>'
+      },
+      iterate: {
+        title: '迭代方法论',
+        content: '<strong>系统化的、数据驱动的 harness 迭代。</strong><br><br>'
+          + '<strong>LangChain</strong>：类似 Boosting 的 trace 分析——每轮聚焦于上一轮的失败样本，针对性添加中间件。跑 benchmark → 分析 trace → 修改 harness → 重复。<br><br>'
+          + '<strong>OpenAI</strong>：深度优先问题解决——Agent 卡住时不要替它写代码，诊断缺少什么能力，让 Agent 自己编码这个能力。每个编码的能力都成为未来的基础设施。<br><br>'
+          + '<strong>Anthropic</strong>：用 Agent 自己来改进工具定义。把评估日志批量喂给 Claude Code，让它改进 MCP 工具的 description 和 schema。Anthropic 发现这比人工手写效果更好。<br><br>'
+          + '共同洞察：<em>Harness engineering 是迭代过程，不是一次性设计。正确的方法论是：测量 → 分析 → 修复 → 重复。</em>'
+      }
+    };
+
+    var currentTopic = 'constraint';
+
+    tabsEl.querySelectorAll('button').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        currentTopic = btn.getAttribute('data-topic');
+        tabsEl.querySelectorAll('button').forEach(function(b) { b.className = 'hw-btn hw-btn-secondary'; b.style.fontSize = '0.8rem'; });
+        btn.className = 'hw-btn hw-btn-primary';
+        btn.style.fontSize = '0.8rem';
+        infoEl.innerHTML = topics[currentTopic].content;
+      });
+    });
+
+    infoEl.innerHTML = topics[currentTopic].content;
+  }
+
+  // ============ Init ============
+  function init() {
+    initScore();
+    initFailures();
+    initMiddleware();
+    initSandwich();
+    initConvergence();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+`}</script>
