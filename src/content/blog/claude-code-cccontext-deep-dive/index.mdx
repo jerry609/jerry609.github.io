@@ -1,0 +1,1430 @@
+---
+title: 'CCContext 深度解析：Coding Agent 的运行内存与数据总线'
+description: '基于 learn-claude-code 开源项目，从消息存储、Token 账本、原子块压缩到 Re-fetch 兜底——拆解 Coding Agent 上下文管理的核心设计。'
+publishDate: '2026-03-17'
+tags: ['Claude Code', 'Agent', '源码分析', '上下文管理', 'Context']
+language: 'zh-CN'
+draft: false
+---
+
+<style>{`
+  .cc-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .cc-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .cc-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .cc-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .cc-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .cc-btn-primary:hover { opacity: 0.85; }
+  .cc-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .cc-btn-secondary:hover { opacity: 0.85; }
+  .cc-btn:disabled { opacity: 0.4; cursor: default; }
+  .cc-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .cc-code {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    color: hsl(var(--foreground));
+    margin: 1rem 0;
+  }
+  .cc-tag {
+    display: inline-block; padding: 0.15rem 0.5rem;
+    border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+  }
+  .cc-tag-blue { background: #dbeafe; color: #1e40af; }
+  .cc-tag-green { background: #d1fae5; color: #065f46; }
+  .cc-tag-red { background: #fee2e2; color: #991b1b; }
+  .cc-tag-yellow { background: #fef3c7; color: #92400e; }
+  .cc-tag-purple { background: #ede9fe; color: #5b21b6; }
+  .cc-highlight { color: hsl(var(--primary)); font-weight: 600; }
+  .cc-warn { color: #ef4444; font-weight: 600; }
+  .cc-ok { color: #10b981; font-weight: 600; }
+  .cc-tab-bar {
+    display: flex; gap: 0; margin-bottom: 0;
+    border-bottom: 2px solid hsl(var(--border));
+  }
+  .cc-tab {
+    padding: 0.5rem 1.2rem; cursor: pointer;
+    border: none; background: none;
+    font-size: 0.85rem;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+  .cc-tab:hover { color: hsl(var(--foreground)); }
+  .cc-tab-active {
+    color: hsl(var(--primary));
+    border-bottom-color: hsl(var(--primary));
+    font-weight: 600;
+  }
+  .cc-tab-content { display: none; padding: 1rem 0; }
+  .cc-tab-content-active { display: block; }
+  .cc-quote {
+    border-left: 3px solid hsl(var(--primary));
+    padding-left: 1rem;
+    margin: 1.5rem 0;
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+  }
+  @media (prefers-color-scheme: dark) {
+    .cc-tag-blue { background: #1e3a5f; color: #93c5fd; }
+    .cc-tag-green { background: #064e3b; color: #6ee7b7; }
+    .cc-tag-red { background: #7f1d1d; color: #fca5a5; }
+    .cc-tag-yellow { background: #78350f; color: #fcd34d; }
+    .cc-tag-purple { background: #4c1d95; color: #c4b5fd; }
+  }
+  :root.dark .cc-tag-blue { background: #1e3a5f; color: #93c5fd; }
+  :root.dark .cc-tag-green { background: #064e3b; color: #6ee7b7; }
+  :root.dark .cc-tag-red { background: #7f1d1d; color: #fca5a5; }
+  :root.dark .cc-tag-yellow { background: #78350f; color: #fcd34d; }
+  :root.dark .cc-tag-purple { background: #4c1d95; color: #c4b5fd; }
+`}</style>
+
+> **如果大模型是 Agent 的 CPU，那么 CCContext 就是它的 RAM 和数据总线。** 在 Coding Agent 的数据面（Data Plane）中，CCContext 是最核心的数据结构——它维护对话记录、监控 Token 消耗、在内存即将溢出时执行无感压缩，并屏蔽底层所有物理复杂性。
+>
+> **声明：** 本文基于开源项目 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 的**社区逆向分析与重新实现**，并非 Anthropic 官方 Claude Code 的真实源码。文中所有函数名、代码片段和架构描述均来自该社区项目对混淆代码的推测性还原，可能与 Claude Code 的实际实现存在差异。本文旨在学习 Agent 上下文管理的设计思想，不代表 Claude Code 的官方技术细节。
+
+---
+
+## 一、CCContext 的四大核心职责
+
+<div class="cc-demo">
+  <div class="cc-demo-title">交互演示：CCContext 的四层架构</div>
+  <span class="cc-demo-subtitle">点击每一层，查看具体的职责和源码实现</span>
+  <svg id="arch-svg" viewBox="0 0 700 320" style="width: 100%; max-height: 320px;"></svg>
+  <div id="arch-info" class="cc-step-info"></div>
+</div>
+
+CCContext 承担了四大核心职责，每一个都是 Agent 能够正常运行的必要条件：
+
+| 职责 | 类比 | 核心机制 |
+|:-----|:-----|:---------|
+| **消息存储** | RAM | 维护 `messages[]` 数组，记录 Agent 全生命周期 |
+| **Token 账本** | 内存计数器 | 实时追踪消耗，触发压缩阈值 |
+| **上下文压缩** | GC / 碎片整理 | 8 段式结构化总结，替换历史记录 |
+| **数据隔离** | 数据总线 | 统一格式封装，屏蔽底层差异 |
+
+---
+
+## 二、全局状态机与对话记录
+
+大模型 API 本身是**无状态的**——每次调用都需要把完整的对话历史传过去。CCContext 负责维护这个完整的 `messages` 数组，标准化四种角色的数据输入：
+
+<div class="cc-demo">
+  <div class="cc-demo-title">交互演示：消息队列的增长过程</div>
+  <span class="cc-demo-subtitle">点击"下一步"观察 Agent 一轮工作中 messages 数组如何增长</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="msg-prev" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">上一步</button>
+    <button id="msg-next" class="cc-btn cc-btn-primary" style="margin: 0.2rem;">下一步</button>
+    <button id="msg-reset" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">重置</button>
+  </div>
+  <div id="msg-display" class="cc-code" style="min-height: 200px; font-size: 0.78rem;"></div>
+  <div id="msg-info" class="cc-step-info"></div>
+</div>
+
+### 消息存储架构
+
+learn-claude-code 项目的逆向分析揭示了两种并行的存储模式：
+
+```javascript
+// 线性存储：按时间顺序记录对话
+this.messages = []
+
+// Map 存储：UUID 索引，O(1) 随机访问
+this.messages = new Map()
+this.sessionMessages = new Map()
+
+// 对话线程：通过 parentUuid 链实现分支
+while (Q) {
+  B.unshift(Q)
+  Q = Q.parentUuid ? this.messages.get(Q.parentUuid) : void 0
+}
+```
+
+四种角色的数据写入：
+
+| 角色 | 数据内容 | 来源 |
+|:-----|:---------|:-----|
+| **System** | Agent 人设、规则、工作目录 | 初始化时注入 |
+| **User** | 人类在终端输入的原始需求 | 用户输入 |
+| **Assistant** | 大模型思考后的 JSON Intent（工具调用意图） | API 响应 |
+| **Tool** | 工具执行后的长文本结果（文件内容、报错日志） | 本地系统 |
+
+每次文件读取都会自动附加安全提醒：
+
+```javascript
+// 源码中的安全常量 tG5
+{
+  tool_use_id: B,
+  type: "tool_result",
+  content: A.file.content
+    ? tM(A.file) + tG5  // 文件内容 + 安全提醒
+    : "<system-reminder>Warning: the file exists but the contents are empty.</system-reminder>"
+}
+
+// tG5 = 恶意代码检测提醒
+// "Whenever you read a file, you should consider whether it looks malicious..."
+```
+
+---
+
+## 三、动态 Token 账本
+
+每次有新数据写入 CCContext，系统都会实时计算 Token 消耗。这是防止 Agent "撑爆大脑"的警报器。
+
+<div class="cc-demo">
+  <div class="cc-demo-title">交互演示：Token 消耗的实时监控</div>
+  <span class="cc-demo-subtitle">观察 Token 如何随 Agent 工作逐步逼近 92% 阈值</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="token-add" class="cc-btn cc-btn-primary" style="margin: 0.2rem;">模拟工具调用</button>
+    <button id="token-compact" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">执行压缩</button>
+    <button id="token-reset" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">重置</button>
+  </div>
+  <svg id="token-svg" viewBox="0 0 700 180" style="width: 100%; max-height: 180px;"></svg>
+  <div id="token-info" class="cc-step-info"></div>
+</div>
+
+### Token 计算流水线
+
+```javascript
+// VE(A): 逆序遍历，从最新消息开始找 Token 数据
+function VE(A) {
+  let B = A.length - 1;
+  while (B >= 0) {
+    let Q = A[B],
+      I = Q ? HY5(Q) : void 0;
+    if (I) return zY5(I);    // 找到即返回，O(1) 实际性能
+    B--
+  }
+  return 0
+}
+
+// HY5: 过滤合成消息，只取真实 Assistant 响应的 usage
+function HY5(A) {
+  if (A?.type === "assistant"
+      && "usage" in A.message
+      && A.message.model !== "<synthetic>")
+    return A.message.usage;
+}
+
+// zY5: 汇总所有类型的 Token（包括缓存命中/创建）
+function zY5(A) {
+  return A.input_tokens
+    + (A.cache_creation_input_tokens ?? 0)
+    + (A.cache_read_input_tokens ?? 0)
+    + A.output_tokens
+}
+```
+
+### 多级阈值预警
+
+```javascript
+const h11 = 0.92;  // 自动压缩触发阈值
+
+function m11(A, B) {
+  let Q = zU2() * B,               // 有效上下文窗口
+    I = g11() ? Q : zU2(),          // 是否启用自动压缩
+    G = Math.max(0, Math.round((I - A) / I * 100)),  // 剩余百分比
+    Z = I * _W5,                    // 第一级警告线
+    D = I * jW5,                    // 第二级警告线
+    Y = A >= Z,                     // 是否触发第一级
+    W = A >= D,                     // 是否触发第二级
+    J = g11() && A >= Q;            // 是否触发自动压缩
+  return { percentLeft: G, /* ... */ }
+}
+```
+
+用户看到的提示信息：
+- **正常**：`Context left until auto-compact: 45%`
+- **警告**：`Context low · Run /compact to compact & continue`
+- **自动触发**：达到 92%，静默启动压缩
+
+---
+
+## 四、核心机制：无感上下文压缩
+
+这是 CCContext 最精妙的设计——相当于 Agent 的"垃圾回收"（GC）。
+
+### 为什么不能随便删消息？
+
+<div class="cc-demo">
+  <div class="cc-demo-title">交互演示：为什么删消息会导致 API 崩溃</div>
+  <span class="cc-demo-subtitle">点击按钮观察：随机删除 vs 原子块安全切片</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="frag-random" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">随机删除（崩溃）</button>
+    <button id="frag-atomic" class="cc-btn cc-btn-primary" style="margin: 0.2rem;">原子块切片（安全）</button>
+    <button id="frag-reset" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">重置</button>
+  </div>
+  <div id="frag-display" class="cc-code" style="min-height: 180px; font-size: 0.78rem;"></div>
+  <div id="frag-info" class="cc-step-info"></div>
+</div>
+
+在 Anthropic API 中，消息格式校验**极其严格**：
+
+- `tool_use`（Assistant 发出的工具调用意图）必须紧跟对应的 `tool_result`
+- 如果只删了 `tool_use` 保留了 `tool_result`，或者反过来——**API 直接返回 400 Bad Request**
+
+这就是为什么 CCContext 不能像 Top-K 那样按 ID 随便删消息，而是必须基于**时间轴的块级切片**。
+
+### 三段式压缩流程
+
+<div class="cc-demo">
+  <div class="cc-demo-title">交互演示：上下文压缩的完整过程</div>
+  <span class="cc-demo-subtitle">点击"下一步"逐步观察压缩的三个阶段</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="compact-prev" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">上一步</button>
+    <button id="compact-next" class="cc-btn cc-btn-primary" style="margin: 0.2rem;">下一步</button>
+    <button id="compact-reset" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">重置</button>
+  </div>
+  <svg id="compact-svg" viewBox="0 0 700 300" style="width: 100%; max-height: 300px;"></svg>
+  <div id="compact-info" class="cc-step-info"></div>
+</div>
+
+**第一步：原子化分组（Atomic Blocks）**
+
+压缩器扫描 `messages[]` 时，不把每条消息当独立单位，而是打包成**不可分割的原子块**：
+
+```
+原子块 A: [Assistant: "我要读取 auth.py"] + [Tool: "文件内容..."]
+原子块 B: [User: "帮我修这个 bug"] + [Assistant: "分析如下..."]
+原子块 C: [Assistant: "调用 search_files"] + [Tool: "3 个匹配结果"]
+```
+
+**第二步：按时间轴安全切片（Safe Slicing）**
+
+```
+绝对保留 ← [System 设定]
+           [原子块 1] ← 早期历史
+           [原子块 2] ← 早期历史     ← 这些被选中压缩
+           [原子块 3] ← 中期工作
+           ...
+           [原子块 N-1] ← 最近工作
+绝对保留 ← [原子块 N]   ← 当前对话
+```
+
+**第三步：同态替换（Homomorphic Replacement）**
+
+抽离出来的原子块，交给压缩模型（`J7()`）执行 8 段式结构化总结，然后用总结文本替换原位置。
+
+### 压缩核心代码（社区逆向还原）
+
+```javascript
+// wU2: 压缩调度器——检查是否需要压缩
+async function wU2(A, B) {
+  if (!await yW5(A)) return { messages: A, wasCompacted: false };
+  try {
+    let { messagesAfterCompacting: I } = await qH1(A, B, true, undefined);
+    return { messages: I, wasCompacted: true }
+  } catch (I) {
+    return { messages: A, wasCompacted: false }  // 压缩失败不崩溃
+  }
+}
+
+// qH1: 压缩执行器——核心逻辑
+async function qH1(A, B, Q, I) {
+  let Y = AU2(I);                    // 生成 8 段式压缩提示词
+  let W = K2({ content: Y });
+
+  // 调用压缩专用模型（通常是更便宜的小模型）
+  let J = wu(
+    JW([...A, W]),
+    ["You are a helpful AI assistant tasked with summarizing conversations."],
+    0, [OB],
+    B.abortController.signal,
+    { model: J7() }                  // 压缩专用模型
+  );
+
+  // 流式处理压缩响应...
+  // (省略流式处理细节)
+
+  // 恢复最近读取的文件状态
+  let N = { ...B.readFileState };
+  let q = await TW5(N, B, qW5);     // TW5: 文件状态恢复
+
+  // 返回压缩后的消息数组
+  return {
+    summaryMessage: K,
+    messagesAfterCompacting: [
+      K2({ content: BU2(E, Q), isCompactSummary: true }),
+      ...q                            // 恢复的文件状态
+    ]
+  };
+}
+```
+
+### AU2: 8 段式压缩提示词
+
+这是 CCContext 记忆管理的核心 Prompt，决定了压缩后保留哪些信息：
+
+<div class="cc-demo">
+  <div class="cc-demo-title">AU2 压缩提示词的 8 个段落</div>
+  <span class="cc-demo-subtitle">点击每个段落查看具体内容和设计意图</span>
+  <div class="cc-tab-bar" id="au2-tabs">
+    <button class="cc-tab cc-tab-active" data-tab="s1">请求意图</button>
+    <button class="cc-tab" data-tab="s2">技术概念</button>
+    <button class="cc-tab" data-tab="s3">文件代码</button>
+    <button class="cc-tab" data-tab="s4">错误修复</button>
+  </div>
+  <div id="au2-tab-s1" class="cc-tab-content cc-tab-content-active"></div>
+  <div id="au2-tab-s2" class="cc-tab-content"></div>
+  <div id="au2-tab-s3" class="cc-tab-content"></div>
+  <div id="au2-tab-s4" class="cc-tab-content"></div>
+  <div style="margin-top: 0.5rem;">
+    <div class="cc-tab-bar" id="au2-tabs2">
+      <button class="cc-tab cc-tab-active" data-tab="s5">问题解决</button>
+      <button class="cc-tab" data-tab="s6">用户消息</button>
+      <button class="cc-tab" data-tab="s7">待处理</button>
+      <button class="cc-tab" data-tab="s8">当前工作</button>
+    </div>
+    <div id="au2-tab-s5" class="cc-tab-content cc-tab-content-active"></div>
+    <div id="au2-tab-s6" class="cc-tab-content"></div>
+    <div id="au2-tab-s7" class="cc-tab-content"></div>
+    <div id="au2-tab-s8" class="cc-tab-content"></div>
+  </div>
+</div>
+
+AU2 的完整提示词：
+
+```
+Your task is to create a detailed summary of the conversation so far,
+paying close attention to the user's explicit requests and your previous actions.
+
+This summary should be thorough in capturing technical details, code patterns,
+and architectural decisions that would be essential for continuing development
+work without losing context.
+
+Your summary should include the following sections:
+
+1. Primary Request and Intent
+2. Key Technical Concepts
+3. Files and Code Sections
+4. Errors and fixes
+5. Problem Solving
+6. All user messages
+7. Pending Tasks
+8. Current Work
+```
+
+---
+
+## 五、压缩后的信息遗漏与三大兜底
+
+压缩本质上是**有损压缩（Lossy Compression）**。如果被卸载的记录里有 50 行报错堆栈或某个具体行号，经过 LLM 总结后这些细节就消失了。
+
+但 Claude Code 敢这么做，因为有**三大兜底机制**：
+
+<div class="cc-demo">
+  <div class="cc-demo-title">交互演示：Re-fetch 机制——Agent 如何从"失忆"中恢复</div>
+  <span class="cc-demo-subtitle">点击"下一步"观察：压缩丢失细节后，Agent 如何通过工具调用自我恢复</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="refetch-prev" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">上一步</button>
+    <button id="refetch-next" class="cc-btn cc-btn-primary" style="margin: 0.2rem;">下一步</button>
+    <button id="refetch-reset" class="cc-btn cc-btn-secondary" style="margin: 0.2rem;">重置</button>
+  </div>
+  <div id="refetch-display" class="cc-code" style="min-height: 180px; font-size: 0.78rem;"></div>
+  <div id="refetch-info" class="cc-step-info"></div>
+</div>
+
+### 兜底 1：物理世界就是最好的记忆体
+
+这是 Agent 架构与普通 ChatBot 最大的区别。**真正的长期记忆不是 Context，而是本地文件系统。**
+
+Summary 的作用不是为了"背诵代码"，而是为了**建立索引**：
+
+| 阶段 | Context 内容 | 说明 |
+|:-----|:-------------|:-----|
+| 压缩前 | `auth.py` 的 1000 行完整代码 | 占用大量 Token |
+| 压缩后 | "我查阅了 `auth.py`，了解了登录逻辑" | 只保留了索引 |
+| 被问到 | 用户问 "auth.py 第 50 行是什么？" | Context 里找不到 |
+| 恢复 | Agent 再次调用 `read_file("auth.py")` | 重新拉取，一次小成本的 Tool Call |
+
+代价只是多花一次 Tool Call 的时间，换来的是系统永不崩溃。
+
+### 兜底 2：结构化的总结 Prompt
+
+AU2 不是简单的"请总结这段对话"，而是强制提取**8 个维度**的结构化信息，相当于一份**交接文档**：
+
+- 过滤废话（大段 JSON 返回值、无用的 `ls` 输出）
+- 保留骨架（文件路径、已确认的结论、待办事项）
+
+### 兜底 3：滑动窗口与工作区保护
+
+压缩机制**绝对不会触碰"最近的 N 轮"**。Agent 永远保有最清晰的短期记忆。只有当某项工作已经翻篇，变成"历史包袱"时，才会被塞进压缩区。
+
+```javascript
+// TW5: 压缩后恢复最近读取的文件状态
+let q = await TW5(N, B, qW5);
+// PW5: 恢复 Agent 身份状态
+let O = PW5(B.agentId);
+if (O) q.push(O);
+```
+
+---
+
+## 六、数据隔离层
+
+CCContext 作为缓冲池，将底层的"物理真实"与上层的"逻辑意图"隔离开来。
+
+无论数据来自文件读取、网页抓取还是 Bash 输出，都被封装成统一格式：
+
+```javascript
+// 工具结果的统一封装
+{
+  role: "tool",
+  tool_use_id: "toolu_01abc...",
+  content: "... 工具输出内容 ..."
+}
+```
+
+控制面（大模型）不需要关心数据从哪来，只需要像翻阅一本结构化的日志本一样，从 CCContext 读取当前状态。
+
+---
+
+## 七、完整架构总览
+
+<div class="cc-demo">
+  <div class="cc-demo-title">CCContext 完整数据流</div>
+  <span class="cc-demo-subtitle">点击不同阶段查看详细说明</span>
+  <svg id="flow-svg" viewBox="0 0 700 260" style="width: 100%; max-height: 260px;"></svg>
+  <div id="flow-info" class="cc-step-info"></div>
+</div>
+
+### 关键函数速查表（社区逆向推测）
+
+以下映射来自 learn-claude-code 社区对混淆代码的推测性还原，**并非官方确认**：
+
+| 混淆名 | 社区推测语义名 | 推测职责 | 社区验证级别 |
+|:-------|:-------|:-----|:---------|
+| `VE` | `calculateTokenUsage` | Token 使用量计算器 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `HY5` | `extractAssistantUsage` | Assistant 消息 usage 提取 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `zY5` | `sumAllTokenTypes` | 汇总所有 Token 类型 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `yW5` | `checkCompactionEligibility` | 压缩资格检查 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `wU2` | `compactionOrchestrator` | 压缩调度器 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `qH1` | `performCompaction` | 压缩执行器 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `AU2` | `generateCompressionPrompt` | 8 段式压缩提示词生成 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `TW5` | `restoreRecentFiles` | 压缩后文件状态恢复 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `BU2` | `formatSummaryMessage` | 总结消息格式化 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `m11` | `calculateContextThresholds` | 上下文百分比和警告级别 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `h11` | `AUTO_COMPACT_THRESHOLD` | 自动压缩阈值 = 0.92 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+| `J7` | `getCompressionModel` | 获取压缩专用模型 | <span class="cc-tag cc-tag-blue">B 级：基于模式推断</span> |
+| `nO` | `agentMainLoop` | Agent 主循环 | <span class="cc-tag cc-tag-green">A 级：代码中直接发现</span> |
+
+---
+
+## 八、设计本质
+
+CCContext 不是一个简单的 `Array`。它是一个**带自净能力的智能数据总线**：
+
+<div class="cc-quote">
+  用"偶尔需要重新查阅文件（Re-fetch）的时间成本"，换取"无限轮次对话且 Token 永远不会爆炸的系统稳定性"。
+</div>
+
+这是目前让 AI Agent 能够在大型复杂项目中真正干活（而不是聊两句就报错）的最佳工程妥协。
+
+核心设计决策总结：
+
+1. **有损压缩 + Re-fetch 兜底**：接受信息损失，依赖文件系统作为持久记忆
+2. **原子块保证格式安全**：永远不会产生 API 碎片
+3. **8 段式结构化总结**：不是随便总结，而是生成交接文档
+4. **92% 阈值自动触发**：用户无感知，Agent 满血复活
+5. **TW5 文件状态恢复**：压缩后立即恢复最近工作的文件上下文
+
+> **再次声明：** 本文所有代码和架构分析均来自开源社区项目 [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 的逆向推测，**并非 Anthropic 官方 Claude Code 的真实源码**。混淆函数名（如 AU2、qH1、VE 等）和语义名映射均为社区的推测性还原，实际实现可能不同。本文价值在于学习 Agent 上下文管理的设计范式，而非还原 Claude Code 的具体实现。
+
+<script>{`
+(function() {
+  'use strict';
+
+  // ============ Theme Helpers ============
+  function C() {
+    var d = document.documentElement;
+    var isDark = d.classList.contains('dark') || d.getAttribute('data-theme') === 'dark'
+      || (!d.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    return {
+      bg: isDark ? '#1a1a2e' : '#ffffff',
+      card: isDark ? '#16213e' : '#f8fafc',
+      text: isDark ? '#e2e8f0' : '#1e293b',
+      muted: isDark ? '#94a3b8' : '#64748b',
+      border: isDark ? '#334155' : '#e2e8f0',
+      primary: isDark ? '#818cf8' : '#6366f1',
+      green: isDark ? '#34d399' : '#10b981',
+      red: isDark ? '#f87171' : '#ef4444',
+      yellow: isDark ? '#fbbf24' : '#f59e0b',
+      blue: isDark ? '#60a5fa' : '#3b82f6',
+      purple: isDark ? '#a78bfa' : '#8b5cf6'
+    };
+  }
+
+  function onTheme(fn) {
+    var ob = new MutationObserver(fn);
+    ob.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', fn);
+  }
+
+  // ============ 1. Architecture Layer Demo ============
+  function initArch() {
+    var svg = document.getElementById('arch-svg');
+    var infoEl = document.getElementById('arch-info');
+    if (!svg) return;
+
+    var layers = [
+      { id: 'msg', label: 'Messages Storage', y: 20, h: 55, color: '#3b82f6', icon: '[ ]',
+        desc: '<strong>消息存储层</strong>（社区推测）：维护完整的 messages 数组，标准化 System / User / Assistant / Tool 四种角色。采用 Array + Map 双存储模式——Array 保持时间顺序，Map 提供 O(1) 的 UUID 随机访问。通过 parentUuid 链支持对话分支。' },
+      { id: 'token', label: 'Token Ledger', y: 90, h: 55, color: '#10b981', icon: '#',
+        desc: '<strong>Token 账本层</strong>（社区推测）：VE() 逆序遍历找最新 usage → HY5() 过滤合成消息 → zY5() 汇总所有 Token 类型（含缓存命中）。实时监控消耗量，92% 触发自动压缩，多级阈值 (_W5, jW5) 提供渐进式警告。' },
+      { id: 'compact', label: 'Context Compaction', y: 160, h: 55, color: '#f59e0b', icon: 'GC',
+        desc: '<strong>上下文压缩层</strong>（社区推测）：wU2() 调度 → qH1() 执行 → AU2() 生成 8 段式压缩提示词。核心机制：原子块分组（保证 tool_use/tool_result 闭环不被破坏）→ 时间轴安全切片 → LLM 总结替换。TW5() 在压缩后恢复最近文件状态。' },
+      { id: 'iso', label: 'Data Isolation', y: 230, h: 55, color: '#8b5cf6', icon: '||',
+        desc: '<strong>数据隔离层</strong>（社区推测）：无论数据来自文件读取、Bash 输出还是网页抓取，统一封装为 {role: "tool", content: "..."} 格式。控制面不关心数据的物理来源，只从 CCContext 读取结构化状态。每次文件注入自动附加 tG5 安全提醒。' }
+    ];
+
+    var selected = -1;
+
+    function draw() {
+      var c = C();
+      var h = '';
+
+      layers.forEach(function(l, i) {
+        var isSel = i === selected;
+        var opacity = isSel ? 0.25 : 0.08;
+        var sw = isSel ? 2.5 : 1;
+
+        h += '<rect x="60" y="' + l.y + '" width="580" height="' + l.h + '" rx="10" fill="' + l.color + '" opacity="' + opacity + '" stroke="' + l.color + '" stroke-width="' + sw + '" style="cursor:pointer;" data-idx="' + i + '"/>';
+        h += '<text x="90" y="' + (l.y + 23) + '" fill="' + (isSel ? l.color : c.muted) + '" font-size="11" font-family="monospace">' + l.icon + '</text>';
+        h += '<text x="130" y="' + (l.y + 24) + '" fill="' + (isSel ? l.color : c.text) + '" font-size="14" font-weight="' + (isSel ? '700' : '500') + '">' + l.label + '</text>';
+
+        var subtext = ['messages[] + Map<UUID>', 'VE() → HY5() → zY5() → 92%', 'wU2() → qH1() → AU2() → TW5()', 'tool_result → {role, content}'];
+        h += '<text x="130" y="' + (l.y + 43) + '" fill="' + c.muted + '" font-size="11" font-family="monospace">' + subtext[i] + '</text>';
+      });
+
+      // Arrows between layers
+      for (var i = 0; i < layers.length - 1; i++) {
+        var y1 = layers[i].y + layers[i].h;
+        var y2 = layers[i+1].y;
+        var my = (y1 + y2) / 2;
+        h += '<line x1="350" y1="' + y1 + '" x2="350" y2="' + y2 + '" stroke="' + c.border + '" stroke-width="1" stroke-dasharray="4,3"/>';
+        h += '<polygon points="346,' + (y2-4) + ' 354,' + (y2-4) + ' 350,' + y2 + '" fill="' + c.muted + '"/>';
+      }
+
+      // Side labels
+      h += '<text x="30" y="170" fill="' + c.muted + '" font-size="10" text-anchor="middle" transform="rotate(-90, 30, 170)">CCContext</text>';
+
+      svg.innerHTML = h;
+
+      svg.querySelectorAll('rect[data-idx]').forEach(function(rect) {
+        rect.addEventListener('click', function() {
+          selected = parseInt(rect.getAttribute('data-idx'));
+          draw();
+        });
+      });
+
+      if (selected >= 0) {
+        infoEl.innerHTML = layers[selected].desc;
+      } else {
+        infoEl.innerHTML = '点击任意一层查看详细职责和对应的源码函数。CCContext 的四层架构从上到下依次是：消息存储 → Token 账本 → 上下文压缩 → 数据隔离。';
+      }
+    }
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 2. Message Queue Growth Demo ============
+  function initMsg() {
+    var display = document.getElementById('msg-display');
+    var infoEl = document.getElementById('msg-info');
+    var nextBtn = document.getElementById('msg-next');
+    var prevBtn = document.getElementById('msg-prev');
+    var resetBtn = document.getElementById('msg-reset');
+    if (!display) return;
+
+    var steps = [
+      { msg: '{ role: "system", content: "You are Claude Code..." }', role: 'System', color: '#8b5cf6',
+        info: '<strong>Step 0</strong>：System 设定注入。包含 Agent 人设、工作目录、安全规则等。这条消息永远位于数组索引 0，<strong>压缩时绝对不会被触碰</strong>。' },
+      { msg: '{ role: "user", content: "帮我修复 auth.py 的登录 bug" }', role: 'User', color: '#3b82f6',
+        info: '<strong>Step 1</strong>：用户输入。人类在终端键入的原始需求，原封不动地存入 messages 数组。' },
+      { msg: '{ role: "assistant", content: [{\n    type: "tool_use",\n    name: "read_file",\n    input: { path: "auth.py" }\n  }] }', role: 'Assistant', color: '#10b981',
+        info: '<strong>Step 2</strong>：Assistant 返回工具调用意图。大模型"思考"后决定先读取文件。注意这是一个 tool_use block，它和下一条 tool_result <strong>构成不可分割的原子块</strong>。' },
+      { msg: '{ role: "tool", tool_use_id: "toolu_01abc",\n  content: "def login(user, pwd):\\n    ...\\n    # 1000 行代码" }', role: 'Tool', color: '#f59e0b',
+        info: '<strong>Step 3</strong>：工具返回结果。文件内容被注入 messages 数组，同时附带 tG5 安全提醒（恶意代码检测）。这条消息往往很长——1000 行代码 = 大量 Token。' },
+      { msg: '{ role: "assistant", content: "发现 line 42 的\n  缩进错误，正在修复..." }', role: 'Assistant', color: '#10b981',
+        info: '<strong>Step 4</strong>：大模型分析文件后给出结论。此时 messages 数组已有 5 条记录，Token 开始累积。随着后续的工具调用和文件读取，Token 会快速逼近 92% 阈值。' }
+    ];
+
+    var step = -1;
+    var accumulated = [];
+
+    function draw() {
+      var c = C();
+      var lines = ['messages = ['];
+      for (var i = 0; i < accumulated.length; i++) {
+        var s = accumulated[i];
+        var indent = '  ';
+        var msgLines = s.msg.split('\\n');
+        for (var j = 0; j < msgLines.length; j++) {
+          lines.push(indent + msgLines[j]);
+        }
+        if (i < accumulated.length - 1) lines[lines.length - 1] += ',';
+      }
+      lines.push(']');
+      lines.push('');
+      lines.push('// Token 使用: ~' + (accumulated.length * 850) + ' / 200,000 (' + Math.round(accumulated.length * 850 / 2000) + '%)');
+
+      display.textContent = lines.join('\\n');
+
+      if (step >= 0 && step < steps.length) {
+        infoEl.innerHTML = steps[step].info;
+      } else if (step >= steps.length) {
+        infoEl.innerHTML = '<strong>循环继续</strong>：Agent Loop 会不断重复 User → Assistant → Tool → Assistant 的循环。每一轮都向 messages 数组追加新条目，Token 持续增长。当 Token 达到 92%，wU2() 自动触发压缩。';
+      } else {
+        infoEl.innerHTML = '这是一个空的 messages 数组。点击"下一步"观察 Agent 一轮工作中消息如何逐条追加。';
+      }
+
+      prevBtn.disabled = step <= -1;
+      nextBtn.disabled = step >= steps.length;
+    }
+
+    nextBtn.addEventListener('click', function() {
+      if (step < steps.length) {
+        step++;
+        if (step < steps.length) accumulated.push(steps[step]);
+        draw();
+      }
+    });
+    prevBtn.addEventListener('click', function() {
+      if (step > -1) {
+        if (step < steps.length) accumulated.pop();
+        step--;
+        draw();
+      }
+    });
+    resetBtn.addEventListener('click', function() { step = -1; accumulated = []; draw(); });
+    draw();
+  }
+
+  // ============ 3. Token Meter Demo ============
+  function initToken() {
+    var svg = document.getElementById('token-svg');
+    var infoEl = document.getElementById('token-info');
+    var addBtn = document.getElementById('token-add');
+    var compactBtn = document.getElementById('token-compact');
+    var resetBtn = document.getElementById('token-reset');
+    if (!svg) return;
+
+    var usage = 0;
+    var maxTokens = 200000;
+    var history = [];
+
+    function draw() {
+      var c = C();
+      var pct = usage / maxTokens;
+      var barW = 560;
+      var barH = 30;
+      var barX = 70;
+      var barY = 40;
+
+      var h = '';
+
+      // Label
+      h += '<text x="' + barX + '" y="25" fill="' + c.text + '" font-size="12" font-weight="600">Token Usage</text>';
+      h += '<text x="' + (barX + barW) + '" y="25" fill="' + c.muted + '" font-size="11" text-anchor="end">' + Math.round(usage).toLocaleString() + ' / ' + maxTokens.toLocaleString() + ' (' + Math.round(pct * 100) + '%)</text>';
+
+      // Background bar
+      h += '<rect x="' + barX + '" y="' + barY + '" width="' + barW + '" height="' + barH + '" rx="6" fill="' + c.card + '" stroke="' + c.border + '" stroke-width="1"/>';
+
+      // Fill bar
+      var fillW = Math.min(pct, 1) * barW;
+      var fillColor = pct < 0.7 ? c.green : pct < 0.92 ? c.yellow : c.red;
+      h += '<rect x="' + barX + '" y="' + barY + '" width="' + fillW + '" height="' + barH + '" rx="6" fill="' + fillColor + '" opacity="0.7"/>';
+
+      // Threshold line at 92%
+      var threshX = barX + 0.92 * barW;
+      h += '<line x1="' + threshX + '" y1="' + (barY - 5) + '" x2="' + threshX + '" y2="' + (barY + barH + 5) + '" stroke="' + c.red + '" stroke-width="2" stroke-dasharray="4,2"/>';
+      h += '<text x="' + threshX + '" y="' + (barY + barH + 18) + '" fill="' + c.red + '" font-size="10" text-anchor="middle">92% auto-compact</text>';
+
+      // Warning thresholds
+      var w1X = barX + 0.7 * barW;
+      var w2X = barX + 0.8 * barW;
+      h += '<line x1="' + w1X + '" y1="' + (barY + barH - 5) + '" x2="' + w1X + '" y2="' + (barY + barH + 5) + '" stroke="' + c.yellow + '" stroke-width="1" stroke-dasharray="3,2"/>';
+      h += '<line x1="' + w2X + '" y1="' + (barY + barH - 5) + '" x2="' + w2X + '" y2="' + (barY + barH + 5) + '" stroke="' + c.yellow + '" stroke-width="1" stroke-dasharray="3,2"/>';
+
+      // History sparkline
+      if (history.length > 1) {
+        var sparkY = 110;
+        var sparkH = 50;
+        var sparkW = barW;
+        h += '<text x="' + barX + '" y="' + (sparkY - 5) + '" fill="' + c.muted + '" font-size="10">Token History</text>';
+
+        var maxH = Math.max.apply(null, history);
+        var pts = [];
+        for (var i = 0; i < history.length; i++) {
+          var x = barX + (i / (Math.max(history.length - 1, 1))) * sparkW;
+          var y = sparkY + sparkH - (history[i] / Math.max(maxH, 1)) * sparkH;
+          pts.push(x + ',' + y);
+        }
+        h += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + c.primary + '" stroke-width="2"/>';
+
+        // Compact events
+        for (var i = 1; i < history.length; i++) {
+          if (history[i] < history[i-1] * 0.5) {
+            var cx = barX + (i / (Math.max(history.length - 1, 1))) * sparkW;
+            var cy = sparkY + sparkH - (history[i] / Math.max(maxH, 1)) * sparkH;
+            h += '<circle cx="' + cx + '" cy="' + cy + '" r="4" fill="' + c.green + '"/>';
+            h += '<text x="' + cx + '" y="' + (cy - 8) + '" fill="' + c.green + '" font-size="9" text-anchor="middle">compact</text>';
+          }
+        }
+      }
+
+      svg.innerHTML = h;
+
+      var leftPct = Math.max(0, Math.round((1 - pct) * 100));
+      if (pct >= 0.92) {
+        infoEl.innerHTML = '<span style="color:#ef4444;font-weight:700;">Token 超过 92% 阈值！</span> wU2() 自动触发 → qH1() 执行 8 段式压缩 → 用总结文本替换历史 → Agent 满血复活。点击"执行压缩"模拟这个过程。';
+        compactBtn.disabled = false;
+      } else if (pct >= 0.7) {
+        infoEl.innerHTML = '<span style="color:#f59e0b;font-weight:600;">Context left: ' + leftPct + '%</span>。接近警告线，用户可以手动执行 /compact。继续点击"模拟工具调用"观察 Token 增长。';
+        compactBtn.disabled = false;
+      } else {
+        infoEl.innerHTML = 'Context left: <strong>' + leftPct + '%</strong>。每次工具调用（读取文件、执行命令）都会向 messages 数组追加新消息，Token 持续增长。';
+        compactBtn.disabled = usage < 20000;
+      }
+    }
+
+    addBtn.addEventListener('click', function() {
+      var added = 8000 + Math.random() * 25000;
+      usage = Math.min(usage + added, maxTokens);
+      history.push(usage);
+      draw();
+    });
+
+    compactBtn.addEventListener('click', function() {
+      usage = usage * 0.25;
+      history.push(usage);
+      draw();
+    });
+
+    resetBtn.addEventListener('click', function() {
+      usage = 0; history = [];
+      draw();
+    });
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 4. Fragment Demo ============
+  function initFrag() {
+    var display = document.getElementById('frag-display');
+    var infoEl = document.getElementById('frag-info');
+    var randomBtn = document.getElementById('frag-random');
+    var atomicBtn = document.getElementById('frag-atomic');
+    var resetBtn = document.getElementById('frag-reset');
+    if (!display) return;
+
+    var original = [
+      { role: 'system',    text: '{ role: "system", content: "You are Claude..." }', color: '#8b5cf6', group: 0 },
+      { role: 'user',      text: '{ role: "user", content: "修复 auth.py" }', color: '#3b82f6', group: 1 },
+      { role: 'assistant', text: '{ role: "assistant", tool_use: "read_file" }', color: '#10b981', group: 2 },
+      { role: 'tool',      text: '{ role: "tool", tool_result: "def login..." }', color: '#f59e0b', group: 2 },
+      { role: 'assistant', text: '{ role: "assistant", tool_use: "edit_file" }', color: '#10b981', group: 3 },
+      { role: 'tool',      text: '{ role: "tool", tool_result: "success" }', color: '#f59e0b', group: 3 },
+      { role: 'user',      text: '{ role: "user", content: "再查 utils.py" }', color: '#3b82f6', group: 4 },
+      { role: 'assistant', text: '{ role: "assistant", tool_use: "read_file" }', color: '#10b981', group: 5 },
+      { role: 'tool',      text: '{ role: "tool", tool_result: "def hash..." }', color: '#f59e0b', group: 5 },
+      { role: 'assistant', text: '{ role: "assistant", content: "分析完毕" }', color: '#10b981', group: 6 }
+    ];
+
+    var state = 'original';
+
+    function draw() {
+      var lines = [];
+      if (state === 'original') {
+        lines.push('messages = [');
+        for (var i = 0; i < original.length; i++) {
+          var prefix = '  [' + i + '] ';
+          var groupLabel = '  // group ' + original[i].group;
+          lines.push(prefix + original[i].text + groupLabel);
+        }
+        lines.push(']');
+        infoEl.innerHTML = '完整的 messages 数组，包含 10 条消息。注意 group 2、3、5 中的 tool_use 和 tool_result <strong>必须成对出现</strong>——这是 API 的强制约束。';
+      } else if (state === 'random') {
+        lines.push('messages = [');
+        lines.push('  [0] { role: "system", content: "You are..." }');
+        lines.push('  [1] { role: "user", content: "修复 auth.py" }');
+        lines.push('  [2] { role: "assistant", tool_use: "read_file" }');
+        lines.push('  ---- DELETED: tool_result ----              ');
+        lines.push('  [4] { role: "assistant", tool_use: "edit_file" }');
+        lines.push('  [5] { role: "tool", tool_result: "success" }');
+        lines.push('  ---- DELETED: user message ----             ');
+        lines.push('  ---- DELETED: tool_use ----                 ');
+        lines.push('  [8] { role: "tool", tool_result: "def hash..." }');
+        lines.push('  [9] { role: "assistant", content: "分析完毕" }');
+        lines.push(']');
+        lines.push('');
+        lines.push('// API Response: 400 Bad Request');
+        lines.push('// "tool_use toolu_01abc has no matching tool_result"');
+        lines.push('// "tool_result toolu_03xyz has no matching tool_use"');
+        infoEl.innerHTML = '<span style="color:#ef4444;font-weight:700;">API 崩溃！</span> 随机删除打破了 tool_use/tool_result 的配对关系。索引 2 的 tool_use 没有对应的 tool_result，索引 8 的 tool_result 没有对应的 tool_use。<strong>这就是为什么不能按 Top-K 删消息。</strong>';
+      } else if (state === 'atomic') {
+        lines.push('messages = [');
+        lines.push('  [0] { role: "system", content: "You are..." }    // KEEP: 头部保留');
+        lines.push('');
+        lines.push('  // ---- 原子块 1-3 被整体切片 ----');
+        lines.push('  [1] { role: "user", content: "<context_summary>');
+        lines.push('         之前你读取了 auth.py 并修复了缩进错误,');
+        lines.push('         然后查阅了 utils.py 的 hash_password 函数。');
+        lines.push('       </context_summary>" }');
+        lines.push('');
+        lines.push('  [2] { role: "assistant", content: "分析完毕" }   // KEEP: 尾部保留');
+        lines.push(']');
+        lines.push('');
+        lines.push('// API Response: 200 OK');
+        lines.push('// Token: 45,000 → 12,000 (节省 73%)');
+        infoEl.innerHTML = '<span style="color:#10b981;font-weight:700;">安全压缩！</span> 原子块 1-3（包含完整的 tool_use + tool_result 配对）被整体切片，用一段 <context_summary> 纯文本替换。头部的 System 和尾部的最近对话<strong>绝对保留</strong>。API 格式完整，零碎片。';
+      }
+
+      display.textContent = lines.join('\\n');
+    }
+
+    randomBtn.addEventListener('click', function() { state = 'random'; draw(); });
+    atomicBtn.addEventListener('click', function() { state = 'atomic'; draw(); });
+    resetBtn.addEventListener('click', function() { state = 'original'; draw(); });
+    draw();
+  }
+
+  // ============ 5. Compaction Steps Demo ============
+  function initCompact() {
+    var svg = document.getElementById('compact-svg');
+    var infoEl = document.getElementById('compact-info');
+    var nextBtn = document.getElementById('compact-next');
+    var prevBtn = document.getElementById('compact-prev');
+    var resetBtn = document.getElementById('compact-reset');
+    if (!svg) return;
+
+    var step = -1;
+    var maxSteps = 4;
+
+    function draw() {
+      var c = C();
+      var h = '';
+      var bw = 80, bh = 40, gap = 6, startX = 30, startY = 30;
+
+      // Block labels
+      var blocks = [
+        { label: 'System', color: c.purple, type: 'keep' },
+        { label: 'Block 1', color: c.blue, type: 'old' },
+        { label: 'Block 2', color: c.blue, type: 'old' },
+        { label: 'Block 3', color: c.blue, type: 'old' },
+        { label: 'Block 4', color: c.blue, type: 'old' },
+        { label: 'Block 5', color: c.green, type: 'mid' },
+        { label: 'Block 6', color: c.green, type: 'mid' },
+        { label: 'Recent', color: c.yellow, type: 'keep' }
+      ];
+
+      if (step <= 0) {
+        // Phase 0: Show original blocks
+        h += '<text x="350" y="18" text-anchor="middle" fill="' + c.text + '" font-size="13" font-weight="600">' + (step < 0 ? '原始 messages 数组' : 'Step 1: 原子化分组') + '</text>';
+
+        for (var i = 0; i < blocks.length; i++) {
+          var x = startX + i * (bw + gap);
+          var opacity = step === 0 ? (blocks[i].type === 'old' ? 0.3 : 0.15) : 0.15;
+          var sw = step === 0 && blocks[i].type === 'old' ? 2 : 1;
+          h += '<rect x="' + x + '" y="' + startY + '" width="' + bw + '" height="' + bh + '" rx="6" fill="' + blocks[i].color + '" opacity="' + opacity + '" stroke="' + blocks[i].color + '" stroke-width="' + sw + '"/>';
+          h += '<text x="' + (x + bw/2) + '" y="' + (startY + bh/2 + 4) + '" text-anchor="middle" fill="' + c.text + '" font-size="10">' + blocks[i].label + '</text>';
+
+          if (step === 0) {
+            if (blocks[i].type === 'keep') {
+              h += '<text x="' + (x + bw/2) + '" y="' + (startY + bh + 15) + '" text-anchor="middle" fill="' + c.green + '" font-size="9" font-weight="600">KEEP</text>';
+            } else if (blocks[i].type === 'old') {
+              h += '<text x="' + (x + bw/2) + '" y="' + (startY + bh + 15) + '" text-anchor="middle" fill="' + c.red + '" font-size="9" font-weight="600">COMPRESS</text>';
+            }
+          }
+        }
+
+        if (step === 0) {
+          // Group bracket for compress targets
+          var x1 = startX + 1 * (bw + gap);
+          var x2 = startX + 4 * (bw + gap) + bw;
+          h += '<line x1="' + x1 + '" y1="' + (startY + bh + 22) + '" x2="' + x2 + '" y2="' + (startY + bh + 22) + '" stroke="' + c.red + '" stroke-width="1.5"/>';
+          h += '<text x="' + ((x1+x2)/2) + '" y="' + (startY + bh + 36) + '" text-anchor="middle" fill="' + c.red + '" font-size="10">Blocks 1-4: 早期历史，被选中压缩</text>';
+        }
+
+        // Token bar
+        var tokenY = 180;
+        h += '<rect x="60" y="' + tokenY + '" width="580" height="16" rx="4" fill="' + c.card + '" stroke="' + c.border + '" stroke-width="1"/>';
+        var fillW = step < 0 ? 540 : 540;
+        h += '<rect x="60" y="' + tokenY + '" width="' + fillW + '" height="16" rx="4" fill="' + c.red + '" opacity="0.5"/>';
+        h += '<text x="' + (60 + fillW/2) + '" y="' + (tokenY + 12) + '" text-anchor="middle" fill="' + c.text + '" font-size="10" font-weight="600">Token: 185,000 / 200,000 (92.5%)</text>';
+
+      } else if (step === 1) {
+        // Phase 1: Extract + Summarize
+        h += '<text x="350" y="18" text-anchor="middle" fill="' + c.text + '" font-size="13" font-weight="600">Step 2: 切片抽取 + AU2 8 段式总结</text>';
+
+        // Left side: extracted blocks
+        h += '<text x="120" y="45" text-anchor="middle" fill="' + c.muted + '" font-size="10">抽离的原子块</text>';
+        for (var i = 0; i < 4; i++) {
+          var y = 55 + i * 35;
+          h += '<rect x="40" y="' + y + '" width="160" height="28" rx="5" fill="' + c.blue + '" opacity="0.15" stroke="' + c.blue + '" stroke-width="1" stroke-dasharray="4,2"/>';
+          h += '<text x="120" y="' + (y + 18) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">Block ' + (i+1) + ' (tool_use + result)</text>';
+        }
+
+        // Arrow to AU2
+        h += '<line x1="210" y1="120" x2="280" y2="120" stroke="' + c.primary + '" stroke-width="2" marker-end="url(#ccArrow)"/>';
+
+        // AU2 box
+        h += '<rect x="290" y="55" width="180" height="130" rx="8" fill="' + c.primary + '" opacity="0.12" stroke="' + c.primary + '" stroke-width="2"/>';
+        h += '<text x="380" y="78" text-anchor="middle" fill="' + c.primary + '" font-size="12" font-weight="700">AU2() 压缩引擎</text>';
+        var sections = ['1. 请求意图', '2. 技术概念', '3. 文件代码', '4. 错误修复', '5. 问题解决', '6. 用户消息', '7. 待处理', '8. 当前工作'];
+        for (var i = 0; i < 8; i++) {
+          h += '<text x="310" y="' + (95 + i * 11) + '" fill="' + c.muted + '" font-size="8">' + sections[i] + '</text>';
+        }
+
+        // Arrow to summary
+        h += '<line x1="480" y1="120" x2="530" y2="120" stroke="' + c.green + '" stroke-width="2" marker-end="url(#ccArrow)"/>';
+
+        // Summary output
+        h += '<rect x="540" y="80" width="130" height="80" rx="6" fill="' + c.green + '" opacity="0.12" stroke="' + c.green + '" stroke-width="2"/>';
+        h += '<text x="605" y="105" text-anchor="middle" fill="' + c.green + '" font-size="11" font-weight="600">Summary</text>';
+        h += '<text x="605" y="122" text-anchor="middle" fill="' + c.muted + '" font-size="9">"你读取了 auth.py</text>';
+        h += '<text x="605" y="134" text-anchor="middle" fill="' + c.muted + '" font-size="9">修复了缩进错误..."</text>';
+        h += '<text x="605" y="150" text-anchor="middle" fill="' + c.green + '" font-size="9" font-weight="600">~500 tokens</text>';
+
+        h = '<defs><marker id="ccArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="' + c.primary + '"/></marker></defs>' + h;
+
+      } else if (step === 2) {
+        // Phase 2: Replacement
+        h += '<text x="350" y="18" text-anchor="middle" fill="' + c.text + '" font-size="13" font-weight="600">Step 3: 同态替换 + TW5 文件恢复</text>';
+
+        var newBlocks = [
+          { label: 'System', color: c.purple, w: 100 },
+          { label: 'Summary', color: c.green, w: 200 },
+          { label: 'Block 5', color: c.green, w: 90 },
+          { label: 'Block 6', color: c.green, w: 90 },
+          { label: 'Recent', color: c.yellow, w: 100 }
+        ];
+
+        var x = 40;
+        for (var i = 0; i < newBlocks.length; i++) {
+          var b = newBlocks[i];
+          h += '<rect x="' + x + '" y="' + startY + '" width="' + b.w + '" height="' + bh + '" rx="6" fill="' + b.color + '" opacity="0.2" stroke="' + b.color + '" stroke-width="2"/>';
+          h += '<text x="' + (x + b.w/2) + '" y="' + (startY + bh/2 + 4) + '" text-anchor="middle" fill="' + c.text + '" font-size="10" font-weight="600">' + b.label + '</text>';
+          x += b.w + gap;
+        }
+
+        // Arrow showing TW5
+        h += '<text x="350" y="' + (startY + bh + 25) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">TW5(): 恢复最近读取的文件状态到新 context</text>';
+
+        // Token bar - after
+        var tokenY = 150;
+        h += '<rect x="60" y="' + tokenY + '" width="580" height="16" rx="4" fill="' + c.card + '" stroke="' + c.border + '" stroke-width="1"/>';
+        h += '<rect x="60" y="' + tokenY + '" width="145" height="16" rx="4" fill="' + c.green + '" opacity="0.5"/>';
+        h += '<text x="132" y="' + (tokenY + 12) + '" text-anchor="middle" fill="' + c.text + '" font-size="10" font-weight="600">Token: 48,000 / 200,000 (24%)</text>';
+
+        // Comparison
+        h += '<text x="350" y="' + (tokenY + 40) + '" text-anchor="middle" fill="' + c.green + '" font-size="12" font-weight="700">185,000 → 48,000 (节省 74%)</text>';
+        h += '<text x="350" y="' + (tokenY + 58) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">Agent 满血复活，可继续工作数十轮</text>';
+
+      } else if (step === 3) {
+        // Phase 3: The filmstrip analogy
+        h += '<text x="350" y="18" text-anchor="middle" fill="' + c.text + '" font-size="13" font-weight="600">整体类比：剪辑电影胶片</text>';
+
+        // Film strip metaphor
+        var stripY = 40;
+        var frameW = 65, frameH = 80, frameGap = 4;
+
+        for (var i = 0; i < 8; i++) {
+          var x = 40 + i * (frameW + frameGap);
+          var isCompressed = i >= 1 && i <= 4;
+          var isKept = i === 0 || i >= 5;
+
+          h += '<rect x="' + x + '" y="' + stripY + '" width="' + frameW + '" height="' + frameH + '" rx="3" fill="' + (isCompressed ? c.red : c.card) + '" opacity="' + (isCompressed ? 0.15 : 0.3) + '" stroke="' + (isCompressed ? c.red : c.border) + '" stroke-width="' + (isCompressed ? 2 : 1) + '"/>';
+
+          // Sprocket holes
+          h += '<circle cx="' + (x + 8) + '" cy="' + (stripY + 8) + '" r="3" fill="' + c.border + '"/>';
+          h += '<circle cx="' + (x + frameW - 8) + '" cy="' + (stripY + 8) + '" r="3" fill="' + c.border + '"/>';
+          h += '<circle cx="' + (x + 8) + '" cy="' + (stripY + frameH - 8) + '" r="3" fill="' + c.border + '"/>';
+          h += '<circle cx="' + (x + frameW - 8) + '" cy="' + (stripY + frameH - 8) + '" r="3" fill="' + c.border + '"/>';
+
+          if (isCompressed) {
+            h += '<line x1="' + (x + 10) + '" y1="' + (stripY + 15) + '" x2="' + (x + frameW - 10) + '" y2="' + (stripY + frameH - 15) + '" stroke="' + c.red + '" stroke-width="2" opacity="0.5"/>';
+            h += '<line x1="' + (x + frameW - 10) + '" y1="' + (stripY + 15) + '" x2="' + (x + 10) + '" y2="' + (stripY + frameH - 15) + '" stroke="' + c.red + '" stroke-width="2" opacity="0.5"/>';
+          } else {
+            h += '<text x="' + (x + frameW/2) + '" y="' + (stripY + frameH/2 + 4) + '" text-anchor="middle" fill="' + c.muted + '" font-size="9">' + (i === 0 ? 'System' : 'Frame ' + i) + '</text>';
+          }
+        }
+
+        // Arrow down
+        h += '<text x="350" y="' + (stripY + frameH + 20) + '" text-anchor="middle" fill="' + c.primary + '" font-size="20">↓</text>';
+
+        // Compressed strip
+        var strip2Y = stripY + frameH + 30;
+        var newFrames = [
+          { label: 'System', w: 65 },
+          { label: 'Summary Card', w: 200 },
+          { label: 'Frame 5', w: 65 },
+          { label: 'Frame 6', w: 65 },
+          { label: 'Frame 7', w: 65 }
+        ];
+
+        var x = 80;
+        for (var i = 0; i < newFrames.length; i++) {
+          var f = newFrames[i];
+          var col = i === 1 ? c.green : c.card;
+          h += '<rect x="' + x + '" y="' + strip2Y + '" width="' + f.w + '" height="' + (frameH * 0.7) + '" rx="3" fill="' + col + '" opacity="0.2" stroke="' + (i === 1 ? c.green : c.border) + '" stroke-width="' + (i === 1 ? 2 : 1) + '"/>';
+          h += '<text x="' + (x + f.w/2) + '" y="' + (strip2Y + frameH * 0.35 + 4) + '" text-anchor="middle" fill="' + (i === 1 ? c.green : c.muted) + '" font-size="10" font-weight="' + (i === 1 ? '600' : '400') + '">' + f.label + '</text>';
+          x += f.w + frameGap;
+        }
+      }
+
+      svg.innerHTML = h;
+
+      var infos = [
+        '这是 CCContext 压缩前的完整 messages 数组。8 个原子块，Token 已经达到 92.5%。点击"下一步"开始压缩。',
+        '<strong>Step 1: 原子化分组</strong> — 扫描 messages 数组，将 tool_use + tool_result 配对打包为不可分割的原子块。然后按时间轴选择：System（头部保留）、Block 1-4（早期历史，选中压缩）、Block 5-6 和 Recent（尾部保留）。',
+        '<strong>Step 2: AU2 8 段式总结</strong> — 抽离的 Block 1-4 被送入压缩模型（J7()），AU2() 生成结构化提示词，要求从 8 个维度提取关键信息。输出：一段精简的总结文本（~500 tokens vs 原始 ~130,000 tokens）。',
+        '<strong>Step 3: 同态替换 + 恢复</strong> — 用 Summary 文本替换原位置，TW5() 恢复最近读取的文件状态。Token 从 185,000 骤降到 48,000（节省 74%）。API 格式完整，Agent 满血复活。',
+        '<strong>电影胶片类比</strong> — CCContext 的压缩就像剪辑电影：找到很久以前的"长镜头"，沿着原子块的起止帧一刀切下，用一张写着"刚才发生了什么"的<strong>字幕卡</strong>替换那段胶片。既释放了空间，又不破坏叙事连贯性。'
+      ];
+
+      infoEl.innerHTML = infos[step + 1] || infos[0];
+      prevBtn.disabled = step <= -1;
+      nextBtn.disabled = step >= maxSteps;
+    }
+
+    nextBtn.addEventListener('click', function() { if (step < maxSteps) { step++; draw(); } });
+    prevBtn.addEventListener('click', function() { if (step > -1) { step--; draw(); } });
+    resetBtn.addEventListener('click', function() { step = -1; draw(); });
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ 6. AU2 Tabs Demo ============
+  function initAU2() {
+    var tabs1 = document.getElementById('au2-tabs');
+    var tabs2 = document.getElementById('au2-tabs2');
+    if (!tabs1 || !tabs2) return;
+
+    var content = {
+      s1: {
+        title: '1. Primary Request and Intent',
+        prompt: 'Capture all of the user\\'s explicit requests and intents in detail.',
+        why: '确保 Agent 不会在压缩后忘记"用户到底让我干什么"。这是最重要的维度——丢了用户意图，后续所有工作都会偏。',
+        example: '"用户要求修复 auth.py 中的登录 bug，特别是 line 42 附近的缩进问题导致的 IndentationError。"'
+      },
+      s2: {
+        title: '2. Key Technical Concepts',
+        prompt: 'List all important technical concepts, technologies, and frameworks discussed.',
+        why: '保留技术栈上下文。Agent 知道项目用的是 Flask + SQLAlchemy，就不会在后续推荐 Express.js 的解决方案。',
+        example: '"项目使用 Python 3.11 + Flask + SQLAlchemy，数据库是 PostgreSQL，认证采用 JWT。"'
+      },
+      s3: {
+        title: '3. Files and Code Sections',
+        prompt: 'Enumerate specific files and code sections examined, modified, or created. Pay special attention to the most recent messages and include full code snippets where applicable.',
+        why: '<strong>建立索引</strong>——这是 Re-fetch 机制的基础。压缩后 Agent 知道看过哪些文件，需要时可以再次读取。',
+        example: '"已检查: auth.py (login 函数), utils.py (hash_password)。已修改: auth.py line 42 的缩进。"'
+      },
+      s4: {
+        title: '4. Errors and Fixes',
+        prompt: 'List all errors that you ran into, and how you fixed them. Pay special attention to specific user feedback.',
+        why: '防止 Agent 重蹈覆辙。如果之前某个方案被用户否决了，压缩后 Agent 不应该再提同样的方案。',
+        example: '"错误: IndentationError at line 42。原因: if 块内混用了 tab 和 space。修复: 统一为 4 space。"'
+      },
+      s5: {
+        title: '5. Problem Solving',
+        prompt: 'Document problems solved and any ongoing troubleshooting efforts.',
+        why: '区分"已解决"和"进行中"的问题。已解决的可以简略，进行中的需要保留更多细节。',
+        example: '"已解决: 登录函数的缩进问题。进行中: 需要验证修复后的登录流程是否正常工作。"'
+      },
+      s6: {
+        title: '6. All User Messages',
+        prompt: 'List ALL user messages that are not tool results. These are critical for understanding the users\\' feedback and changing intent.',
+        why: '<strong>最关键的维度之一</strong>。用户的反馈和意图变化必须被完整保留。如果用户说"不要用 ORM，直接写 SQL"，这条指令在压缩后绝对不能丢。',
+        example: '"用户 1: \\"帮我修复 auth.py 的登录 bug\\"。用户 2: \\"再查一下 utils.py 有没有相关问题\\"。"'
+      },
+      s7: {
+        title: '7. Pending Tasks',
+        prompt: 'Outline any pending tasks that you have explicitly been asked to work on.',
+        why: '确保待办事项不会在压缩中"蒸发"。Agent 的 TODO 列表必须完整传递。',
+        example: '"待办: 1. 运行测试验证修复。2. 检查 utils.py 的 hash_password 是否需要更新。"'
+      },
+      s8: {
+        title: '8. Current Work',
+        prompt: 'Describe in detail precisely what was being worked on immediately before this summary request.',
+        why: '压缩往往发生在 Agent 工作的中途。这个维度保证 Agent 压缩后能无缝接续，而不是"我刚才在干什么来着？"',
+        example: '"正在分析 utils.py 的 hash_password 函数，判断是否需要从 MD5 迁移到 bcrypt。"'
+      }
+    };
+
+    function setupTabs(tabBar, prefix) {
+      var allTabs = tabBar.querySelectorAll('.cc-tab');
+
+      function showTab(tabId) {
+        allTabs.forEach(function(t) {
+          t.classList.remove('cc-tab-active');
+          if (t.getAttribute('data-tab') === tabId) t.classList.add('cc-tab-active');
+        });
+
+        Object.keys(content).forEach(function(id) {
+          var el = document.getElementById('au2-tab-' + id);
+          if (!el) return;
+          var isInThisBar = false;
+          allTabs.forEach(function(t) { if (t.getAttribute('data-tab') === id) isInThisBar = true; });
+          if (!isInThisBar) return;
+
+          el.className = 'cc-tab-content' + (id === tabId ? ' cc-tab-content-active' : '');
+          if (id === tabId) {
+            var c = content[id];
+            el.innerHTML = '<div style="font-size:0.9rem;font-weight:700;margin-bottom:0.5rem;">' + c.title + '</div>'
+              + '<div class="cc-code" style="font-size:0.78rem;">' + c.prompt + '</div>'
+              + '<div style="margin-top:0.75rem;font-size:0.85rem;"><strong>设计意图：</strong>' + c.why + '</div>'
+              + '<div style="margin-top:0.5rem;font-size:0.82rem;color:hsl(var(--muted-foreground));"><strong>示例输出：</strong>' + c.example + '</div>';
+          }
+        });
+      }
+
+      allTabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          showTab(tab.getAttribute('data-tab'));
+        });
+      });
+
+      showTab(allTabs[0].getAttribute('data-tab'));
+    }
+
+    setupTabs(tabs1, 'au2-tab-');
+    setupTabs(tabs2, 'au2-tab-');
+  }
+
+  // ============ 7. Re-fetch Demo ============
+  function initRefetch() {
+    var display = document.getElementById('refetch-display');
+    var infoEl = document.getElementById('refetch-info');
+    var nextBtn = document.getElementById('refetch-next');
+    var prevBtn = document.getElementById('refetch-prev');
+    var resetBtn = document.getElementById('refetch-reset');
+    if (!display) return;
+
+    var steps = [
+      {
+        lines: [
+          '// 压缩前的 Context（185,000 tokens）',
+          'messages = [',
+          '  { system: "You are Claude Code..." },',
+          '  { user: "修复 auth.py 的 bug" },',
+          '  { assistant: tool_use("read_file", "auth.py") },',
+          '  { tool: "def login(user, pwd):\\n    if check_creds(user, pwd):\\n        ...(1000 行)" },',
+          '  { assistant: "line 42 有缩进错误" },',
+          '  { assistant: tool_use("edit_file", ...) },',
+          '  { tool: "success" },',
+          '  // ... 更多工具调用 ...',
+          ']'
+        ],
+        info: '<strong>压缩前</strong>：Context 包含 auth.py 的 1000 行完整代码和所有工具调用记录。Token 已达 92.5%。'
+      },
+      {
+        lines: [
+          '// 压缩后的 Context（48,000 tokens）',
+          'messages = [',
+          '  { system: "You are Claude Code..." },',
+          '  { user: "<context_summary>',
+          '      1. 意图: 修复 auth.py 的登录 bug',
+          '      3. 文件: auth.py (login 函数), utils.py',
+          '      4. 修复: line 42 缩进错误已修复',
+          '      8. 当前: 准备验证修复结果',
+          '    </context_summary>" },',
+          '  { assistant: "修复完成，准备验证" },',
+          ']',
+          '',
+          '// auth.py 的具体代码已经丢失！',
+          '// 但 Agent 知道它看过这个文件 → 索引保留'
+        ],
+        info: '<strong>压缩后</strong>：1000 行代码被浓缩为一句话。<span style="color:#f59e0b;font-weight:600;">具体代码细节已丢失</span>（有损压缩），但"我看过 auth.py"的<strong>索引信息保留</strong>了。'
+      },
+      {
+        lines: [
+          '// 用户新请求：',
+          '> "auth.py 第 50 行是什么？"',
+          '',
+          '// Agent 的 Context 里找不到具体代码...',
+          '// 但 summary 告诉它看过这个文件！',
+          '',
+          '// Agent 决策：',
+          '{ role: "assistant",',
+          '  content: [{ type: "tool_use",',
+          '    name: "read_file",',
+          '    input: { path: "auth.py" }  // Re-fetch!',
+          '  }]',
+          '}'
+        ],
+        info: '<strong>Re-fetch 触发</strong>：Agent 在 Context 里找不到 auth.py 的代码，但 summary 的"文件索引"告诉它看过这个文件。于是它<strong>毫不犹豫地再次调用 read_file</strong>，重新拉取需要的内容。'
+      },
+      {
+        lines: [
+          '// Re-fetch 后的 Context',
+          'messages = [',
+          '  { system: "You are Claude Code..." },',
+          '  { user: "<context_summary>..." },',
+          '  { assistant: "修复完成，准备验证" },',
+          '  { user: "auth.py 第 50 行是什么？" },',
+          '  { assistant: tool_use("read_file", "auth.py") },',
+          '  { tool: "def login(user, pwd):\\n    ...(重新拉取)" },',
+          '  { assistant: "第 50 行是: return jwt.encode(payload)" },',
+          ']',
+          '',
+          '// 代价: 1 次 Tool Call (~200ms)',
+          '// 收益: 系统永不崩溃，无限轮次对话'
+        ],
+        info: '<strong>恢复完成</strong>：文件内容重新进入 Context，Agent 正常回答。代价仅是一次约 200ms 的 Tool Call。这就是 CCContext 的核心权衡——<span style="color:#10b981;font-weight:600;">用偶尔的 Re-fetch 时间成本，换取无限轮次对话的系统稳定性</span>。'
+      }
+    ];
+
+    var step = -1;
+
+    function draw() {
+      if (step >= 0 && step < steps.length) {
+        display.textContent = steps[step].lines.join('\\n');
+        infoEl.innerHTML = steps[step].info;
+      } else {
+        display.textContent = '// 点击"下一步"观察：压缩 → 信息丢失 → Re-fetch 恢复 的完整过程';
+        infoEl.innerHTML = '这个演示展示 Agent 如何从压缩导致的"失忆"中优雅恢复。核心思想：<strong>物理世界（文件系统）就是最好的记忆体</strong>，Context 里只需要保留索引。';
+      }
+
+      prevBtn.disabled = step <= -1;
+      nextBtn.disabled = step >= steps.length - 1;
+    }
+
+    nextBtn.addEventListener('click', function() { if (step < steps.length - 1) { step++; draw(); } });
+    prevBtn.addEventListener('click', function() { if (step > -1) { step--; draw(); } });
+    resetBtn.addEventListener('click', function() { step = -1; draw(); });
+    draw();
+  }
+
+  // ============ 8. Flow Diagram ============
+  function initFlow() {
+    var svg = document.getElementById('flow-svg');
+    var infoEl = document.getElementById('flow-info');
+    if (!svg) return;
+
+    var selected = -1;
+
+    var nodes = [
+      { id: 'input', label: 'User Input', x: 30, y: 110, w: 90, h: 40, color: '#3b82f6',
+        desc: '<strong>用户输入</strong>：人类在终端键入需求，原封不动存入 messages 数组。这是 Agent Loop 的起点。' },
+      { id: 'store', label: 'messages[]', x: 150, y: 110, w: 90, h: 40, color: '#8b5cf6',
+        desc: '<strong>消息存储</strong>：Array + Map 双存储。Array 保持时间顺序，Map 提供 O(1) UUID 查找。通过 parentUuid 链支持对话分支。' },
+      { id: 'token', label: 'VE() Token', x: 270, y: 50, w: 90, h: 40, color: '#10b981',
+        desc: '<strong>Token 计算</strong>：VE() 逆序遍历 → HY5() 过滤合成消息 → zY5() 汇总所有 Token 类型。实际性能 O(1)——通常第一个非合成 Assistant 消息就有 usage 数据。' },
+      { id: 'check', label: '≥ 92%?', x: 390, y: 50, w: 80, h: 40, color: '#f59e0b',
+        desc: '<strong>阈值检查</strong>：h11 = 0.92。yW5() 比较当前 Token 与阈值。低于阈值 → 正常继续；达到阈值 → 触发 wU2() 压缩调度。' },
+      { id: 'compact', label: 'qH1() + AU2()', x: 500, y: 50, w: 110, h: 40, color: '#ef4444',
+        desc: '<strong>压缩执行</strong>：qH1() 编排压缩流程 → AU2() 生成 8 段式提示词 → J7() 压缩模型执行总结 → BU2() 格式化总结消息 → TW5() 恢复文件状态。' },
+      { id: 'api', label: 'Claude API', x: 270, y: 170, w: 90, h: 40, color: '#6366f1',
+        desc: '<strong>API 调用</strong>：将完整的 messages 数组（System + 历史 + 最新用户消息）发送给大模型。返回 Assistant 消息，可能包含 tool_use 意图。' },
+      { id: 'tool', label: 'Tool Exec', x: 420, y: 170, w: 90, h: 40, color: '#f59e0b',
+        desc: '<strong>工具执行</strong>：hW5() 调度器按并发安全性分组：安全工具并发执行（uW5），不安全工具串行执行（dW5）。最大并发 gW5 = 10。结果以 tool_result 格式写回 messages。' },
+      { id: 'loop', label: 'Agent Loop', x: 560, y: 170, w: 90, h: 40, color: '#10b981',
+        desc: '<strong>循环判断</strong>：nO() 主循环检查：如果 Assistant 返回了 tool_use → 继续执行工具并追加结果；如果只有文本 → 返回给用户。每一轮循环都经过 Token 检查。' }
+    ];
+
+    function draw() {
+      var c = C();
+      var h = '';
+
+      // Arrows
+      var arrows = [
+        [0, 1], [1, 2], [2, 3], [3, 4], [1, 5], [5, 6], [6, 7]
+      ];
+      h += '<defs><marker id="flowArrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="' + c.muted + '"/></marker></defs>';
+
+      arrows.forEach(function(a) {
+        var f = nodes[a[0]], t = nodes[a[1]];
+        var x1 = f.x + f.w, y1 = f.y + f.h/2;
+        var x2 = t.x, y2 = t.y + t.h/2;
+        if (a[0] === 1 && a[1] === 5) { x1 = f.x + f.w/2; y1 = f.y + f.h; x2 = t.x + t.w/2; y2 = t.y; }
+        if (a[0] === 1 && a[1] === 2) { x1 = f.x + f.w/2; y1 = f.y; x2 = t.x + t.w/2; y2 = t.y + t.h; }
+        h += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + c.border + '" stroke-width="1.5" marker-end="url(#flowArrow)"/>';
+      });
+
+      // Loop back arrow
+      h += '<path d="M ' + (nodes[7].x + nodes[7].w/2) + ' ' + (nodes[7].y + nodes[7].h) + ' Q ' + (nodes[7].x + nodes[7].w/2) + ' ' + (nodes[7].y + nodes[7].h + 30) + ' ' + (nodes[1].x + nodes[1].w/2) + ' ' + (nodes[1].y + nodes[1].h) + '" fill="none" stroke="' + c.border + '" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#flowArrow)"/>';
+
+      // Compact back arrow
+      h += '<path d="M ' + (nodes[4].x + nodes[4].w/2) + ' ' + (nodes[4].y + nodes[4].h) + ' Q ' + (nodes[4].x + nodes[4].w/2 + 20) + ' ' + (nodes[4].y + nodes[4].h + 25) + ' ' + (nodes[1].x + nodes[1].w) + ' ' + (nodes[1].y) + '" fill="none" stroke="' + c.green + '" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#flowArrow)"/>';
+
+      // Nodes
+      nodes.forEach(function(n, i) {
+        var isSel = i === selected;
+        h += '<rect x="' + n.x + '" y="' + n.y + '" width="' + n.w + '" height="' + n.h + '" rx="8" fill="' + n.color + '" opacity="' + (isSel ? 0.25 : 0.1) + '" stroke="' + n.color + '" stroke-width="' + (isSel ? 2.5 : 1.5) + '" style="cursor:pointer;" data-idx="' + i + '"/>';
+        h += '<text x="' + (n.x + n.w/2) + '" y="' + (n.y + n.h/2 + 4) + '" text-anchor="middle" fill="' + (isSel ? n.color : c.text) + '" font-size="11" font-weight="' + (isSel ? '700' : '500') + '" style="pointer-events:none;">' + n.label + '</text>';
+      });
+
+      svg.innerHTML = h;
+
+      svg.querySelectorAll('rect[data-idx]').forEach(function(rect) {
+        rect.addEventListener('click', function() {
+          selected = parseInt(rect.getAttribute('data-idx'));
+          draw();
+        });
+      });
+
+      if (selected >= 0) {
+        infoEl.innerHTML = nodes[selected].desc;
+      } else {
+        infoEl.innerHTML = '点击任意节点查看该阶段的详细说明。上半部分是 Token 管理路径（检查 → 压缩），下半部分是 Agent Loop 主路径（API → 工具 → 循环）。';
+      }
+    }
+
+    draw();
+    onTheme(draw);
+  }
+
+  // ============ Init ============
+  function init() {
+    initArch();
+    initMsg();
+    initToken();
+    initFrag();
+    initCompact();
+    initAU2();
+    initRefetch();
+    initFlow();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+`}</script>
