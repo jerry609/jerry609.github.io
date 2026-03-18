@@ -1,0 +1,1839 @@
+---
+title: 'Tool Call Dispatch：多格式信封的统一分发与设计哲学'
+description: '从零构建工具调用分发模块——把 OpenAI、Claude、Codex 三种协议信封统一成内部表示，拆解 normalize-dispatch-wrap 主链路的设计哲学。'
+publishDate: '2026-03-18'
+tags: ['Agent', 'Tool Use', '系统设计', 'Python', '设计哲学']
+language: 'zh-CN'
+draft: false
+---
+
+<style>{`
+  .td-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .td-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .td-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .td-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .td-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .td-btn-primary:hover { opacity: 0.85; }
+  .td-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .td-btn-secondary:hover { opacity: 0.85; }
+  .td-btn:disabled { opacity: 0.4; cursor: default; }
+  .td-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .td-code {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    color: hsl(var(--foreground));
+    margin: 1rem 0;
+  }
+  .td-tab-bar {
+    display: flex; gap: 0; margin-bottom: 0;
+    border-bottom: 2px solid hsl(var(--border));
+  }
+  .td-tab {
+    padding: 0.5rem 1.2rem; cursor: pointer;
+    border: none; background: none;
+    font-size: 0.85rem;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+  .td-tab:hover { color: hsl(var(--foreground)); }
+  .td-tab-active {
+    color: hsl(var(--primary));
+    border-bottom-color: hsl(var(--primary));
+    font-weight: 600;
+  }
+  .td-tab-content { display: none; padding: 1rem 0; }
+  .td-tab-content-active { display: block; }
+  .td-quote {
+    border-left: 3px solid hsl(var(--primary));
+    padding-left: 1rem;
+    margin: 1.5rem 0;
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+  }
+  .td-tag {
+    display: inline-block; padding: 0.15rem 0.5rem;
+    border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+  }
+  .td-tag-blue { background: #dbeafe; color: #1e40af; }
+  .td-tag-green { background: #d1fae5; color: #065f46; }
+  .td-tag-red { background: #fee2e2; color: #991b1b; }
+  .td-tag-yellow { background: #fef3c7; color: #92400e; }
+  .td-tag-purple { background: #ede9fe; color: #5b21b6; }
+  .td-highlight { color: hsl(var(--primary)); font-weight: 600; }
+  .td-warn { color: #ef4444; font-weight: 600; }
+  .td-ok { color: #10b981; font-weight: 600; }
+  .td-arrow {
+    display: inline-block;
+    color: hsl(var(--primary));
+    font-size: 1.2rem;
+    margin: 0 0.5rem;
+    vertical-align: middle;
+  }
+  @media (prefers-color-scheme: dark) {
+    .td-tag-blue { background: #1e3a5f; color: #93c5fd; }
+    .td-tag-green { background: #064e3b; color: #6ee7b7; }
+    .td-tag-red { background: #7f1d1d; color: #fca5a5; }
+    .td-tag-yellow { background: #78350f; color: #fcd34d; }
+    .td-tag-purple { background: #4c1d95; color: #c4b5fd; }
+  }
+  :root.dark .td-tag-blue { background: #1e3a5f; color: #93c5fd; }
+  :root.dark .td-tag-green { background: #064e3b; color: #6ee7b7; }
+  :root.dark .td-tag-red { background: #7f1d1d; color: #fca5a5; }
+  :root.dark .td-tag-yellow { background: #78350f; color: #fcd34d; }
+  :root.dark .td-tag-purple { background: #4c1d95; color: #c4b5fd; }
+  details.td-collapsible {
+    margin: 1rem 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  details.td-collapsible > summary {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  details.td-collapsible > summary::-webkit-details-marker { display: none; }
+  details.td-collapsible > summary::before {
+    content: '\\25B6'; font-size: 0.7rem;
+    transition: transform 0.2s;
+  }
+  details.td-collapsible[open] > summary::before {
+    transform: rotate(90deg);
+  }
+`}</style>
+
+> **把不同格式的工具调用请求，统一成一种内部格式，执行本地函数，再把结果包装回去。** 这就是工具调用分发模块的全部使命。本文按"先跑通最小骨架，再一层层加能力"的方式，从零拆解这个模块的设计与实现——包括为什么要 normalize、怎么分层、以及背后的工程哲学。
+>
+> 核心链路只有一句话：`call_envelope → normalize → dispatch → execute → wrap_result → append_context`
+
+---
+
+## 一、这个模块到底解决什么问题
+
+先别写代码，先写目标。这个模块要解决的是：
+
+1. 接收不同厂商风格的工具调用信封（envelope）
+2. 统一成内部标准格式
+3. 根据名字找到本地处理函数
+4. 执行函数
+5. 把结果重新包装成对应格式
+6. 把调用和结果追加到上下文
+
+<div class="td-demo">
+  <div class="td-demo-title">交互演示：工具调用分发的主链路</div>
+  <span class="td-demo-subtitle">点击每个阶段，查看它的输入输出和职责</span>
+  <svg id="pipeline-svg" viewBox="0 0 720 120" style="width: 100%; max-height: 120px;"></svg>
+  <div id="pipeline-info" class="td-step-info"></div>
+</div>
+
+这条链路就是整个模块的主线，后面的函数基本都在服务它：
+
+| 阶段 | 函数 | 回答的问题 |
+|:-----|:-----|:-----------|
+| **Normalize** | `normalize_tool_call()` | 模型到底调用了哪个工具，参数是什么？ |
+| **Dispatch** | `dispatch_tool_call()` | 把整条链路串起来执行 |
+| **Wrap** | `build_tool_result_envelope()` | 执行结果要按哪种格式回给模型？ |
+| **Append** | `append_tool_interaction_to_context()` | 这次调用和结果怎么写进会话历史？ |
+
+---
+
+## 二、数据结构先行：异常类与标准化对象
+
+第一步不要急着写大函数，先把最基础的类型定义好。
+
+### 2.1 先写异常类
+
+后面很多地方都可能失败——envelope 格式不对、参数不是 dict、注册表里没 handler、handler 参数不匹配。所以先定义统一异常：
+
+```python
+class EnvelopeDispatchError(Exception):
+    """Raised when a tool call envelope cannot be normalized or dispatched."""
+```
+
+这样后面所有分发错误都能抛这个，逻辑会很干净。
+
+### 2.2 再写标准化后的数据结构
+
+你最终想把所有不同格式的 envelope 变成统一格式，所以先定义那个"统一格式"：
+
+```python
+@dataclass
+class NormalizedToolCall:
+    source_format: str       # 来源：openai / claude / codex
+    call_id: str             # 回包时要用
+    dispatch_key: str        # 真正拿来找 handler 的键
+    arguments: Dict[str, Any]  # 已经解析好的参数
+    raw_envelope: Dict[str, Any]  # 保留原始输入，便于调试
+```
+
+这里每个字段都很关键：
+
+- `source_format`：记录来源，决定回包时用哪种格式
+- `call_id`：后面回包时关联用
+- `dispatch_key`：真正拿来找 handler 的键
+- `arguments`：已经解析好的参数（一律是 dict）
+- `raw_envelope`：保留原始输入，便于调试
+
+**这一步很重要，因为它决定了后面所有代码都围绕这个统一对象展开。**
+
+---
+
+## 三、处理器注册表
+
+dispatch 最终要调用真实 Python 函数，所以需要一个映射表：
+
+```python
+Handler = Callable[..., Dict[str, Any]]
+
+TOOL_REGISTRY: Dict[str, Handler] = {
+    "functions.exec_command": exec_command,
+    "functions.write_stdin": write_stdin,
+    "functions.apply_patch": apply_patch,
+    "functions.view_image": view_image,
+    "snapshot_before_edit": snapshot_before_edit,
+    "restore_snapshot": restore_snapshot,
+    "edit_file_with_validation": edit_file_with_validation,
+}
+```
+
+理解方式：
+
+- Schema 里定义"工具名字"
+- Registry 决定"这个名字对应哪个 Python 函数"
+
+也就是说，**真正把协议名绑定到本地执行逻辑的地方，就是这个表**。
+
+写这个表时注意两点：key 要和模型发来的工具名一致；value 必须是可调用对象，且统一返回 `dict`。
+
+---
+
+## 四、辅助函数
+
+先写两个小函数，独立、简单、好测。
+
+### 4.1 生成 call_id
+
+有些 envelope 没给 id，需要本地补一个：
+
+```python
+def _generated_call_id(prefix: str = "call") -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
+```
+
+### 4.2 解析 arguments
+
+不同厂商里，arguments 可能已经是 dict，也可能是 JSON 字符串：
+
+```python
+def _parse_arguments(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        parsed = json.loads(value)
+        if not isinstance(parsed, dict):
+            raise EnvelopeDispatchError(
+                "function.arguments JSON must decode to an object"
+            )
+        return parsed
+    raise EnvelopeDispatchError(
+        f"tool arguments must be object or JSON string, got {type(value).__name__}"
+    )
+```
+
+把解析逻辑单独抽出来的好处：`normalize_tool_call()` 不会变得太臃肿，参数格式校验集中在一个地方，后续测试更容易写。
+
+---
+
+## 五、核心一：normalize_tool_call
+
+这是整个模块最重要的第一核心函数。它的任务不是执行工具，而是：**把不同来源的 envelope 变成同一种内部结构。**
+
+<div class="td-demo">
+  <div class="td-demo-title">交互演示：三种信封格式的统一化</div>
+  <span class="td-demo-subtitle">选择不同厂商格式，点击 Normalize 查看统一后的结果</span>
+  <div class="td-tab-bar" id="fmt-tabs">
+    <button class="td-tab td-tab-active" data-fmt="openai">OpenAI</button>
+    <button class="td-tab" data-fmt="claude">Claude</button>
+    <button class="td-tab" data-fmt="codex">Codex</button>
+  </div>
+  <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
+    <div style="flex: 1; min-width: 280px;">
+      <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">原始信封</div>
+      <div id="fmt-input" class="td-code" style="min-height: 160px;"></div>
+    </div>
+    <div style="flex: 1; min-width: 280px;">
+      <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem; color: hsl(var(--muted-foreground));">Normalize 结果</div>
+      <div id="fmt-output" class="td-code" style="min-height: 160px;"></div>
+    </div>
+  </div>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="fmt-normalize" class="td-btn td-btn-primary">Normalize</button>
+    <button id="fmt-reset" class="td-btn td-btn-secondary" style="margin-left: 0.5rem;">重置</button>
+  </div>
+  <div id="fmt-info" class="td-step-info"></div>
+</div>
+
+按"识别来源格式"的顺序来写。每一段遵循相同模式：**先判断是不是这种格式 → 再校验关键字段 → 再提取统一字段 → 最后返回 `NormalizedToolCall`**。
+
+### 5.1 Codex 风格
+
+Codex 风格看 `recipient_name` 和 `parameters`：
+
+```python
+if "recipient_name" in raw:
+    dispatch_key = raw["recipient_name"]
+    parameters = raw.get("parameters")
+    if not isinstance(parameters, dict):
+        raise EnvelopeDispatchError(
+            "codex envelope requires an object 'parameters' field"
+        )
+    call_id = str(
+        raw.get("call_id") or raw.get("id") or _generated_call_id("codex")
+    )
+    return NormalizedToolCall(
+        source_format="codex",
+        call_id=call_id,
+        dispatch_key=str(dispatch_key),
+        arguments=dict(parameters),
+        raw_envelope=raw,
+    )
+```
+
+### 5.2 OpenAI 风格
+
+这里以 **OpenAI Responses API** 的 `function_call` 项为例：`type: "function_call"` + `function.name` + `function.arguments`：
+
+```python
+if raw.get("type") == "function_call":
+    fn = raw.get("function")
+    if not isinstance(fn, dict):
+        raise EnvelopeDispatchError(
+            "openai-style function_call envelope requires a 'function' object"
+        )
+    if "name" not in fn or "arguments" not in fn:
+        raise EnvelopeDispatchError(
+            "openai-style function_call requires function.name and function.arguments"
+        )
+    call_id = str(raw.get("id") or _generated_call_id("openai"))
+    return NormalizedToolCall(
+        source_format="openai",
+        call_id=call_id,
+        dispatch_key=str(fn["name"]),
+        arguments=_parse_arguments(fn["arguments"]),
+        raw_envelope=raw,
+    )
+```
+
+这里最重要的是 `_parse_arguments(fn["arguments"])`——OpenAI 风格最容易出现 JSON 字符串参数。
+
+### 5.3 Claude 风格
+
+Claude 风格用 `type: "tool_use"` + `name` + `input`：
+
+```python
+if raw.get("type") == "tool_use":
+    if "name" not in raw or "input" not in raw:
+        raise EnvelopeDispatchError(
+            "claude-style tool_use requires name and input"
+        )
+    if not isinstance(raw["input"], dict):
+        raise EnvelopeDispatchError(
+            "claude-style tool_use input must be an object"
+        )
+    call_id = str(raw.get("id") or _generated_call_id("claude"))
+    return NormalizedToolCall(
+        source_format="claude",
+        call_id=call_id,
+        dispatch_key=str(raw["name"]),
+        arguments=dict(raw["input"]),
+        raw_envelope=raw,
+    )
+```
+
+### 5.4 兜底异常
+
+```python
+raise EnvelopeDispatchError("unrecognized tool call envelope shape")
+```
+
+---
+
+## 六、核心二：build_tool_result_envelope
+
+这个函数做的是 normalize 的反方向：
+
+- normalize 是"外部格式 → 内部格式"
+- build_tool_result_envelope 是"内部结果 → 外部格式"
+
+根据 `source_format` 分支返回不同字典：
+
+```python
+def build_tool_result_envelope(
+    normalized_call: NormalizedToolCall,
+    output: Dict[str, Any],
+) -> Dict[str, Any]:
+
+    if normalized_call.source_format == "openai":
+        return {
+            "type": "function_call_output",
+            "call_id": normalized_call.call_id,
+            "name": normalized_call.dispatch_key,
+            "output": output,
+        }
+
+    if normalized_call.source_format == "claude":
+        return {
+            "type": "tool_result",
+            "tool_use_id": normalized_call.call_id,
+            "name": normalized_call.dispatch_key,
+            "content": output,
+        }
+
+    if normalized_call.source_format == "codex":
+        return {
+            "type": "tool_result",
+            "call_id": normalized_call.call_id,
+            "recipient_name": normalized_call.dispatch_key,
+            "output": output,
+        }
+
+    raise EnvelopeDispatchError(
+        f"unsupported source format: {normalized_call.source_format}"
+    )
+```
+
+注意每家的字段名差异：Claude 用 `tool_use_id` 和 `content`，OpenAI 用 `call_id` 和 `output`。这一步本质上就是"根据来源格式选模板"。
+
+---
+
+## 七、上下文追加函数
+
+这个函数的目的很单纯：**把工具调用记录和工具结果记录加到 context 里。**
+
+```python
+def append_tool_interaction_to_context(
+    context: MutableSequence[Dict[str, Any]],
+    *,
+    call_envelope: Mapping[str, Any],
+    tool_result_envelope: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    updated = list(context)
+    updated.append({
+        "role": "assistant",
+        "type": "tool_call",
+        "content": dict(call_envelope),
+    })
+    updated.append({
+        "role": "tool",
+        "type": "tool_result",
+        "content": dict(tool_result_envelope),
+    })
+    return updated
+```
+
+这里最核心的思想是：
+
+- 模型不会自动记住工具调用过程
+- 宿主运行时必须自己维护上下文
+- 下一轮要把这些记录再喂回去
+
+本质上，这个函数就是"更新对话状态"。
+
+---
+
+## 八、总调度函数 dispatch_tool_call
+
+建议最后写，因为它依赖前面的所有组件。它按顺序串起整条链路：
+
+<div class="td-demo">
+  <div class="td-demo-title">交互演示：dispatch_tool_call 执行流程</div>
+  <span class="td-demo-subtitle">点击"下一步"逐步观察 dispatch 的每个阶段</span>
+  <div style="text-align: center; margin: 0.75rem 0;">
+    <button id="dp-prev" class="td-btn td-btn-secondary" style="margin: 0.2rem;">上一步</button>
+    <button id="dp-next" class="td-btn td-btn-primary" style="margin: 0.2rem;">下一步</button>
+    <button id="dp-reset" class="td-btn td-btn-secondary" style="margin: 0.2rem;">重置</button>
+  </div>
+  <div id="dp-display" class="td-code" style="min-height: 200px; font-size: 0.78rem;"></div>
+  <div id="dp-info" class="td-step-info"></div>
+</div>
+
+```python
+def dispatch_tool_call(
+    call_envelope: Mapping[str, Any],
+    *,
+    context: Optional[MutableSequence[Dict[str, Any]]] = None,
+    registry: Optional[Dict[str, Handler]] = None,
+) -> Dict[str, Any]:
+
+    # 第一步：normalize
+    normalized = normalize_tool_call(call_envelope)
+
+    # 第二步：拿 registry
+    active_registry = dict(registry or TOOL_REGISTRY)
+
+    # 第三步：查 handler
+    handler = active_registry.get(normalized.dispatch_key)
+    if handler is None:
+        raise EnvelopeDispatchError(
+            f"no handler registered for {normalized.dispatch_key!r}"
+        )
+
+    # 第四步：执行 handler
+    try:
+        output = handler(**normalized.arguments)
+    except TypeError as exc:
+        raise EnvelopeDispatchError(
+            f"handler argument mismatch for {normalized.dispatch_key}: {exc}"
+        ) from exc
+
+    # 第五步：检查返回值
+    if not isinstance(output, dict):
+        raise EnvelopeDispatchError(
+            f"handler {normalized.dispatch_key!r} returned "
+            f"{type(output).__name__}, expected dict"
+        )
+
+    # 第六步：构造结果 envelope
+    tool_result_envelope = build_tool_result_envelope(normalized, output)
+
+    # 第七步：更新上下文
+    updated_context = append_tool_interaction_to_context(
+        context or [],
+        call_envelope=call_envelope,
+        tool_result_envelope=tool_result_envelope,
+    )
+
+    # 第八步：返回完整结果
+    return {
+        "normalized_call": {
+            "source_format": normalized.source_format,
+            "call_id": normalized.call_id,
+            "dispatch_key": normalized.dispatch_key,
+            "arguments": normalized.arguments,
+        },
+        "tool_output": output,
+        "tool_result_envelope": tool_result_envelope,
+        "updated_context": updated_context,
+    }
+```
+
+注意这里专门抓 `TypeError`——最常见问题就是参数名不匹配、缺参数、多参数。返回的不只是最终结果，还包括调试很有用的中间信息。
+
+---
+
+## 九、设计哲学：为什么要 normalize
+
+normalize 的目的不只是"让下游都接收统一参数"。更准确地说，**normalize 是为了把"协议差异"挡在系统边界之外。**
+
+<div class="td-demo">
+  <div class="td-demo-title">交互演示：边界隔离架构</div>
+  <span class="td-demo-subtitle">点击每一层，理解为什么要在入口统一格式</span>
+  <svg id="arch-svg" viewBox="0 0 720 280" style="width: 100%; max-height: 280px;"></svg>
+  <div id="arch-info" class="td-step-info"></div>
+</div>
+
+### 9.1 边界隔离：把外部复杂性挡在入口
+
+外部世界是脏的、变动的、不统一的。内部系统应该是干净的、稳定的、可控的。
+
+如果不做 normalize，协议差异会一路渗透到整个系统：dispatch 判断一次、日志判断一次、回包判断一次、context 更新又判断一次。以后加新 provider 还要全系统改。
+
+> **把不稳定、异构、供应商相关的复杂性，收口在系统入口。** 这就是"边界吸收复杂度"。
+
+### 9.2 先统一语义，再执行逻辑
+
+normalize 不是在做业务执行，它是在做**语义提纯**。三种信封虽然字段名不同，但语义一样——都在表达"调用哪个工具，参数是什么"。
+
+```python
+# 这三个底层表达的都是同一件事：
+{"function": {"name": "snapshot_before_edit", "arguments": {...}}}
+{"name": "snapshot_before_edit", "input": {...}}
+{"recipient_name": "snapshot_before_edit", "parameters": {...}}
+```
+
+> **不要让系统围着表示形式转，而要围着语义转。** 这就是 representation → semantics 的转换。
+
+### 9.3 把变化点集中起来
+
+Provider 格式是高变化点。今天支持 OpenAI、Claude、Codex，明天可能加 Gemini、Mistral。
+
+normalize 把所有"协议差异"集中在一个函数里。以后新增 provider，只改 `normalize_tool_call()` 和 `build_tool_result_envelope()`，系统主体基本不动。
+
+| 没有 normalize | 有 normalize |
+|:--------------|:------------|
+| 协议判断散落 everywhere | 协议判断集中在适配层 |
+| 新增 provider 改 N 个文件 | 新增 provider 改 2 个函数 |
+| 主流程依赖具体协议 | 主流程依赖稳定抽象 |
+
+### 9.4 内部先定义自己的世界观
+
+`NormalizedToolCall` 在说：**"我这个运行时不想用厂商的世界观组织代码，我要先定义自己的世界观。"**
+
+你不是"围着 OpenAI 的 schema 写代码"，而是"先定义自己的内部抽象，再把 OpenAI 映射进来"。
+
+- 外部协议只是输入材料
+- 内部模型才是系统真正依赖的抽象
+
+### 9.5 尽早校验，尽早失败
+
+normalize 让错误更早暴露。如果不在 normalize 里拦住格式错误，后面执行阶段才爆炸，错误会更模糊。
+
+- 错误位置明确
+- 错误类型清晰
+- 后面业务逻辑可以更简单
+
+这叫 **fail fast**。
+
+### 9.6 类比编译器前端
+
+不同语言写法不同，但编译器不会一路拿源码文本往后传——它会先转成 AST。后面的优化器和执行器面对的是统一中间表示（IR），而不是原始文本。
+
+| 编译器 | 本模块 |
+|:------|:------|
+| 输入语言 | Provider envelope |
+| AST / IR | `NormalizedToolCall` |
+| 执行器 | Dispatcher |
+
+> **先把多样输入压缩成单一中间表示，再驱动后续流程。** 输入多态，内部单态。
+
+---
+
+## 十、镜像设计：build_tool_result_envelope 的对称哲学
+
+`build_tool_result_envelope` 是 normalize 的**镜像动作**：
+
+- `normalize_tool_call` 是 **外部 → 内部**
+- `build_tool_result_envelope` 是 **内部 → 外部**
+
+两者放在一起，构成一个完整的边界设计。
+
+### 10.1 为什么结果回包也不直接返回 dict
+
+handler 返回的只是"内部结果"，不是"协议结果"。比如 handler 可能只返回 `{"ok": True, "snapshot_path": "..."}`——这只是业务数据。但模型侧真正期待的，还包括：这是哪次调用的结果、对应哪个工具、字段名要符合哪个 provider 的协议。
+
+**业务结果本身差不多，但协议包装不同。** 所以这里的哲学和 normalize 完全对称：
+
+> 内部执行逻辑不应该关心外部协议怎么收结果。
+
+### 10.2 双向适配模型
+
+```
+外部请求 → 适配输入 → 内部执行 → 适配输出 → 外部结果
+```
+
+真正稳定的只有中间那一层：`NormalizedToolCall` → `handler(**arguments)` → `output: dict`。输入和输出都可能因 provider 而变化，但中间层最好不要变。
+
+> **把不稳定性留在边界，把稳定性留在核心。**
+
+### 10.3 六边形架构 / Ports and Adapters
+
+虽然这个例子很小，但它很像六边形架构的思想。内部核心只关心"调用哪个能力、参数是什么、执行结果是什么"，而不关心"请求是 OpenAI 发来的还是 Claude 发来的、结果回包要叫 `output` 还是 `content`"。
+
+| 角色 | 对应组件 |
+|:-----|:---------|
+| 输入适配器 | `normalize_tool_call` |
+| 输出适配器 | `build_tool_result_envelope` |
+| 核心编排器 | `dispatch_tool_call` |
+| 能力实现层 | `TOOL_REGISTRY` + handlers |
+
+### 10.4 边界进出对称
+
+如果只做输入适配、不做输出适配，核心编排逻辑就会被 provider 细节污染——你可能会在 `dispatch_tool_call` 里写 `if source_format == "openai": ...`。最漂亮的做法是：**入口统一一次，出口统一一次，中间主流程只处理内部对象。**
+
+### 10.5 维护抽象纯度
+
+如果 handler 必须自己返回 OpenAI/Claude/Codex 风格结果，业务 handler 就已经知道外部协议了。一旦换 provider，所有 handler 都可能要改。
+
+> **业务逻辑不应该依赖传输协议。** handler 只应该表达业务事实——是否成功、生成了什么文件、输出是什么数据。至于封装和投递，那是 runtime 的事。
+
+这和 Web 开发里一样：service 层返回业务对象，controller 层决定 HTTP status、JSON 结构。不要把 controller 的事塞进 service。
+
+### 10.6 source_format 的克制设计
+
+内部虽然不该被 provider 细节污染，但 runtime 仍然需要知道"最后要翻译成哪种外部格式"。所以 `source_format` 的设计很有意思：
+
+- 它不是给业务 handler 用的
+- 它是给边界适配层用的
+- 不让整个系统到处知道 provider 是谁，但也不完全丢掉必要的路由信息
+
+> **保留必要来源信息，但不让它进入业务语义层。**
+
+### 10.7 协议/语义解耦
+
+- **协议**：字段名、消息格式、信封形状
+- **语义**：调用哪个工具、参数是什么、结果是什么
+
+normalize 和 result envelope 两层一起实现的，就是：**让协议变化不影响语义层，让语义层稳定存在。**
+
+### 10.8 可测试性收益
+
+现在你可以分别测：
+
+| 测试对象 | 验证内容 |
+|:---------|:---------|
+| normalize | 给 OpenAI/Claude/Codex 输入，看是否都变成同一个内部对象 |
+| dispatch | 给合理的内部路径，看 handler 是否被正确执行 |
+| result envelope | 给统一 output，看是否能正确还原为不同 provider 格式 |
+
+系统被切成了几个可独立验证的部件。这不仅是"架构优雅"，还有非常实际的收益：更好测、更好扩展、更好 debug、更好替换 provider。
+
+---
+
+## 十一、生产级实现：cc-switch 的 Rust 双向转换
+
+上面是 Python 的实现。在真实生产环境中，[cc-switch](https://github.com/farion1231/cc-switch)（一个跨平台的 Claude Code / Codex / Gemini CLI 配置管理工具）的代理层用 Rust 实现了**完全相同的双向适配模式**。
+
+### Adapter Trait：统一供应商接口
+
+cc-switch 定义了一个 `ProviderAdapter` trait，所有供应商适配器都需要实现：
+
+```rust
+pub trait ProviderAdapter: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn extract_base_url(&self, provider: &Provider) -> Result<String, ProxyError>;
+    fn extract_auth(&self, provider: &Provider) -> Option<AuthInfo>;
+    fn build_url(&self, base_url: &str, endpoint: &str) -> String;
+    fn add_auth_headers(&self, request: RequestBuilder, auth: &AuthInfo) -> RequestBuilder;
+
+    // 双向转换接口
+    fn needs_transform(&self, _provider: &Provider) -> bool { false }
+    fn transform_request(&self, body: Value, _provider: &Provider) -> Result<Value, ProxyError> {
+        Ok(body)  // 默认透传
+    }
+    fn transform_response(&self, body: Value) -> Result<Value, ProxyError> {
+        Ok(body)  // 默认透传
+    }
+}
+```
+
+注意 `transform_request` 和 `transform_response` 就是入口适配和出口适配，默认是透传（identity），只在需要格式转换时才覆盖。
+
+### Anthropic → OpenAI：请求转换（normalize 方向）
+
+cc-switch 在 `transform.rs` 中实现了 Anthropic 格式到 OpenAI 格式的请求转换。关键逻辑是工具调用的转换：
+
+```rust
+// Claude 的 tool_use → OpenAI 的 tool_calls
+"tool_use" => {
+    let id = block.get("id").and_then(|i| i.as_str()).unwrap_or("");
+    let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
+    let input = block.get("input").cloned().unwrap_or(json!({}));
+    tool_calls.push(json!({
+        "id": id,
+        "type": "function",
+        "function": {
+            "name": name,
+            // 注意：OpenAI 的 arguments 必须是 JSON 字符串
+            "arguments": serde_json::to_string(&input).unwrap_or_default()
+        }
+    }));
+}
+```
+
+这里能看到和 Python 实现完全对应的问题：Claude 的 `input` 是 dict，但 OpenAI 的 `arguments` 必须是 JSON 字符串——这就是 `_parse_arguments` 要解决的那个差异。
+
+### OpenAI → Anthropic：响应转换（build_result 方向）
+
+```rust
+// OpenAI 的 tool_calls → Claude 的 tool_use
+if let Some(tool_calls) = message.get("tool_calls").and_then(|t| t.as_array()) {
+    for tc in tool_calls {
+        let func = tc.get("function").unwrap_or(&empty_obj);
+        let args_str = func.get("arguments")
+            .and_then(|a| a.as_str())
+            .unwrap_or("{}");
+        let input: Value = serde_json::from_str(args_str).unwrap_or(json!({}));
+
+        content.push(json!({
+            "type": "tool_use",
+            "id": tc.get("id").and_then(|i| i.as_str()).unwrap_or(""),
+            "name": func.get("name").and_then(|n| n.as_str()).unwrap_or(""),
+            "input": input  // JSON 字符串 → dict
+        }));
+    }
+}
+```
+
+**这就是 normalize 和 build_result 的镜像关系在生产代码中的体现**——进来时把 dict 转成 JSON 字符串，出去时把 JSON 字符串解析回 dict。
+
+### 关键映射对照
+
+| Python 实现 | cc-switch Rust 实现 |
+|:-----------------|:------------------------|
+| `normalize_tool_call()` | `transform_request()` |
+| `build_tool_result_envelope()` | `transform_response()` |
+| `NormalizedToolCall` | Anthropic Messages API 格式（canonical form） |
+| `source_format` 字段 | `needs_transform()` + `get_api_format()` |
+| `TOOL_REGISTRY` | 上游 handler 路由 |
+| `_parse_arguments()` | `serde_json::from_str(args_str)` |
+
+### 设计一致性
+
+cc-switch 的实现验证了所有设计原则：
+
+1. **边界进出对称**——`transform_request` 和 `transform_response` 成对出现
+2. **默认透传**——只在 `needs_transform()` 返回 true 时才转换
+3. **适配器模式**——`ProviderAdapter` trait 是统一接口，`ClaudeAdapter` 是具体实现
+4. **变化点集中**——新增 provider（如 Gemini）只需实现新 adapter，不影响核心转发逻辑
+
+---
+
+## 十二、为什么用 Registry 做 Late Binding
+
+很多人第一反应是用 if/elif 分发：
+
+```python
+# 反面示例
+if dispatch_key == "snapshot_before_edit":
+    output = snapshot_before_edit(**args)
+elif dispatch_key == "exec_command":
+    output = exec_command(**args)
+elif dispatch_key == "apply_patch":
+    output = apply_patch(**args)
+# ...
+```
+
+这能跑，但它是**脚本思维**，不是 runtime 思维。
+
+### 字符串→函数的间接层
+
+Registry 的本质是一张**字符串到可调用对象的映射表**：
+
+```python
+TOOL_REGISTRY: Dict[str, Handler] = {
+    "snapshot_before_edit": snapshot_before_edit,
+    "functions.exec_command": exec_command,
+    # ...
+}
+```
+
+这张表把"协议里的工具名"和"真正要执行的 Python 函数"解耦了。
+
+### if/elif vs Registry 的关键差异
+
+| | if/elif 分发 | Registry |
+|:-----|:-------------|:---------|
+| **新增工具** | 改 dispatch 函数代码 | 往表里加一行 |
+| **测试** | 需要 mock 整个 dispatch 函数 | 直接传入自定义 registry |
+| **运行时扩展** | 不可能 | 可以动态注册/注销 |
+| **协议名和函数名** | 强耦合 | 完全解耦 |
+| **谁决定绑定关系** | dispatch 函数内部 | 调用方 / 配置层 |
+
+### 为什么说 Registry 更像 Runtime
+
+if/elif 是**编译时决定**的——你写完代码，工具列表就固定了。Registry 是**运行时决定**的——调用方可以传入自定义 registry，可以动态增删工具。
+
+这也是为什么 `dispatch_tool_call` 接受 `registry` 参数：
+
+```python
+def dispatch_tool_call(
+    call_envelope,
+    *,
+    registry: Optional[Mapping[str, Handler]] = None,  # 外部可注入
+):
+    active_registry = dict(registry or TOOL_REGISTRY)
+```
+
+测试时传一个只有一个 handler 的 registry，生产时用默认的。这种灵活性用 if/elif 做不到。
+
+### 更深一层：Late Binding 是一种依赖反转
+
+dispatch 不再依赖具体的 handler 实现，而是依赖 registry 接口。handler 通过注册自己来"插入"系统。这就是 IoC 容器的最小实现。
+
+---
+
+## 十三、为什么 Handler 统一要求返回 Dict
+
+如果有的 handler 返回字符串，有的返回 dict，有的返回 list，外层包装逻辑会越来越混乱。统一返回 dict 是一种**契约设计**。
+
+### 对 build_tool_result_envelope 的意义
+
+`build_tool_result_envelope` 直接把 handler 的返回值塞进 `output` / `content` 字段。如果返回类型不确定，这个函数就需要一堆类型判断。统一成 dict 后：
+
+```python
+# 永远成立，不需要类型判断
+tool_result_envelope = build_tool_result_envelope(normalized, output)
+```
+
+### 对调试的意义
+
+dict 可以直接 `json.dumps`，可以加字段、可以嵌套。字符串做不到这些。dict 是 JSON 世界里最自然的"业务结果容器"。
+
+### 对 handler 的约束
+
+这也是对 handler 作者的一种指引——你的返回值应该是结构化的业务数据，不是一段文本。如果确实要返回文本，包成 `{"text": "..."}` 就行。
+
+```python
+# dispatch 里的强制检查
+if not isinstance(output, dict):
+    raise EnvelopeDispatchError(
+        f"handler {normalized.dispatch_key!r} returned "
+        f"{type(output).__name__}, expected dict"
+    )
+```
+
+---
+
+## 十四、为什么 append_tool_interaction_to_context 单独拆出来
+
+很容易把上下文追加逻辑直接写在 `dispatch_tool_call` 里。但单独拆出来有三个好处：
+
+### 1）职责清晰
+
+dispatch 负责"执行"，append 负责"记录"。这两个关注点不同——执行可能失败，但已经成功的调用仍然需要记录。
+
+### 2）可独立调用
+
+有些场景下你可能不想走完整 dispatch 流程，但仍然需要手动往 context 里追加记录（比如重放历史记录、导入外部日志）。
+
+### 3）解释了一个容易被忽略的事实
+
+**模型不会自动记住工具调用过程。** 大模型 API 是无状态的——每次调用都需要把完整对话历史传过去。宿主 runtime 必须自己维护 context，在下一轮调用前把工具调用和结果喂回去。
+
+这个函数的存在本身就在提醒你：**上下文管理是 runtime 的责任，不是模型的。**
+
+---
+
+## 十五、dispatch_tool_call 为什么是编排器
+
+`dispatch_tool_call` 自己几乎不做任何"实质工作"。它做的是：
+
+1. 调用 `normalize_tool_call`
+2. 查 registry
+3. 调用 handler
+4. 调用 `build_tool_result_envelope`
+5. 调用 `append_tool_interaction_to_context`
+6. 组装返回值
+
+**它是一个纯粹的编排函数（orchestrator）。**
+
+### 为什么不把所有逻辑揉进一个函数
+
+如果把 normalize、dispatch、wrap、append 全写在一个函数里，你会得到一个 100+ 行的巨型函数，里面既有协议识别、又有 handler 执行、又有结果包装、又有上下文管理。
+
+问题是：
+
+- **改一处影响全部**——修改 normalize 逻辑可能意外影响 context 追加
+- **无法单独测试**——想测 normalize 必须 mock handler，想测 handler 必须构造完整 envelope
+- **无法单独复用**——只想 normalize 而不 dispatch？做不到
+
+编排器模式的好处是：**每个子函数可以独立理解、独立测试、独立复用。** 编排器只负责把它们串起来。
+
+### 编排器的返回值设计
+
+注意 dispatch 返回的不只是最终结果，而是完整的中间状态：
+
+```python
+return {
+    "normalized_call": {...},       # normalize 的输出
+    "tool_output": output,          # handler 的原始输出
+    "tool_result_envelope": {...},  # 包装后的结果
+    "updated_context": [...],       # 更新后的上下文
+}
+```
+
+这让调用方可以拿到任何一步的中间产物，方便调试、日志、审计。
+
+---
+
+## 十六、错误处理哲学
+
+这份代码里的错误处理不是随意的，有三条主线：
+
+### Fail Fast：尽早失败
+
+normalize 阶段就拦住格式错误——不要让一个格式不对的 envelope 一路传到 handler 执行阶段才爆炸。越早失败，错误信息越精确。
+
+```python
+# normalize 里的早期校验
+if not isinstance(fn, dict):
+    raise EnvelopeDispatchError(
+        "openai-style function_call envelope requires a 'function' object"
+    )
+```
+
+### 边界校验：在系统入口做结构验证
+
+normalize 不仅提取字段，还校验结构。这意味着**过了 normalize 之后的代码，可以安全地假设数据是合法的**。
+
+这就是"在边界做验证，在内部做信任"的设计。
+
+### 类型约束：用运行时检查弥补动态语言的缺陷
+
+Python 是动态类型语言，没有编译器帮你检查参数类型。所以代码里有多处显式类型检查：
+
+| 检查位置 | 检查内容 | 防止什么 |
+|:---------|:---------|:---------|
+| `_parse_arguments` | value 必须是 dict 或 str | 非法参数类型 |
+| `normalize_tool_call` | parameters/input 必须是 dict | 上游传了非对象参数 |
+| `dispatch_tool_call` | handler 返回值必须是 dict | handler 作者返回了非标准类型 |
+| `dispatch_tool_call` | 捕获 TypeError | 参数名不匹配 |
+
+这些检查在静态类型语言里是编译器的活，在 Python 里就是 runtime 的活。
+
+---
+
+## 十七、如果演化成生产级 Runtime
+
+目前的实现是一个完整但最小化的版本。如果要投入生产，还需要加这些层：
+
+| 能力 | 为什么需要 | 实现思路 |
+|:-----|:-----------|:---------|
+| **日志** | 追踪每次工具调用的 input/output，排查问题 | normalize 后记录 dispatch_key + call_id，handler 执行后记录耗时和结果摘要 |
+| **权限控制** | 不是所有工具都允许被调用 | 在 dispatch 里查 registry 之后、执行 handler 之前，检查 `allowed_tools` 白名单 |
+| **Schema 校验** | 确保 arguments 符合工具的参数 schema | normalize 后用 JSON Schema 校验 `normalized.arguments`，不合法则返回 agent-friendly 错误 |
+| **重试** | handler 执行可能因网络等原因暂时失败 | 在 dispatch 里包装 retry 逻辑，注意幂等性 |
+| **超时** | handler 不能无限期运行 | 用 `asyncio.wait_for` 或 `signal.alarm` 给 handler 加执行时限 |
+| **幂等** | 重试时不能重复执行有副作用的操作 | handler 接受 `call_id` 作为幂等键，重复调用返回缓存结果 |
+| **审计** | 合规需要，记录谁在什么时候调用了什么工具 | 在 `append_tool_interaction_to_context` 同时写审计日志 |
+| **沙箱** | 工具执行不能损害宿主系统 | handler 在 Docker/gVisor/E2B 容器中执行 |
+
+这些能力的加入不需要改变核心架构——normalize → dispatch → wrap → append 的主链路保持不变，新增的能力以**中间件**的形式插入链路的各个阶段。这也是为什么把系统拆成独立函数很重要：每个函数都是一个可以插入中间件的接缝。
+
+---
+
+## 十八、最推荐的实现顺序
+
+如果你真的要从零自己敲，按这个顺序：
+
+### 第 1 轮：最小可运行版本
+
+先只支持一种格式（比如 OpenAI）：
+
+1. `EnvelopeDispatchError`
+2. `NormalizedToolCall`
+3. `_parse_arguments`
+4. `normalize_tool_call()` 只写 OpenAI 分支
+5. `build_tool_result_envelope()` 只写 OpenAI 分支
+6. `dispatch_tool_call()`
+7. 一个最简单的 `TOOL_REGISTRY`
+8. 一个假的 handler 测试
+
+**先确保最简单链路能跑通：**
+
+```python
+class EnvelopeDispatchError(Exception):
+    pass
+
+@dataclass
+class NormalizedToolCall:
+    source_format: str
+    call_id: str
+    dispatch_key: str
+    arguments: Dict[str, Any]
+    raw_envelope: Dict[str, Any]
+
+def normalize_tool_call(envelope):
+    if envelope.get("type") == "function_call":
+        fn = envelope["function"]
+        return NormalizedToolCall(
+            source_format="openai",
+            call_id=envelope.get("id", "call_xxx"),
+            dispatch_key=fn["name"],
+            arguments=(
+                fn["arguments"]
+                if isinstance(fn["arguments"], dict)
+                else json.loads(fn["arguments"])
+            ),
+            raw_envelope=dict(envelope),
+        )
+    raise EnvelopeDispatchError("unsupported envelope")
+
+def build_tool_result_envelope(normalized_call, output):
+    if normalized_call.source_format == "openai":
+        return {
+            "type": "function_call_output",
+            "call_id": normalized_call.call_id,
+            "name": normalized_call.dispatch_key,
+            "output": output,
+        }
+    raise EnvelopeDispatchError("unsupported source format")
+
+def dispatch_tool_call(call_envelope, registry):
+    normalized = normalize_tool_call(call_envelope)
+    handler = registry.get(normalized.dispatch_key)
+    if handler is None:
+        raise EnvelopeDispatchError("handler not found")
+    output = handler(**normalized.arguments)
+    return build_tool_result_envelope(normalized, output)
+```
+
+### 第 2 轮：补 Claude 分支
+
+把 Claude 分支加进 `normalize_tool_call()` 和 `build_tool_result_envelope()`。
+
+### 第 3 轮：补 Codex 分支
+
+同样补进去。
+
+### 第 4 轮：补 context 更新逻辑
+
+先前可以不加 `append_tool_interaction_to_context()`，确认 dispatch 正常后再补上下文管理。
+
+### 第 5 轮：补 demo 和 `__main__`
+
+最后再写调试代码：`_demo_context`、`_demo_call`、`_demo_output`、`if __name__ == "__main__":`。
+
+---
+
+## 十九、最容易犯的 5 个错误
+
+### 1）在 dispatch 阶段再去判断 provider 格式
+
+这是最常见错误。正确做法：**先 normalize，后面全都只处理统一格式。**
+
+### 2）不校验 arguments 类型
+
+尤其 OpenAI 风格里 `arguments` 可能是字符串 JSON，不能直接当 dict 用。
+
+### 3）handler 返回值不统一
+
+如果有的 handler 返回字符串，有的返回 dict，外层包装会越来越乱。**统一返回 dict。**
+
+### 4）把 registry 写死在 dispatch 里
+
+允许传入 `registry` 参数，测试时非常方便。
+
+### 5）上下文更新和工具执行混在一起
+
+拆开了清晰很多——执行归执行，上下文归上下文。
+
+---
+
+## 二十、为什么这份代码的分层是合理的
+
+### 职责分离
+
+- `normalize_tool_call` 只管协议
+- `dispatch_tool_call` 只管分发
+- `TOOL_REGISTRY` 只管绑定
+
+### 标准化对象的抽象
+
+`NormalizedToolCall` 非常关键。没有它，后面的代码就会一直判断各种 provider 格式。
+
+### handler 输出强制约束成 dict
+
+让结果包装逻辑非常稳定，不容易出现混乱类型。
+
+### 保留 raw_envelope
+
+日常执行只依赖标准化字段，调试出问题时还能看原始 envelope。这是"抽象但不失真"的设计。
+
+---
+
+## 二十一、完整代码
+
+<details class="td-collapsible">
+<summary>点击展开完整代码（单文件可独立运行）</summary>
+
+```python
+#!/usr/bin/env python3
+"""Dispatch demo for tool call envelopes and tool result envelopes.
+
+This module demonstrates a minimal host runtime that:
+1. receives a provider-style or Codex-style tool call envelope
+2. normalizes it into a dispatch key plus arguments
+3. looks up a real local handler
+4. executes the handler
+5. wraps the return value into a tool result envelope
+6. appends the interaction to conversation context
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Mapping, MutableSequence, Optional
+
+# ── Mock Handlers ──────────────────────────────────────────────
+
+def exec_command(**kwargs: Any) -> Dict[str, Any]:
+    return {"ok": True, "command_executed": kwargs.get("cmd"), "output": "Mock output"}
+
+def write_stdin(**kwargs: Any) -> Dict[str, Any]:
+    return {"ok": True, "chars_written": kwargs.get("chars")}
+
+def apply_patch(patch_text: str, **kwargs: Any) -> Dict[str, Any]:
+    return {"ok": True, "patch_applied": True, "patch_length": len(patch_text)}
+
+def view_image(**kwargs: Any) -> Dict[str, Any]:
+    return {"ok": True, "path": kwargs.get("path"), "format": "mock_png"}
+
+def snapshot_before_edit(
+    file_path: str,
+    *,
+    snapshot_root: Optional[str] = None,
+    workspace_root: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "file_path": file_path,
+        "snapshot_path": f"{snapshot_root or '/tmp'}/{uuid.uuid4().hex[:6]}_{Path(file_path).name}",
+        "message": "This is a mock snapshot function.",
+    }
+
+def restore_snapshot(
+    snapshot_path: str,
+    file_path: str,
+    *,
+    workspace_root: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {"ok": True, "restored_from": snapshot_path, "target_file": file_path}
+
+def edit_file_with_validation(**kwargs: Any) -> Dict[str, Any]:
+    return {"ok": True, "file_edited": kwargs.get("file_path"), "validation_passed": True}
+
+
+# ── Exception ──────────────────────────────────────────────────
+
+class EnvelopeDispatchError(Exception):
+    """Raised when a tool call envelope cannot be normalized or dispatched."""
+
+
+# ── Canonical Form ─────────────────────────────────────────────
+
+@dataclass
+class NormalizedToolCall:
+    source_format: str          # openai / claude / codex
+    call_id: str                # 回包关联用
+    dispatch_key: str           # handler 查找键
+    arguments: Dict[str, Any]   # 已解析参数
+    raw_envelope: Dict[str, Any]  # 原始信封，便于调试
+
+
+# ── Registry ───────────────────────────────────────────────────
+
+Handler = Callable[..., Dict[str, Any]]
+
+TOOL_REGISTRY: Dict[str, Handler] = {
+    "functions.exec_command": exec_command,
+    "functions.write_stdin": write_stdin,
+    "functions.apply_patch": apply_patch,
+    "functions.view_image": view_image,
+    "snapshot_before_edit": snapshot_before_edit,
+    "restore_snapshot": restore_snapshot,
+    "edit_file_with_validation": edit_file_with_validation,
+}
+
+
+# ── Helpers ────────────────────────────────────────────────────
+
+def _generated_call_id(prefix: str = "call") -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
+
+def _parse_arguments(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        parsed = json.loads(value)
+        if not isinstance(parsed, dict):
+            raise EnvelopeDispatchError(
+                "function.arguments JSON must decode to an object"
+            )
+        return parsed
+    raise EnvelopeDispatchError(
+        f"tool arguments must be object or JSON string, got {type(value).__name__}"
+    )
+
+
+# ── Input Adapter: normalize ───────────────────────────────────
+
+def normalize_tool_call(envelope: Mapping[str, Any]) -> NormalizedToolCall:
+    raw = dict(envelope)
+
+    # Codex 风格
+    if "recipient_name" in raw:
+        dispatch_key = raw["recipient_name"]
+        parameters = raw.get("parameters")
+        if not isinstance(parameters, dict):
+            raise EnvelopeDispatchError(
+                "codex envelope requires an object 'parameters' field"
+            )
+        call_id = str(
+            raw.get("call_id") or raw.get("id") or _generated_call_id("codex")
+        )
+        return NormalizedToolCall(
+            source_format="codex",
+            call_id=call_id,
+            dispatch_key=str(dispatch_key),
+            arguments=dict(parameters),
+            raw_envelope=raw,
+        )
+
+    # OpenAI 风格
+    if raw.get("type") == "function_call":
+        fn = raw.get("function")
+        if not isinstance(fn, dict):
+            raise EnvelopeDispatchError(
+                "openai-style function_call envelope requires a 'function' object"
+            )
+        if "name" not in fn or "arguments" not in fn:
+            raise EnvelopeDispatchError(
+                "openai-style function_call requires function.name and function.arguments"
+            )
+        call_id = str(raw.get("id") or _generated_call_id("openai"))
+        return NormalizedToolCall(
+            source_format="openai",
+            call_id=call_id,
+            dispatch_key=str(fn["name"]),
+            arguments=_parse_arguments(fn["arguments"]),
+            raw_envelope=raw,
+        )
+
+    # Claude 风格
+    if raw.get("type") == "tool_use":
+        if "name" not in raw or "input" not in raw:
+            raise EnvelopeDispatchError(
+                "claude-style tool_use requires name and input"
+            )
+        if not isinstance(raw["input"], dict):
+            raise EnvelopeDispatchError(
+                "claude-style tool_use input must be an object"
+            )
+        call_id = str(raw.get("id") or _generated_call_id("claude"))
+        return NormalizedToolCall(
+            source_format="claude",
+            call_id=call_id,
+            dispatch_key=str(raw["name"]),
+            arguments=dict(raw["input"]),
+            raw_envelope=raw,
+        )
+
+    raise EnvelopeDispatchError("unrecognized tool call envelope shape")
+
+
+# ── Output Adapter: build_result ───────────────────────────────
+
+def build_tool_result_envelope(
+    normalized_call: NormalizedToolCall,
+    output: Dict[str, Any],
+) -> Dict[str, Any]:
+
+    if normalized_call.source_format == "openai":
+        return {
+            "type": "function_call_output",
+            "call_id": normalized_call.call_id,
+            "name": normalized_call.dispatch_key,
+            "output": output,
+        }
+    if normalized_call.source_format == "claude":
+        return {
+            "type": "tool_result",
+            "tool_use_id": normalized_call.call_id,
+            "name": normalized_call.dispatch_key,
+            "content": output,
+        }
+    if normalized_call.source_format == "codex":
+        return {
+            "type": "tool_result",
+            "call_id": normalized_call.call_id,
+            "recipient_name": normalized_call.dispatch_key,
+            "output": output,
+        }
+    raise EnvelopeDispatchError(
+        f"unsupported source format: {normalized_call.source_format}"
+    )
+
+
+# ── Context Management ─────────────────────────────────────────
+
+def append_tool_interaction_to_context(
+    context: MutableSequence[Dict[str, Any]],
+    *,
+    call_envelope: Mapping[str, Any],
+    tool_result_envelope: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    updated = list(context)
+    updated.append({
+        "role": "assistant",
+        "type": "tool_call",
+        "content": dict(call_envelope),
+    })
+    updated.append({
+        "role": "tool",
+        "type": "tool_result",
+        "content": dict(tool_result_envelope),
+    })
+    return updated
+
+
+# ── Orchestrator ───────────────────────────────────────────────
+
+def dispatch_tool_call(
+    call_envelope: Mapping[str, Any],
+    *,
+    context: Optional[List[Dict[str, Any]]] = None,
+    registry: Optional[Mapping[str, Handler]] = None,
+) -> Dict[str, Any]:
+
+    normalized = normalize_tool_call(call_envelope)
+    active_registry = dict(registry or TOOL_REGISTRY)
+
+    handler = active_registry.get(normalized.dispatch_key)
+    if handler is None:
+        raise EnvelopeDispatchError(
+            f"no handler registered for {normalized.dispatch_key!r}"
+        )
+
+    try:
+        output = handler(**normalized.arguments)
+    except TypeError as exc:
+        raise EnvelopeDispatchError(
+            f"handler argument mismatch for {normalized.dispatch_key}: {exc}"
+        ) from exc
+
+    if not isinstance(output, dict):
+        raise EnvelopeDispatchError(
+            f"handler {normalized.dispatch_key!r} returned "
+            f"{type(output).__name__}, expected dict"
+        )
+
+    tool_result_envelope = build_tool_result_envelope(normalized, output)
+    updated_context = append_tool_interaction_to_context(
+        context or [],
+        call_envelope=call_envelope,
+        tool_result_envelope=tool_result_envelope,
+    )
+
+    return {
+        "normalized_call": {
+            "source_format": normalized.source_format,
+            "call_id": normalized.call_id,
+            "dispatch_key": normalized.dispatch_key,
+            "arguments": normalized.arguments,
+        },
+        "tool_output": output,
+        "tool_result_envelope": tool_result_envelope,
+        "updated_context": updated_context,
+    }
+
+
+# ── Demo ───────────────────────────────────────────────────────
+
+def _demo_context() -> List[Dict[str, Any]]:
+    return [
+        {"role": "system", "content": "You are a coding agent."},
+        {"role": "user", "content": "Create a snapshot before editing demo.py."},
+    ]
+
+def _demo_call() -> Dict[str, Any]:
+    return {
+        "id": "call_demo_snapshot",
+        "type": "function_call",
+        "function": {
+            "name": "snapshot_before_edit",
+            "arguments": {
+                "file_path": "/tmp/demo.py",
+                "snapshot_root": "/tmp/.snapshots-demo",
+                "workspace_root": "/tmp",
+            },
+        },
+    }
+
+if __name__ == "__main__":
+    result = dispatch_tool_call(_demo_call(), context=_demo_context())
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+```
+
+</details>
+
+---
+
+## 二十二、总结
+
+用一句最接地气的话解释：
+
+> **前台说话方式很多种，后台先配一个翻译，把意思翻成内部统一术语，再交给后厨做事。后厨不该知道这个单是英文下的还是中文下的——后厨只需要知道菜名、规格、桌号。这就是 normalize。**
+
+把它压缩成设计原则：
+
+| 原则 | 体现 |
+|:-----|:-----|
+| **输入多态，内部单态** | 外部允许多种格式，内部只认一种 |
+| **边界吸收复杂度** | 协议差异收口在 normalize |
+| **围着语义转，不围着表示转** | 提取"调用谁+参数"的统一语义 |
+| **变化点集中** | 新增 provider 只改适配层 |
+| **尽早失败** | normalize 阶段就拦住格式错误 |
+| **抽象但不失真** | NormalizedToolCall 保留 raw_envelope |
+| **边界进出对称** | normalize 进、build_result 出，双向适配保护内部核心 |
+
+这个 runtime 的真正世界观不是 OpenAI，不是 Claude，也不是 Codex。它真正的世界观是：**调用有一个标准内部表示，结果有一个标准内部表示，provider 只是边界上的一种方言。**
+
+> **在系统边界上吸收异构性，在系统内部维护单一真相。**
+
+---
+
+## References
+
+- [Anthropic: Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents)
+- [Anthropic: Building Effective Agents](https://www.anthropic.com/research/building-effective-agents)
+- [OpenAI: Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
+- [Claude API: Tool Use](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview)
+- [cc-switch: Cross-platform AI CLI Configuration Manager](https://github.com/farion1231/cc-switch) — 本文引用了其 Rust 代理层的双向格式转换实现
+
+<script>{`
+(function() {
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+  function C() {
+    var d = isDark();
+    return {
+      text: d ? '#e2e8f0' : '#334155',
+      muted: d ? '#94a3b8' : '#64748b',
+      primary: d ? '#7dd3fc' : '#3b82f6',
+      pLight: d ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981', sLight: d ? '#064e3b' : '#d1fae5',
+      warning: '#f59e0b', wLight: d ? '#78350f' : '#fef3c7',
+      danger: '#ef4444', dLight: d ? '#7f1d1d' : '#fee2e2',
+      purple: '#8b5cf6', purpleLight: d ? '#4c1d95' : '#ede9fe',
+      border: d ? '#334155' : '#e2e8f0',
+      node: d ? '#1e293b' : '#ffffff',
+      nodeStroke: d ? '#475569' : '#cbd5e1',
+      cardBg: d ? '#1e293b' : '#f8fafc',
+    };
+  }
+  function onTheme(fn) {
+    new MutationObserver(fn).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // ============ 1. Pipeline SVG ============
+  function initPipeline() {
+    var svg = document.getElementById('pipeline-svg');
+    var info = document.getElementById('pipeline-info');
+    if (!svg) return;
+
+    var stages = [
+      { label: 'Envelope', x: 10, desc: '接收原始工具调用信封，可能是 OpenAI、Claude 或 Codex 格式。这是整个链路的起点。' },
+      { label: 'Normalize', x: 130, desc: '识别信封来源格式，提取 dispatch_key、arguments、call_id，转成统一的 NormalizedToolCall 对象。' },
+      { label: 'Dispatch', x: 250, desc: '根据 dispatch_key 在 TOOL_REGISTRY 中查找对应的 handler 函数。' },
+      { label: 'Execute', x: 370, desc: '调用 handler(**arguments)，执行真实的本地函数，获取返回结果（dict）。' },
+      { label: 'Wrap', x: 490, desc: '根据 source_format 把执行结果重新包装成对应厂商的结果信封格式。' },
+      { label: 'Context', x: 610, desc: '把工具调用记录和结果记录追加到对话上下文，供下一轮 API 调用使用。' }
+    ];
+
+    function render(activeIdx) {
+      var c = C();
+      var h = '';
+      stages.forEach(function(s, i) {
+        var isActive = i === activeIdx;
+        var fill = isActive ? c.primary : c.node;
+        var stroke = isActive ? c.primary : c.nodeStroke;
+        var textFill = isActive ? '#ffffff' : c.text;
+        var w = 100, ht = 44, y = 38, r = 8;
+        h += '<rect x="' + s.x + '" y="' + y + '" width="' + w + '" height="' + ht + '" rx="' + r + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5" style="cursor:pointer" data-idx="' + i + '"/>';
+        h += '<text x="' + (s.x + w/2) + '" y="' + (y + ht/2 + 5) + '" text-anchor="middle" fill="' + textFill + '" font-size="12" font-weight="' + (isActive ? '700' : '500') + '" style="pointer-events:none">' + s.label + '</text>';
+        if (i < stages.length - 1) {
+          var ax = s.x + w + 4, ay = y + ht/2;
+          h += '<path d="M' + ax + ' ' + ay + ' L' + (ax + 18) + ' ' + ay + '" stroke="' + c.muted + '" stroke-width="1.5" marker-end="url(#td-arrow)"/>';
+        }
+      });
+      h = '<defs><marker id="td-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="' + c.muted + '"/></marker></defs>' + h;
+      svg.innerHTML = h;
+      info.innerHTML = activeIdx >= 0 ? '<strong>' + stages[activeIdx].label + '</strong>：' + stages[activeIdx].desc : '点击任意阶段查看详情。';
+    }
+
+    render(-1);
+    svg.addEventListener('click', function(e) {
+      var t = e.target.closest('[data-idx]');
+      if (t) render(parseInt(t.getAttribute('data-idx')));
+    });
+    onTheme(function() { render(-1); });
+  }
+
+  // ============ 2. Format Normalizer Demo ============
+  function initFormatDemo() {
+    var tabs = document.getElementById('fmt-tabs');
+    var inputEl = document.getElementById('fmt-input');
+    var outputEl = document.getElementById('fmt-output');
+    var infoEl = document.getElementById('fmt-info');
+    var normBtn = document.getElementById('fmt-normalize');
+    var resetBtn = document.getElementById('fmt-reset');
+    if (!tabs) return;
+
+    var formats = {
+      openai: {
+        input: JSON.stringify({
+          type: 'function_call',
+          id: 'call_abc123',
+          function: {
+            name: 'snapshot_before_edit',
+            arguments: '{"file_path": "/src/main.py"}'
+          }
+        }, null, 2),
+        normalized: {
+          source_format: 'openai',
+          call_id: 'call_abc123',
+          dispatch_key: 'snapshot_before_edit',
+          arguments: { file_path: '/src/main.py' },
+        },
+        note: 'OpenAI 风格：type=\\"function_call\\"，arguments 是 JSON 字符串，需要 _parse_arguments 解析。'
+      },
+      claude: {
+        input: JSON.stringify({
+          type: 'tool_use',
+          id: 'toolu_01XFG',
+          name: 'snapshot_before_edit',
+          input: { file_path: '/src/main.py' }
+        }, null, 2),
+        normalized: {
+          source_format: 'claude',
+          call_id: 'toolu_01XFG',
+          dispatch_key: 'snapshot_before_edit',
+          arguments: { file_path: '/src/main.py' },
+        },
+        note: 'Claude 风格：type=\\"tool_use\\"，input 已经是 dict，字段名是 name/input。'
+      },
+      codex: {
+        input: JSON.stringify({
+          recipient_name: 'snapshot_before_edit',
+          call_id: 'codex_9f3a',
+          parameters: { file_path: '/src/main.py' }
+        }, null, 2),
+        normalized: {
+          source_format: 'codex',
+          call_id: 'codex_9f3a',
+          dispatch_key: 'snapshot_before_edit',
+          arguments: { file_path: '/src/main.py' },
+        },
+        note: 'Codex 风格：用 recipient_name 标识工具，parameters 是参数对象。'
+      }
+    };
+
+    var currentFmt = 'openai';
+
+    function showFormat(fmt) {
+      currentFmt = fmt;
+      var btns = tabs.querySelectorAll('.td-tab');
+      btns.forEach(function(b) {
+        b.classList.toggle('td-tab-active', b.getAttribute('data-fmt') === fmt);
+      });
+      inputEl.textContent = formats[fmt].input;
+      outputEl.textContent = '点击 Normalize 查看结果...';
+      infoEl.innerHTML = formats[fmt].note;
+    }
+
+    tabs.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-fmt]');
+      if (btn) showFormat(btn.getAttribute('data-fmt'));
+    });
+
+    normBtn.addEventListener('click', function() {
+      var n = formats[currentFmt].normalized;
+      outputEl.innerHTML = '<span style="color:#10b981;font-weight:600;">NormalizedToolCall</span>\\n' + JSON.stringify(n, null, 2);
+      infoEl.innerHTML = '<strong style="color:#10b981;">Normalize 完成</strong>：三种格式产生了完全相同的 dispatch_key 和 arguments。下游代码只需要面对这一种结构。';
+    });
+
+    resetBtn.addEventListener('click', function() { showFormat(currentFmt); });
+    showFormat('openai');
+  }
+
+  // ============ 3. Dispatch Stepper Demo ============
+  function initDispatchStepper() {
+    var display = document.getElementById('dp-display');
+    var info = document.getElementById('dp-info');
+    var prevBtn = document.getElementById('dp-prev');
+    var nextBtn = document.getElementById('dp-next');
+    var resetBtn = document.getElementById('dp-reset');
+    if (!display) return;
+
+    var steps = [
+      {
+        title: '输入：原始 OpenAI 信封',
+        code: 'call_envelope = {\\n  "type": "function_call",\\n  "id": "call_abc123",\\n  "function": {\\n    "name": "snapshot_before_edit",\\n    "arguments": "{\\\\"file_path\\\\": \\\\"/src/main.py\\\\"}"\\n  }\\n}',
+        info: '起点：收到一个 OpenAI 格式的工具调用信封。注意 arguments 是 JSON 字符串。'
+      },
+      {
+        title: '第一步：normalize',
+        code: 'normalized = normalize_tool_call(call_envelope)\\n\\n# NormalizedToolCall(\\n#   source_format="openai",\\n#   call_id="call_abc123",\\n#   dispatch_key="snapshot_before_edit",\\n#   arguments={"file_path": "/src/main.py"},\\n#   raw_envelope={...}\\n# )',
+        info: '识别为 OpenAI 格式，JSON 字符串 arguments 被解析成 dict，生成统一的 NormalizedToolCall。'
+      },
+      {
+        title: '第二步：查 registry',
+        code: 'handler = active_registry.get("snapshot_before_edit")\\n# -> <function snapshot_before_edit at 0x...>',
+        info: '根据 dispatch_key 在注册表中查找对应的 handler 函数。'
+      },
+      {
+        title: '第三步：执行 handler',
+        code: 'output = handler(file_path="/src/main.py")\\n# -> {"success": True, "snapshot_id": "snap_001"}',
+        info: '用 **arguments 展开参数调用 handler。如果参数不匹配会抛 TypeError。'
+      },
+      {
+        title: '第四步：检查返回值',
+        code: 'isinstance(output, dict)  # True \\u2713\\n# 如果 handler 返回非 dict，这里会抛 EnvelopeDispatchError',
+        info: 'handler 返回值必须是 dict，保证后续包装逻辑的稳定性。'
+      },
+      {
+        title: '第五步：构造结果 envelope',
+        code: 'tool_result_envelope = {\\n  "type": "function_call_output",\\n  "call_id": "call_abc123",\\n  "name": "snapshot_before_edit",\\n  "output": {"success": True, "snapshot_id": "snap_001"}\\n}',
+        info: '因为 source_format 是 openai，所以用 OpenAI 的回包格式。如果是 Claude 会用 tool_result + tool_use_id。'
+      },
+      {
+        title: '第六步：更新上下文',
+        code: 'updated_context = [\\n  ...existing_context,\\n  {"role": "assistant", "type": "tool_call", "content": {...}},\\n  {"role": "tool", "type": "tool_result", "content": {...}}\\n]',
+        info: '把调用记录和结果记录追加到 context，下一轮 API 调用时喂回去。'
+      },
+      {
+        title: '最终返回',
+        code: 'return {\\n  "normalized_call": {source_format, call_id, dispatch_key, arguments},\\n  "tool_output": {"success": True, "snapshot_id": "snap_001"},\\n  "tool_result_envelope": {...},\\n  "updated_context": [...]\\n}',
+        info: '返回完整结果，包含中间信息，便于调试。整条链路完成。'
+      }
+    ];
+
+    var step = 0;
+
+    function render() {
+      var s = steps[step];
+      display.innerHTML = '<span style="font-weight:700;color:hsl(var(--primary));">[' + (step + 1) + '/' + steps.length + '] ' + s.title + '</span>\\n\\n' + s.code;
+      info.innerHTML = s.info;
+      prevBtn.disabled = step === 0;
+      nextBtn.disabled = step === steps.length - 1;
+    }
+
+    nextBtn.addEventListener('click', function() { if (step < steps.length - 1) { step++; render(); } });
+    prevBtn.addEventListener('click', function() { if (step > 0) { step--; render(); } });
+    resetBtn.addEventListener('click', function() { step = 0; render(); });
+    render();
+  }
+
+  // ============ 4. Architecture SVG ============
+  function initArchSvg() {
+    var svg = document.getElementById('arch-svg');
+    var info = document.getElementById('arch-info');
+    if (!svg) return;
+
+    var layers = [
+      { label: 'OpenAI', y: 30, color: 'blue', desc: 'OpenAI 格式：type=\\"function_call\\"，function.name + function.arguments（JSON 字符串）' },
+      { label: 'Claude', y: 100, color: 'purple', desc: 'Claude 格式：type=\\"tool_use\\"，name + input（dict）' },
+      { label: 'Codex', y: 170, color: 'yellow', desc: 'Codex 格式：recipient_name + parameters（dict）' }
+    ];
+
+    function render(activeIdx) {
+      var c = C();
+      var h = '';
+
+      // 色盘
+      var colors = {
+        blue: { fill: c.pLight, stroke: c.primary, text: c.primary },
+        purple: { fill: c.purpleLight, stroke: c.purple, text: c.purple },
+        yellow: { fill: c.wLight, stroke: c.warning, text: c.warning },
+        green: { fill: c.sLight, stroke: c.success, text: c.success }
+      };
+
+      // 外部信封
+      layers.forEach(function(l, i) {
+        var cl = colors[l.color];
+        var isActive = i === activeIdx;
+        var opacity = isActive ? '1' : (activeIdx >= 0 ? '0.4' : '0.85');
+        h += '<g style="cursor:pointer;opacity:' + opacity + '" data-idx="' + i + '">';
+        h += '<rect x="20" y="' + l.y + '" width="160" height="50" rx="8" fill="' + cl.fill + '" stroke="' + cl.stroke + '" stroke-width="' + (isActive ? 2 : 1.5) + '"/>';
+        h += '<text x="100" y="' + (l.y + 30) + '" text-anchor="middle" fill="' + cl.text + '" font-size="13" font-weight="600">' + l.label + ' Envelope</text>';
+        h += '</g>';
+        // arrow to normalize
+        h += '<path d="M185 ' + (l.y + 25) + ' L260 130" stroke="' + c.muted + '" stroke-width="1" stroke-dasharray="4 3" fill="none"/>';
+      });
+
+      // Normalize 中心
+      var nActive = activeIdx === 3;
+      var nFill = nActive ? c.success : c.sLight;
+      var nStroke = c.success;
+      var nOpacity = nActive ? '1' : (activeIdx >= 0 && activeIdx < 3 ? '0.85' : (activeIdx >= 0 ? '0.4' : '0.85'));
+      h += '<g style="cursor:pointer;opacity:' + nOpacity + '" data-idx="3">';
+      h += '<rect x="260" y="90" width="180" height="80" rx="10" fill="' + nFill + '" stroke="' + nStroke + '" stroke-width="2"/>';
+      h += '<text x="350" y="120" text-anchor="middle" fill="' + colors.green.text + '" font-size="14" font-weight="700">normalize()</text>';
+      h += '<text x="350" y="142" text-anchor="middle" fill="' + c.muted + '" font-size="11">NormalizedToolCall</text>';
+      h += '</g>';
+
+      // arrow to dispatch
+      h += '<path d="M445 130 L500 130" stroke="' + c.muted + '" stroke-width="1.5" marker-end="url(#td-arch-arrow)"/>';
+
+      // Dispatch
+      var dActive = activeIdx === 4;
+      var dOpacity = dActive ? '1' : (activeIdx >= 0 ? '0.4' : '0.85');
+      h += '<g style="cursor:pointer;opacity:' + dOpacity + '" data-idx="4">';
+      h += '<rect x="500" y="70" width="200" height="120" rx="10" fill="' + c.node + '" stroke="' + c.nodeStroke + '" stroke-width="1.5"/>';
+      h += '<text x="600" y="105" text-anchor="middle" fill="' + c.text + '" font-size="13" font-weight="600">dispatch + execute</text>';
+      h += '<text x="600" y="125" text-anchor="middle" fill="' + c.muted + '" font-size="11">build_result</text>';
+      h += '<text x="600" y="145" text-anchor="middle" fill="' + c.muted + '" font-size="11">append_context</text>';
+      h += '<text x="600" y="175" text-anchor="middle" fill="' + c.success + '" font-size="11" font-weight="600">\\u2190 \\u53EA\\u8BA4 NormalizedToolCall</text>';
+      h += '</g>';
+
+      h = '<defs><marker id="td-arch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="' + c.muted + '"/></marker></defs>' + h;
+      svg.innerHTML = h;
+
+      var descs = [
+        layers[0].desc,
+        layers[1].desc,
+        layers[2].desc,
+        '<strong>normalize()</strong>：把三种外部格式统一成 NormalizedToolCall。这是边界隔离的核心——所有协议差异在这里被吸收。',
+        '<strong>内部世界</strong>：dispatch、execute、build_result、append_context 全部面向 NormalizedToolCall，完全不知道外面是哪种格式。新增 provider 不影响这里。'
+      ];
+      info.innerHTML = activeIdx >= 0 ? descs[activeIdx] : '点击任意区域查看详情。左侧是三种外部格式，中间是 normalize 适配层，右侧是只认内部格式的业务逻辑。';
+    }
+
+    render(-1);
+    svg.addEventListener('click', function(e) {
+      var t = e.target.closest('[data-idx]');
+      if (t) render(parseInt(t.getAttribute('data-idx')));
+    });
+    onTheme(function() { render(-1); });
+  }
+
+  // ============ Init all ============
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      initPipeline(); initFormatDemo(); initDispatchStepper(); initArchSvg();
+    });
+  } else {
+    initPipeline(); initFormatDemo(); initDispatchStepper(); initArchSvg();
+  }
+})();
+`}</script>
