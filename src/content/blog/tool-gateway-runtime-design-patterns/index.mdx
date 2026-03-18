@@ -7,6 +7,62 @@ language: 'zh-CN'
 draft: false
 ---
 
+<style>{`
+  .dp-demo {
+    margin: 2rem 0;
+    background: hsl(var(--card));
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .dp-demo-title {
+    text-align: center; margin-bottom: 0.25rem;
+    font-size: 0.9rem; font-weight: 700;
+    color: hsl(var(--foreground));
+  }
+  .dp-demo-subtitle {
+    display: block; text-align: center;
+    font-size: 0.75rem; margin-top: 0.25rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .dp-btn {
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 0.85rem; transition: all 0.2s;
+    padding: 0.4rem 1.2rem;
+  }
+  .dp-btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .dp-btn-primary:hover { opacity: 0.85; }
+  .dp-btn-secondary {
+    background: hsl(var(--secondary));
+    color: hsl(var(--secondary-foreground));
+  }
+  .dp-btn-secondary:hover { opacity: 0.85; }
+  .dp-btn:disabled { opacity: 0.4; cursor: default; }
+  .dp-step-info {
+    border-radius: 8px; padding: 0.75rem 1rem;
+    margin-top: 0.75rem; font-size: 0.85rem;
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border: 1px solid hsl(var(--border));
+  }
+  .dp-code {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    color: hsl(var(--foreground));
+    margin: 1rem 0;
+  }
+`}</style>
+
 > 这篇文章是 [《Tool Call Dispatch：从 Normalize 到 Gateway Adapter 的统一分发设计》](/blog/tool-call-dispatch-normalize-design) 的配套文章。上一篇主要说明 runtime 的执行流程，这一篇聚焦于代码结构中涉及的设计模式与架构模式。
 
 围绕 `dispatch_envelope_demo.py` 这类 agent runtime / gateway 代码，常见的问题通常包括：
@@ -53,6 +109,13 @@ draft: false
 
 例如 `AdapterRoute`、`NormalizedToolCall`、`GatewayTurn`、`TraceEvent` 这类对象，更适合优先视为 **DTO / Value Object / State Snapshot**。
 
+<div class="dp-demo">
+  <div class="dp-demo-title">交互演示：模式分类图谱</div>
+  <span class="dp-demo-subtitle">点击任意模式，查看它在代码中的对应位置</span>
+  <svg id="dp-pattern-svg" viewBox="0 0 780 300" style="width:100%;max-height:300px;"></svg>
+  <div id="dp-pattern-info" class="dp-step-info"></div>
+</div>
+
 ---
 
 ## 二、为什么这份代码适合从模式视角分析
@@ -81,6 +144,13 @@ draft: false
 - 多轮 loop 的 session 推进
 
 在这种分层较清晰的前提下，模式就比较容易和实现一一对应。
+
+<div class="dp-demo">
+  <div class="dp-demo-title">交互演示：双层 Runtime 架构</div>
+  <span class="dp-demo-subtitle">点击每个组件，查看它的职责和涉及的设计模式</span>
+  <svg id="dp-arch-svg" viewBox="0 0 780 260" style="width:100%;max-height:260px;"></svg>
+  <div id="dp-arch-info" class="dp-step-info"></div>
+</div>
 
 ---
 
@@ -134,7 +204,7 @@ class GeminiPassthroughAdapter(IdentityAdapter):
 
 ## 四、Strategy：行为在运行时按 route 或 key 选择
 
-除了统一接口之外，系统还需要在运行时决定“具体采用哪一种行为”。这部分更适合用 `Strategy` 来描述。
+除了统一接口之外，系统还需要在运行时决定"具体采用哪一种行为"。这部分更适合用 `Strategy` 来描述。
 
 ### 4.1 adapter 选择
 
@@ -249,7 +319,7 @@ class NormalizedToolCall:
 - 调用标识：`call_id`
 - 原始输入：`raw_envelope`
 
-从结构上看，它可以被理解为一个“待执行命令”的载体。
+从结构上看，它可以被理解为一个"待执行命令"的载体。
 
 ### 6.2 调度器
 
@@ -273,7 +343,7 @@ output = handler(**normalized.arguments)
 
 ## 七、Null Object / Identity：透传也被建模成显式策略
 
-这份代码没有把“无转换”当作一个漏掉的特殊分支，而是显式建模成 `IdentityAdapter`：
+这份代码没有把"无转换"当作一个漏掉的特殊分支，而是显式建模成 `IdentityAdapter`：
 
 ```python title="dispatch_envelope_demo.py"
 class IdentityAdapter:
@@ -298,7 +368,7 @@ class GeminiPassthroughAdapter(IdentityAdapter):
 
 核心点不在术语，而在设计选择本身：
 
-> **“不做转换”也是一个需要被明确表达的策略。**
+> **"不做转换"也是一个需要被明确表达的策略。**
 
 ---
 
@@ -423,7 +493,19 @@ next_request = append_tool_results_to_provider_messages(...)
 - local dispatch
 - append back
 
-因此，这里更适合用“编排器”或“流水线”来描述。
+因此，这里更适合用"编排器"或"流水线"来描述。
+
+<div class="dp-demo">
+  <div class="dp-demo-title">交互演示：dispatch_tool_call() 流水线</div>
+  <span class="dp-demo-subtitle">逐步查看 6 个阶段的执行细节</span>
+  <div id="dp-pipe-display" class="dp-code"></div>
+  <div style="display:flex;gap:0.5rem;margin-top:0.75rem;justify-content:center;">
+    <button id="dp-pipe-prev" class="dp-btn dp-btn-secondary">Prev</button>
+    <button id="dp-pipe-next" class="dp-btn dp-btn-primary">Next</button>
+    <button id="dp-pipe-reset" class="dp-btn dp-btn-secondary">Reset</button>
+  </div>
+  <div id="dp-pipe-info" class="dp-step-info"></div>
+</div>
 
 ---
 
@@ -459,6 +541,13 @@ class GatewaySession:
 - 无 tool calls -> 标记 completed
 
 从职责上看，这里已经比较接近一个轻量状态机。
+
+<div class="dp-demo">
+  <div class="dp-demo-title">交互演示：GatewaySession 状态转移</div>
+  <span class="dp-demo-subtitle">点击状态节点查看详细说明</span>
+  <svg id="dp-state-svg" viewBox="0 0 780 200" style="width:100%;max-height:200px;"></svg>
+  <div id="dp-state-info" class="dp-step-info"></div>
+</div>
 
 ---
 
@@ -631,7 +720,7 @@ self._record_trace(
 
 如果把问题表述为：
 
-> “这份代码中涉及哪些设计模式和架构模式？”
+> "这份代码中涉及哪些设计模式和架构模式？"
 
 那么一个较准确的回答是：
 
@@ -649,3 +738,292 @@ self._record_trace(
 - [cc-switch: Cross-platform AI CLI Configuration Manager](https://github.com/farion1231/cc-switch)
 - [Claude API: Tool Use](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview)
 - [OpenAI: Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
+
+<script>{`
+(function() {
+  function isDark() { return document.documentElement.classList.contains('dark'); }
+  function C() {
+    var d = isDark();
+    return {
+      text: d ? '#e2e8f0' : '#334155',
+      muted: d ? '#94a3b8' : '#64748b',
+      primary: d ? '#7dd3fc' : '#3b82f6',
+      pLight: d ? '#1e3a5f' : '#dbeafe',
+      success: '#10b981',
+      sLight: d ? '#064e3b' : '#d1fae5',
+      warning: '#f59e0b',
+      wLight: d ? '#78350f' : '#fef3c7',
+      purple: '#8b5cf6',
+      purpleLight: d ? '#4c1d95' : '#ede9fe',
+      border: d ? '#334155' : '#e2e8f0',
+      node: d ? '#1e293b' : '#ffffff',
+      nodeStroke: d ? '#475569' : '#cbd5e1',
+    };
+  }
+  function onTheme(fn) {
+    new MutationObserver(fn).observe(document.documentElement, {attributes:true, attributeFilter:['class']});
+  }
+
+  // ========== 1. Pattern Classification Map ==========
+  function initPatternMap() {
+    var svg = document.getElementById('dp-pattern-svg');
+    var info = document.getElementById('dp-pattern-info');
+    if (!svg) return;
+    var colHeaders = [
+      {label:'Classic Design Patterns', x:10},
+      {label:'Engineering / Architecture', x:270},
+      {label:'Runtime Patterns', x:530}
+    ];
+    var patterns = [
+      {label:'Adapter', col:0, row:0, color:'blue',
+        desc:'ProviderAdapter 定义 transform_request / transform_response 统一协议。ClaudeCodeOpenAIAdapter 和 GeminiPassthroughAdapter 各自实现转换。',
+        code:'class ProviderAdapter(Protocol):\\n    def transform_request(self, body) -> Dict\\n    def transform_response(self, body) -> Dict'},
+      {label:'Strategy', col:0, row:1, color:'blue',
+        desc:'运行时按 route 选择 adapter (get_adapter)，按 dispatch_key 选择 handler (registry.get)。两层 Strategy。',
+        code:'adapter = get_adapter(route=...)\\nhandler = registry.get(dispatch_key)'},
+      {label:'Registry', col:0, row:2, color:'blue',
+        desc:'TOOL_REGISTRY 绑定 dispatch_key -> handler，ADAPTER_REGISTRY 绑定 AdapterRoute -> ProviderAdapter。',
+        code:'TOOL_REGISTRY: Dict[str, Handler] = {...}\\nADAPTER_REGISTRY = build_adapter_registry(...)'},
+      {label:'Command', col:0, row:3, color:'blue',
+        desc:'NormalizedToolCall 承载 dispatch_key + arguments + call_id，是轻量命令对象。dispatch_tool_call() 作为 invoker。',
+        code:'@dataclass\\nclass NormalizedToolCall:\\n    dispatch_key: str\\n    arguments: Dict[str, Any]'},
+      {label:'Null Object', col:0, row:4, color:'blue',
+        desc:'IdentityAdapter 将"不做转换"显式建模为策略。GeminiPassthroughAdapter(IdentityAdapter) 复用。',
+        code:'class IdentityAdapter:\\n    def transform_request(self, body):\\n        return dict(body)'},
+      {label:'Simple Factory', col:1, row:0, color:'green',
+        desc:'create_gateway_session() 集中处理 route 选择、adapter 获取、request 深拷贝和初始化。',
+        code:'def create_gateway_session(...):\\n    adapter = get_adapter(...)\\n    return GatewaySession(adapter=adapter)'},
+      {label:'Anti-Corruption', col:1, row:1, color:'purple',
+        desc:'normalize_tool_call() 入口防腐，build_tool_result_envelope() 出口防腐。双向边界转换。',
+        code:'normalize_tool_call(envelope)\\n  -> NormalizedToolCall\\nbuild_tool_result_envelope(n, output)\\n  -> envelope'},
+      {label:'Pipeline', col:1, row:2, color:'purple',
+        desc:'dispatch_tool_call() 和 GatewaySession.step() 都把流程拆成稳定阶段的流水线。',
+        code:'normalize -> lookup -> execute\\n-> wrap -> append -> provider_native'},
+      {label:'Session State', col:1, row:3, color:'purple',
+        desc:'GatewaySession 维护 current_request / turns / completed。step() 推进状态转移。',
+        code:'@dataclass\\nclass GatewaySession:\\n    completed: bool = False\\n    turns: List[GatewayTurn]'},
+      {label:'Facade', col:1, row:4, color:'purple',
+        desc:'GatewayRuntime 收口 session / adapter route / trace 管理为统一高层接口。',
+        code:'class GatewayRuntime:\\n    def create_session(...)\\n    def run_session(...)'},
+      {label:'Event Log / Trace', col:2, row:0, color:'yellow',
+        desc:'TraceEvent + _record_trace() 记录 session_created / turn_started / turn_completed 等事件，便于调试和回放。',
+        code:'@dataclass\\nclass TraceEvent:\\n    kind: str\\n    payload: Dict[str, Any]'}
+    ];
+    function render(activeIdx) {
+      var c = C();
+      var h = '';
+      var colW = 240, rowH = 48, padTop = 40;
+      var cmap = {
+        blue:{fill:c.pLight, stroke:c.primary, text:c.primary},
+        green:{fill:c.sLight, stroke:c.success, text:c.success},
+        purple:{fill:c.purpleLight, stroke:c.purple, text:c.purple},
+        yellow:{fill:c.wLight, stroke:c.warning, text:c.warning}
+      };
+      colHeaders.forEach(function(ch) {
+        h += '<text x="' + (ch.x + colW/2) + '" y="22" text-anchor="middle" fill="' + c.muted + '" font-size="11" font-weight="700">' + ch.label + '</text>';
+        h += '<line x1="' + ch.x + '" y1="30" x2="' + (ch.x + colW) + '" y2="30" stroke="' + c.border + '" stroke-width="1"/>';
+      });
+      patterns.forEach(function(p, i) {
+        var cc = cmap[p.color];
+        var isA = i === activeIdx;
+        var x = colHeaders[p.col].x;
+        var y = padTop + p.row * rowH;
+        var w = colW, ht = 36, r = 8;
+        h += '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + ht + '" rx="' + r + '" fill="' + (isA ? cc.stroke : c.node) + '" stroke="' + (isA ? cc.stroke : c.nodeStroke) + '" stroke-width="1.5" style="cursor:pointer" data-idx="' + i + '"/>';
+        h += '<text x="' + (x + w/2) + '" y="' + (y + ht/2 + 5) + '" text-anchor="middle" fill="' + (isA ? '#ffffff' : c.text) + '" font-size="12" font-weight="' + (isA ? '700' : '500') + '" style="pointer-events:none">' + p.label + '</text>';
+      });
+      svg.innerHTML = h;
+      if (activeIdx >= 0) {
+        var p = patterns[activeIdx];
+        info.innerHTML = '<strong>' + p.label + '</strong>: ' + p.desc + '<pre style="margin-top:0.5rem;padding:0.5rem;border-radius:4px;background:hsl(var(--card));border:1px solid hsl(var(--border));font-size:0.8rem;overflow-x:auto;">' + p.code + '</pre>';
+      } else {
+        info.innerHTML = '点击任意模式查看对应的代码位置和职责说明。';
+      }
+    }
+    render(-1);
+    svg.addEventListener('click', function(e) {
+      var t = e.target.closest('[data-idx]');
+      if (t) render(parseInt(t.getAttribute('data-idx')));
+    });
+    onTheme(function() { render(-1); });
+  }
+
+  // ========== 2. Architecture Diagram ==========
+  function initArchDiagram() {
+    var svg = document.getElementById('dp-arch-svg');
+    var info = document.getElementById('dp-arch-info');
+    if (!svg) return;
+    var layers = [
+      {label:'Layer 1: Local Host Runtime', y:10, color:'blue', items:[
+        {label:'normalize', desc:'normalize_tool_call(): 识别来源，提取 dispatch_key / arguments / call_id，转成 NormalizedToolCall。', pat:'Anti-Corruption Layer, Command'},
+        {label:'lookup', desc:'active_registry.get(dispatch_key): 在 TOOL_REGISTRY 中查找对应的 handler 函数。', pat:'Registry, Strategy'},
+        {label:'execute', desc:'handler(**arguments): 执行真实的本地函数，要求返回 dict。', pat:'Strategy'},
+        {label:'wrap', desc:'build_tool_result_envelope(): 根据 source_format 把结果包装回对应格式。', pat:'Anti-Corruption Layer'},
+        {label:'context', desc:'append_tool_interaction_to_context(): 追加到会话历史。', pat:'Pipeline'}
+      ]},
+      {label:'Layer 2: Provider Gateway Runtime', y:140, color:'purple', items:[
+        {label:'route', desc:'get_adapter(): 根据 AdapterRoute 四元组从 ADAPTER_REGISTRY 选出 adapter。', pat:'Registry, Strategy'},
+        {label:'xform req', desc:'adapter.transform_request(): 把下游请求体转换成上游格式。', pat:'Adapter'},
+        {label:'upstream', desc:'upstream_responder(): 发送转换后的请求到上游 provider。', pat:'(External Call)'},
+        {label:'xform resp', desc:'adapter.transform_response(): 把上游响应转回下游格式。', pat:'Adapter'},
+        {label:'extract', desc:'extract_tool_calls_from_provider_response(): 从响应提取 tool calls。', pat:'Anti-Corruption Layer'},
+        {label:'append', desc:'append_tool_results_to_provider_messages(): 把结果回填到 provider 历史。', pat:'Pipeline'}
+      ]}
+    ];
+    function render(li, ii) {
+      var c = C();
+      var h = '';
+      var ht = 36, r = 6;
+      var lColors = {
+        blue:{bg:c.pLight, stroke:c.primary, text:c.primary},
+        purple:{bg:c.purpleLight, stroke:c.purple, text:c.purple}
+      };
+      h += '<defs><marker id="dp-arch-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="' + c.muted + '"/></marker></defs>';
+      layers.forEach(function(layer, layerIdx) {
+        var lc = lColors[layer.color];
+        h += '<rect x="0" y="' + layer.y + '" width="780" height="110" rx="8" fill="' + lc.bg + '" opacity="0.3"/>';
+        h += '<text x="390" y="' + (layer.y + 18) + '" text-anchor="middle" fill="' + lc.text + '" font-size="11" font-weight="700">' + layer.label + '</text>';
+        var count = layer.items.length;
+        var itemW = count <= 5 ? 130 : 108;
+        var totalW = count * itemW;
+        var gap = (760 - totalW) / Math.max(count - 1, 1);
+        layer.items.forEach(function(item, itemIdx) {
+          var x = 10 + itemIdx * (itemW + gap);
+          var y = layer.y + 32;
+          var isA = layerIdx === li && itemIdx === ii;
+          var fill = isA ? lc.stroke : c.node;
+          var stroke = isA ? lc.stroke : c.nodeStroke;
+          var tf = isA ? '#ffffff' : c.text;
+          h += '<rect x="' + x + '" y="' + y + '" width="' + itemW + '" height="' + ht + '" rx="' + r + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5" style="cursor:pointer" data-li="' + layerIdx + '" data-ii="' + itemIdx + '"/>';
+          h += '<text x="' + (x + itemW/2) + '" y="' + (y + ht/2 + 4) + '" text-anchor="middle" fill="' + tf + '" font-size="10" font-weight="' + (isA ? '700' : '500') + '" style="pointer-events:none">' + item.label + '</text>';
+          if (itemIdx < count - 1) {
+            var ax = x + itemW + 2;
+            var ay = y + ht/2;
+            var nx = 10 + (itemIdx + 1) * (itemW + gap);
+            h += '<path d="M' + ax + ' ' + ay + ' L' + (nx - 2) + ' ' + ay + '" stroke="' + c.muted + '" stroke-width="1" marker-end="url(#dp-arch-arr)"/>';
+          }
+        });
+      });
+      svg.innerHTML = h;
+      if (li >= 0 && ii >= 0) {
+        var item = layers[li].items[ii];
+        info.innerHTML = '<strong>' + item.label + '</strong>: ' + item.desc + '<br/><span style="font-size:0.8rem;color:hsl(var(--primary));">涉及模式: ' + item.pat + '</span>';
+      } else {
+        info.innerHTML = '点击任意组件查看它的职责和涉及的设计模式。';
+      }
+    }
+    render(-1, -1);
+    svg.addEventListener('click', function(e) {
+      var t = e.target.closest('[data-li]');
+      if (t) render(parseInt(t.getAttribute('data-li')), parseInt(t.getAttribute('data-ii')));
+    });
+    onTheme(function() { render(-1, -1); });
+  }
+
+  // ========== 3. Pipeline Stepper ==========
+  function initPipelineStepper() {
+    var display = document.getElementById('dp-pipe-display');
+    var info = document.getElementById('dp-pipe-info');
+    var prevBtn = document.getElementById('dp-pipe-prev');
+    var nextBtn = document.getElementById('dp-pipe-next');
+    var resetBtn = document.getElementById('dp-pipe-reset');
+    if (!display) return;
+    var steps = [
+      {title:'Stage 1: Normalize',
+        code:'normalized = normalize_tool_call(call_envelope)\\n\\n# NormalizedToolCall(\\n#   source_format="openai",\\n#   source_variant="responses_wrapper",\\n#   call_id="call_abc123",\\n#   dispatch_key="snapshot_before_edit",\\n#   arguments={"file_path": "/src/main.py"}\\n# )',
+        info:'Anti-Corruption Layer: 识别信封来源，吸收异构差异，提炼出内部统一的调用语义。'},
+      {title:'Stage 2: Registry Lookup',
+        code:'handler = active_registry.get(normalized.dispatch_key)\\n# dispatch_key = "snapshot_before_edit"\\n# handler = snapshot_before_edit',
+        info:'Registry + Strategy: 根据 dispatch_key 从 TOOL_REGISTRY 查找对应的 handler。'},
+      {title:'Stage 3: Execute Handler',
+        code:'output = handler(**normalized.arguments)\\n# handler(file_path="/src/main.py")\\n# -> {"success": True, "snapshot_id": "snap_001"}',
+        info:'Command 执行: 用 NormalizedToolCall.arguments 展开参数调用 handler，获取 dict 返回值。'},
+      {title:'Stage 4: Wrap Result',
+        code:'result_envelope = build_tool_result_envelope(\\n    normalized=normalized,\\n    output=output\\n)\\n# -> {"type": "function_call_output",\\n#     "call_id": "call_abc123",\\n#     "output": {"success": True, ...}}',
+        info:'Anti-Corruption Layer (出口): 根据 source_format/source_variant 包装回边界格式。'},
+      {title:'Stage 5: Append Context',
+        code:'updated_context = append_tool_interaction_to_context(\\n    context=existing_context,\\n    normalized_call=normalized,\\n    tool_output=output\\n)\\n# context += [tool_call_record, tool_result_record]',
+        info:'Pipeline: 把工具调用记录和结果追加到通用对话上下文。'},
+      {title:'Stage 6: Provider-Native',
+        code:'provider_entries = build_provider_native_context_entries(\\n    source_format="openai",\\n    source_variant="responses_wrapper",\\n    call_envelope=call_envelope,\\n    tool_result_envelope=result_envelope\\n)',
+        info:'Pipeline 最后阶段: 构造 provider 原生格式的上下文条目，供下一轮调用使用。'}
+    ];
+    var step = 0;
+    function render() {
+      var s = steps[step];
+      display.innerHTML = '<span style="font-weight:700;color:hsl(var(--primary));">[' + (step+1) + '/' + steps.length + '] ' + s.title + '</span>\\n\\n' + s.code;
+      info.innerHTML = s.info;
+      prevBtn.disabled = step === 0;
+      nextBtn.disabled = step === steps.length - 1;
+    }
+    nextBtn.addEventListener('click', function() { if (step < steps.length - 1) { step++; render(); } });
+    prevBtn.addEventListener('click', function() { if (step > 0) { step--; render(); } });
+    resetBtn.addEventListener('click', function() { step = 0; render(); });
+    render();
+  }
+
+  // ========== 4. State Machine ==========
+  function initStateMachine() {
+    var svg = document.getElementById('dp-state-svg');
+    var info = document.getElementById('dp-state-info');
+    if (!svg) return;
+    var states = [
+      {label:'Created', x:40, w:140, desc:'GatewaySession 刚创建。current_request 已初始化，completed=False，turns=[]。由 create_gateway_session() 产生。'},
+      {label:'Running', x:310, w:140, desc:'step() 被调用后进入运行。每次 step: transform_request -> upstream -> transform_response -> extract tool_calls -> local dispatch -> append results。'},
+      {label:'Completed', x:590, w:150, desc:'当某轮没有 tool_calls 时，标记 completed=True，记录 stop_reason 和 final_response。Loop 结束。'}
+    ];
+    var sy = 55, ht = 44;
+    function render(activeIdx) {
+      var c = C();
+      var h = '';
+      h += '<defs><marker id="dp-st-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="' + c.muted + '"/></marker>';
+      h += '<marker id="dp-st-arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="' + c.warning + '"/></marker></defs>';
+      states.forEach(function(s, i) {
+        var isA = i === activeIdx;
+        var fill = isA ? c.primary : c.node;
+        var stroke = isA ? c.primary : c.nodeStroke;
+        var tf = isA ? '#ffffff' : c.text;
+        h += '<rect x="' + s.x + '" y="' + sy + '" width="' + s.w + '" height="' + ht + '" rx="22" fill="' + fill + '" stroke="' + stroke + '" stroke-width="2" style="cursor:pointer" data-idx="' + i + '"/>';
+        h += '<text x="' + (s.x + s.w/2) + '" y="' + (sy + ht/2 + 5) + '" text-anchor="middle" fill="' + tf + '" font-size="13" font-weight="600" style="pointer-events:none">' + s.label + '</text>';
+      });
+      var a1x = states[0].x + states[0].w;
+      var ay = sy + ht/2;
+      h += '<path d="M' + (a1x + 4) + ' ' + ay + ' L' + (states[1].x - 4) + ' ' + ay + '" stroke="' + c.muted + '" stroke-width="1.5" marker-end="url(#dp-st-arr)"/>';
+      h += '<text x="' + ((a1x + states[1].x) / 2) + '" y="' + (sy - 8) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">step()</text>';
+      var a2x = states[1].x + states[1].w;
+      h += '<path d="M' + (a2x + 4) + ' ' + ay + ' L' + (states[2].x - 4) + ' ' + ay + '" stroke="' + c.muted + '" stroke-width="1.5" marker-end="url(#dp-st-arr)"/>';
+      h += '<text x="' + ((a2x + states[2].x) / 2) + '" y="' + (sy - 8) + '" text-anchor="middle" fill="' + c.muted + '" font-size="10">no tool_calls</text>';
+      var mx = states[1].x + states[1].w / 2;
+      var my = sy + ht;
+      h += '<path d="M' + (mx - 45) + ' ' + (my + 2) + ' C ' + (mx - 50) + ' ' + (my + 60) + ' ' + (mx + 50) + ' ' + (my + 60) + ' ' + (mx + 45) + ' ' + (my + 2) + '" stroke="' + c.warning + '" stroke-width="1.5" fill="none" marker-end="url(#dp-st-arr2)"/>';
+      h += '<text x="' + mx + '" y="' + (my + 55) + '" text-anchor="middle" fill="' + c.warning + '" font-size="10">has tool_calls</text>';
+      h += '<text x="' + mx + '" y="' + (my + 68) + '" text-anchor="middle" fill="' + c.warning + '" font-size="9" opacity="0.7">append back, next step</text>';
+      svg.innerHTML = h;
+      if (activeIdx >= 0) {
+        info.innerHTML = '<strong>' + states[activeIdx].label + '</strong>: ' + states[activeIdx].desc;
+      } else {
+        info.innerHTML = '点击状态节点查看 GatewaySession 在该状态下的具体行为。';
+      }
+    }
+    render(-1);
+    svg.addEventListener('click', function(e) {
+      var t = e.target.closest('[data-idx]');
+      if (t) render(parseInt(t.getAttribute('data-idx')));
+    });
+    onTheme(function() { render(-1); });
+  }
+
+  // ========== Initialize ==========
+  function initAll() {
+    initPatternMap();
+    initArchDiagram();
+    initPipelineStepper();
+    initStateMachine();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else {
+    initAll();
+  }
+})();
+`}</script>
