@@ -1,89 +1,96 @@
 ---
-title: 'Tool Gateway Runtime：我们的代码里到底用了哪些设计模式'
-description: '把 dispatch_envelope_demo.py 拆开看：Adapter、Strategy、Registry、Command、State Machine、Facade、Anti-Corruption Layer 分别落在什么位置，哪些又不该硬叫设计模式。'
+title: 'Tool Gateway Runtime：代码中涉及的设计模式与架构模式'
+description: '结合 dispatch_envelope_demo.py，说明 Adapter、Strategy、Registry、Command、State Machine、Facade 与 Anti-Corruption Layer 在实现中的对应位置，并区分经典设计模式与架构模式。'
 publishDate: '2026-03-18'
 tags: ['Agent', '系统设计', '设计模式', 'Python', 'Gateway']
 language: 'zh-CN'
 draft: false
 ---
 
-> 这篇文章是 [《Tool Call Dispatch：从 Normalize 到 Gateway Adapter 的统一分发设计》](/blog/tool-call-dispatch-normalize-design) 的姊妹篇。上一篇讲的是“这套 runtime 是怎么工作的”，这一篇讲的是“这套 runtime 在设计上到底用了哪些模式”。
+> 这篇文章是 [《Tool Call Dispatch：从 Normalize 到 Gateway Adapter 的统一分发设计》](/blog/tool-call-dispatch-normalize-design) 的配套文章。上一篇主要说明 runtime 的执行流程，这一篇聚焦于代码结构中涉及的设计模式与架构模式。
 
-很多人看到一份 agent runtime 或 gateway 代码时，会下意识问一句：
+围绕 `dispatch_envelope_demo.py` 这类 agent runtime / gateway 代码，常见的问题通常包括：
 
-> 这里是不是用了 Adapter？是不是用了 Strategy？Registry 算不算模式？`dispatch_tool_call()` 算不算 Command？
+- 这里是否可以归类为 `Adapter`
+- 运行时按 route 选择 adapter 是否属于 `Strategy`
+- `TOOL_REGISTRY` 和 `ADAPTER_REGISTRY` 是否属于 `Registry`
+- `NormalizedToolCall` 是否可以视为 `Command`
+- `GatewaySession` 更适合归类为普通数据对象，还是状态机
 
-这些问题都值得问，但如果不把“严格意义上的设计模式”和“更偏架构的组织方式”分开，讨论会很快变得混乱。
+为了避免把经典设计模式、架构模式和一般数据对象混在一起，本文会按层次说明：
 
-所以这篇文章只做一件事：
-
-**把我们这份 `dispatch_envelope_demo.py` 里的设计模式逐个落到代码上。**
+1. 哪些结构可以比较明确地归入经典设计模式
+2. 哪些结构更适合归入架构模式或运行时模式
+3. 哪些对象不宜被直接归类为某种设计模式
 
 ---
 
-## 一、先给结论：这份代码最核心的模式组合
+## 一、先给结论：这份代码的主要模式组合
 
-如果只用一句话概括这份代码的设计，我会这样说：
+如果先做一个整体概括，可以把这份代码的结构理解为：
 
-> **`Adapter + Strategy + Registry + Command` 是核心执行骨架，`Anti-Corruption Layer + Pipeline + Session State Machine` 是外围架构骨架。**
+> **`Adapter + Strategy + Registry + Command` 构成执行骨架，`Anti-Corruption Layer + Pipeline + Session State` 构成外围架构骨架。**
 
-再展开一点：
+对应关系可以先整理成一张表：
 
-| 类别 | 模式/结构 | 这份代码里有没有 |
+| 类别 | 模式/结构 | 对应情况 |
 | --- | --- | --- |
-| 经典设计模式 | Adapter | 有，而且是核心 |
-| 经典设计模式 | Strategy | 有，和 Registry 搭配出现 |
-| 经典设计模式 | Registry | 有，且用了两层 |
-| 经典设计模式 | Command | 有一个很轻量的版本 |
-| 经典设计模式 | Null Object / Identity | 有 |
-| 常见工程模式 | Factory | 有一个简单版本 |
-| 架构模式 | Anti-Corruption Layer | 非常明显 |
-| 架构模式 | Pipeline / Orchestrator | 非常明显 |
-| 架构模式 | State Machine / Session Object | 有 |
-| 架构模式 | Facade | 有 |
-| 运行时模式 | Event Log / Trace | 有 |
+| 经典设计模式 | Adapter | 明确存在，是第二层 gateway 的核心 |
+| 经典设计模式 | Strategy | 存在，主要体现为运行时选择 adapter / handler |
+| 经典设计模式 | Registry | 存在，而且分成两层 |
+| 经典设计模式 | Command | 存在一个轻量版本 |
+| 经典设计模式 | Null Object / Identity | 存在，用于 passthrough adapter |
+| 常见工程模式 | Simple Factory | 存在，用于 session 创建 |
+| 架构模式 | Anti-Corruption Layer | 明确存在 |
+| 架构模式 | Pipeline / Orchestrator | 明确存在 |
+| 架构模式 | Session State / State Machine | 存在 |
+| 架构模式 | Facade | 存在 |
+| 运行时模式 | Event Log / Trace | 存在 |
 
-但也要先说一句：
+同时需要补充一点：
 
-> **不是每个“长得像模式”的东西，都应该硬往 GoF 模式里塞。**
+> **并不是所有形式上类似模式的结构，都适合直接归类为 GoF 设计模式。**
 
-比如 `GatewayTurn`、`TraceEvent`、`NormalizedToolCall` 这些，更准确地说是 **DTO / Value Object**，不是要拿去吹成某种复杂模式。
-
----
-
-## 二、为什么这份代码特别适合拿来讲设计模式
-
-很多业务系统的模式讨论都很空，因为代码是混着写的。
-
-而这份 runtime 刚好相反，它的边界特别清楚：
-
-1. 第一层是 **本地 host runtime**
-2. 第二层是 **provider gateway runtime**
-
-第一层关心的是：
-
-- tool envelope 怎么 normalize
-- tool name 怎么 dispatch 到本地函数
-- handler 的输出怎么 wrap 成 provider 能认的 tool result
-
-第二层关心的是：
-
-- 下游请求怎么转成上游格式
-- 上游响应怎么转回下游格式
-- provider-native 的 tool calls 怎么抽出来
-- tool results 怎么按各家协议 append back
-
-一旦边界被切得足够干净，模式就会自然浮出来，而不是靠命名硬套。
+例如 `AdapterRoute`、`NormalizedToolCall`、`GatewayTurn`、`TraceEvent` 这类对象，更适合优先视为 **DTO / Value Object / State Snapshot**。
 
 ---
 
-## 三、Adapter：这份代码里最明显、最标准的模式
+## 二、为什么这份代码适合从模式视角分析
 
-如果你只能从这份代码里认出一个最典型的设计模式，那一定是 **Adapter**。
+设计模式分析最怕两种情况：
 
-### 3.1 入口接口已经很像教科书
+- 职责边界不清晰
+- 同一层里混杂过多不同问题
 
-代码里先定义了一个统一协议：
+这份 runtime 的特点是边界相对明确，可以拆成两层：
+
+1. **本地 host runtime**
+2. **provider gateway runtime**
+
+第一层主要处理：
+
+- 单个 tool envelope 的 normalize
+- dispatch key 到本地 handler 的查找
+- handler 输出到 tool result envelope 的包装
+
+第二层主要处理：
+
+- provider 请求体的双向转换
+- provider-native tool calls 的提取
+- tool results 回填到下一轮请求历史
+- 多轮 loop 的 session 推进
+
+在这种分层较清晰的前提下，模式就比较容易和实现一一对应。
+
+---
+
+## 三、Adapter：第二层 gateway 的核心模式
+
+在这份代码中，最容易识别的一类模式是 `Adapter`。
+
+### 3.1 统一接口
+
+代码先定义了一个统一协议：
 
 ```python title="dispatch_envelope_demo.py"
 class ProviderAdapter(Protocol):
@@ -93,23 +100,19 @@ class ProviderAdapter(Protocol):
     def transform_response(self, body: Mapping[str, Any]) -> Dict[str, Any]: ...
 ```
 
-这个接口的意思非常直接：
+这意味着上层调用方只依赖两件事：
 
-- 不管你底下接的是 Claude、OpenAI、Gemini 还是别的 provider
-- 对外都只暴露同样两件事：
-  - `transform_request()`
-  - `transform_response()`
+- `transform_request()`
+- `transform_response()`
 
-这就是典型的 Adapter 思路：
+调用方不需要直接理解 Claude、OpenAI、Gemini 各自不同的请求和响应细节。
 
-> **把多个不兼容接口，包成同一个上层可消费的接口。**
-
-### 3.2 具体实现就是具体 adapter
+### 3.2 具体 adapter
 
 具体实现里：
 
 - `ClaudeCodeOpenAIAdapter` 负责 `Anthropic Messages -> OpenAI Chat Completions`
-- `GeminiPassthroughAdapter` 负责 Gemini 的透传场景
+- `GeminiPassthroughAdapter` 负责 Gemini 的透传路线
 
 ```python title="dispatch_envelope_demo.py"
 class ClaudeCodeOpenAIAdapter:
@@ -121,34 +124,21 @@ class GeminiPassthroughAdapter(IdentityAdapter):
     ...
 ```
 
-这里的模式不是“看起来像 adapter”，而是**真的就是 adapter**。
+从职责上看，这一层的作用就是：
 
-因为调用方并不关心：
+> **把不同 provider 的不兼容协议，转换成上层统一可消费的接口。**
 
-- Claude 的 `tool_use`
-- OpenAI 的 `tool_calls`
-- Gemini 的 `functionCall`
-
-调用方只关心：
-
-- “请把这个 request 变成上游能吃的格式”
-- “请把这个 response 变回下游能理解的格式”
-
-这就是 Adapter 模式最纯粹的落地方式。
+这正是 Adapter 模式的典型场景。
 
 ---
 
-## 四、Strategy：行为在运行时按 route 选择
+## 四、Strategy：行为在运行时按 route 或 key 选择
 
-单有 Adapter 还不够，因为你还得解决另一个问题：
+除了统一接口之外，系统还需要在运行时决定“具体采用哪一种行为”。这部分更适合用 `Strategy` 来描述。
 
-> **到底该用哪个 adapter？**
+### 4.1 adapter 选择
 
-这时候代码里出现的是 **Strategy**。
-
-### 4.1 route 决定用哪种转换策略
-
-`get_adapter()` 会根据四元组 route 选出一个具体 adapter：
+`get_adapter()` 根据 route 选择具体 adapter：
 
 ```python title="dispatch_envelope_demo.py"
 def get_adapter(
@@ -161,53 +151,41 @@ def get_adapter(
     ...
 ```
 
-这里真正变化的是“算法”：
+这里变化的是具体转换策略：
 
-- Claude -> OpenAI，要用 `ClaudeCodeOpenAIAdapter`
-- Gemini -> Gemini，要用 `GeminiPassthroughAdapter`
+- Claude -> OpenAI，对应一种策略
+- Gemini -> Gemini，对应另一种策略
 
-也就是说：
+### 4.2 handler 选择
 
-- 行为接口是一样的
-- 具体策略在运行时按 route 选择
-
-这就是 Strategy。
-
-### 4.2 tool dispatch 那层也有同样结构
-
-不只是 adapter 层。
-
-本地 dispatch 层同样如此：
+同样的结构也出现在本地 dispatch 层：
 
 ```python title="dispatch_envelope_demo.py"
 handler = active_registry.get(normalized.dispatch_key)
 output = handler(**normalized.arguments)
 ```
 
-这里不同的 `dispatch_key`，会选到不同 handler：
+不同的 `dispatch_key` 会绑定到不同 handler，例如：
 
 - `functions.exec_command`
 - `functions.write_stdin`
 - `snapshot_before_edit`
 - `restore_snapshot`
 
-从“运行时按 key 选行为”的角度讲，这也是 Strategy。
+因此，这份代码里其实有两层 Strategy：
 
-所以更准确的说法是：
-
-> **这份代码里有两层 Strategy：一层选 adapter，一层选 handler。**
+1. 一层选择 adapter
+2. 一层选择 handler
 
 ---
 
-## 五、Registry：两张注册表，各管一层
+## 五、Registry：两张注册表分别负责两层绑定
 
-Strategy 很少单独出现，通常都会和 **Registry** 搭配。
+`Strategy` 往往会和 `Registry` 配合出现，这份代码也是如此。
 
-这份代码里最漂亮的一点，就是它不是一张大表，而是 **两张注册表，各管一层边界**。
+### 5.1 本地工具注册表
 
-### 5.1 TOOL_REGISTRY
-
-第一张表是本地工具注册表：
+第一张表是 `TOOL_REGISTRY`：
 
 ```python title="dispatch_envelope_demo.py"
 TOOL_REGISTRY: Dict[str, Handler] = {
@@ -218,54 +196,40 @@ TOOL_REGISTRY: Dict[str, Handler] = {
 }
 ```
 
-它回答的问题是：
+它解决的问题是：
 
-> **“这个工具名，对应哪个本地 Python 函数？”**
+> **工具名应该绑定到哪个本地函数。**
 
-### 5.2 ADAPTER_REGISTRY
+### 5.2 adapter 注册表
 
-第二张表是 adapter 注册表：
+第二张表是 `ADAPTER_REGISTRY`：
 
 ```python title="dispatch_envelope_demo.py"
 ADAPTER_REGISTRY = build_adapter_registry(REGISTERED_ADAPTERS)
 ```
 
-它回答的问题是：
+它解决的问题是：
 
-> **“这条 provider route，对应哪个转换器？”**
+> **某条 provider route 应该绑定到哪个 adapter。**
 
-### 5.3 为什么 Registry 比 `if/elif` 高一级
+### 5.3 为什么这里更适合用 Registry
 
-很多人会说：
+这些逻辑当然也可以用条件分支实现，但 `Registry` 的优点在于：
 
-> “我也可以写成一堆 `if provider == ...` 啊。”
+- 行为选择逻辑被单独抽离
+- 新增策略时不一定要改主流程
+- 测试时更容易替换绑定关系
+- 运行时绑定关系更明确
 
-可以，但那不是一个层级的设计。
-
-`if/elif` 的问题不是不能工作，而是：
-
-- 行为选择逻辑和业务逻辑会揉在一起
-- 扩展时要改原函数
-- 测试时替换策略不方便
-- 很难把“运行时绑定”这件事独立出来
-
-Registry 的价值在于：
-
-> **把“选择谁执行”单独变成一个运行时设施。**
-
-这也是为什么我会把 Registry 视为这份代码里很关键的模式，而不是一个普通字典。
+因此，这里的 `Registry` 不是普通字典，而是运行时绑定机制的一部分。
 
 ---
 
-## 六、Command：`NormalizedToolCall` 是轻量命令对象
+## 六、Command：`NormalizedToolCall` 可以视为轻量命令对象
 
-如果你问：
+从 `Command` 的角度看，这里存在一个轻量版本的实现。
 
-> “这里有没有 Command 模式？”
-
-答案是：**有，但不是那种很重的 OO Command，而是一个 runtime 版本的轻量 Command。**
-
-### 6.1 `NormalizedToolCall` 封装了一次执行意图
+### 6.1 命令对象
 
 ```python title="dispatch_envelope_demo.py"
 @dataclass
@@ -278,16 +242,18 @@ class NormalizedToolCall:
     raw_envelope: Dict[str, Any]
 ```
 
-它里面放的不是“执行结果”，而是“执行指令”：
+这个对象保存的是一次调用所需的主要信息：
 
-- 调谁：`dispatch_key`
-- 用什么参数：`arguments`
-- 这次调用的 id：`call_id`
-- 原始包长什么样：`raw_envelope`
+- 调用目标：`dispatch_key`
+- 调用参数：`arguments`
+- 调用标识：`call_id`
+- 原始输入：`raw_envelope`
 
-这就是一个标准的“命令载荷”。
+从结构上看，它可以被理解为一个“待执行命令”的载体。
 
-### 6.2 `dispatch_tool_call()` 像 invoker
+### 6.2 调度器
+
+`dispatch_tool_call()` 则承担了调度器的角色：
 
 ```python title="dispatch_envelope_demo.py"
 normalized = normalize_tool_call(call_envelope)
@@ -295,26 +261,19 @@ handler = active_registry.get(normalized.dispatch_key)
 output = handler(**normalized.arguments)
 ```
 
-如果你用 Command 的视角看：
+如果用 Command 的语言来描述：
 
-- `NormalizedToolCall` 是 command object
-- `TOOL_REGISTRY` 像 receiver lookup
-- `dispatch_tool_call()` 像 invoker
+- `NormalizedToolCall` 类似 command object
+- `TOOL_REGISTRY` 提供 receiver lookup
+- `dispatch_tool_call()` 承担 invoker 的职责
 
-当然，它不是典型 Java 教材里那种：
-
-- `command.execute()`
-- `receiver.doSomething()`
-
-而是 Python/runtime 风格的简化版。
-
-但语义上非常接近。
+它不是传统教材里那种完整的 OO Command 体系，但语义上与 Command 相当接近。
 
 ---
 
-## 七、Null Object / Identity：透传不是漏掉，而是显式能力
+## 七、Null Object / Identity：透传也被建模成显式策略
 
-这份代码里一个非常好的点，是把 **“不做转换”** 也建模成了一个明确对象。
+这份代码没有把“无转换”当作一个漏掉的特殊分支，而是显式建模成 `IdentityAdapter`：
 
 ```python title="dispatch_envelope_demo.py"
 class IdentityAdapter:
@@ -325,33 +284,27 @@ class IdentityAdapter:
         return dict(body)
 ```
 
-然后：
+然后由 `GeminiPassthroughAdapter` 复用：
 
 ```python title="dispatch_envelope_demo.py"
 class GeminiPassthroughAdapter(IdentityAdapter):
     ...
 ```
 
-这背后的设计思想很重要：
+这里可以从两个角度理解：
 
-> **透传不是“没处理到”，而是“这是我明确支持的一种策略”。**
+- 它接近 `Null Object`
+- 也可以理解成 `Identity Strategy`
 
-这很接近 `Null Object` 的精神：
+核心点不在术语，而在设计选择本身：
 
-- 它实现同样的接口
-- 但行为是“什么都不改”
-
-也可以叫 `Identity Strategy`。
-
-不管你用哪个术语，这里都体现了一个成熟设计：
-
-> **不要把“无操作”藏在特殊分支里，要把它做成显式对象。**
+> **“不做转换”也是一个需要被明确表达的策略。**
 
 ---
 
-## 八、Factory：`create_gateway_session()` 是一个简单工厂
+## 八、Simple Factory：`create_gateway_session()`
 
-这份代码里没有复杂工厂体系，但有一个很明确的 **Simple Factory**：
+这份代码里没有复杂的工厂体系，但有一个比较清晰的 `Simple Factory`：
 
 ```python title="dispatch_envelope_demo.py"
 def create_gateway_session(... ) -> GatewaySession:
@@ -362,64 +315,50 @@ def create_gateway_session(... ) -> GatewaySession:
     )
 ```
 
-它把下面这些初始化细节封装起来了：
+它把以下初始化细节集中起来：
 
-- route 选择
-- adapter 查找
-- request 深拷贝
+- route 到 adapter 的选择
+- request 的初始深拷贝
 - registry 注入
-- audit_context 初始化
-- turns 初始化
+- audit context 初始化
+- turn 列表初始化
 
-调用方只需要一句：
-
-```python title="dispatch_envelope_demo.py"
-session = create_gateway_session(...)
-```
-
-而不需要自己手搓一个完整 `GatewaySession(...)`。
-
-这就是简单工厂的价值：
-
-> **把“对象怎么被正确组装出来”集中到一个地方。**
+这样调用方不需要自己组装完整的 `GatewaySession(...)`，而是通过一个统一入口完成构建。
 
 ---
 
-## 九、Anti-Corruption Layer：真正的边界防腐层
+## 九、Anti-Corruption Layer：边界上的语义提纯
 
-如果说 Adapter 是这份代码里最标准的 GoF 模式，
-那 **Anti-Corruption Layer** 就是这份代码里最标准的架构模式。
+如果把 `Adapter` 视为最明确的经典设计模式，那么 `Anti-Corruption Layer` 可以视为最明确的架构模式。
 
-### 9.1 `normalize_tool_call()` 是入口防腐层
+### 9.1 入口方向：`normalize_tool_call()`
 
 ```python title="dispatch_envelope_demo.py"
 def normalize_tool_call(envelope: Mapping[str, Any]) -> NormalizedToolCall:
     ...
 ```
 
-它的职责不是“执行工具”，而是：
+它的职责不是执行工具，而是：
 
-- 吃掉各种 provider-native 的差异
-- 提炼出内部唯一承认的调用语义
+- 吸收 provider-native 结构差异
+- 提炼出内部统一使用的调用语义
 
-比如外部世界可能是：
+例如外部世界可能是：
 
 - Codex 的 `recipient_name + parameters`
 - OpenAI Responses 的 `name + arguments`
 - OpenAI Chat 的 `function.name + function.arguments`
 - Claude 的 `tool_use + input`
 
-但进入系统内部以后，都被压成：
+进入系统内部以后，会被统一成：
 
 - `dispatch_key`
 - `arguments`
 - `call_id`
 
-这就是典型防腐层。
+### 9.2 输出方向：`build_tool_result_envelope()`
 
-### 9.2 `build_tool_result_envelope()` 是出边界的镜像防腐
-
-边界不是只有“进”，还有“出”。
+边界不仅有输入方向，也有输出方向：
 
 ```python title="dispatch_envelope_demo.py"
 def build_tool_result_envelope(...):
@@ -433,15 +372,15 @@ def build_tool_result_envelope(...):
 - Claude `tool_result`
 - Codex `tool_result`
 
-所以这套设计不是单边防腐，而是**双向防腐**。
+因此，这里不是单向防腐，而是双向边界转换。
 
 ---
 
-## 十、Pipeline / Orchestrator：流程是被显式拆开的
+## 十、Pipeline / Orchestrator：流程被拆成稳定阶段
 
-这部分不太适合硬叫某个 GoF 模式，更准确是 **Pipeline** 或 **Orchestrator**。
+这部分更适合归类为 `Pipeline` 或 `Orchestrator`，而不是某个特定的 GoF 模式。
 
-### 10.1 `dispatch_tool_call()` 是第一层编排器
+### 10.1 第一层编排：`dispatch_tool_call()`
 
 ```python title="dispatch_envelope_demo.py"
 normalized = normalize_tool_call(call_envelope)
@@ -452,7 +391,7 @@ updated_context = append_tool_interaction_to_context(...)
 provider_native_context = build_provider_native_context_entries(...)
 ```
 
-这段代码最重要的不是某一个步骤，而是它把整个流程拆成了清晰的阶段：
+关键点在于：整个流程被拆成了稳定阶段。
 
 1. normalize
 2. lookup
@@ -461,11 +400,9 @@ provider_native_context = build_provider_native_context_entries(...)
 5. append generic context
 6. append provider-native context
 
-这就是编排器。
+### 10.2 第二层编排：`GatewaySession.step()`
 
-### 10.2 `GatewaySession.step()` 是第二层编排器
-
-第二层更明显：
+在 gateway loop 里，这种结构更明显：
 
 ```python title="dispatch_envelope_demo.py"
 upstream_request = self.adapter.transform_request(self.current_request)
@@ -477,7 +414,7 @@ assistant_text = extract_text_from_provider_response(...)
 next_request = append_tool_results_to_provider_messages(...)
 ```
 
-它把 gateway loop 明确变成一个阶段式流水线：
+这对应的是一个比较清晰的流水线：
 
 - request transform
 - upstream call
@@ -486,15 +423,13 @@ next_request = append_tool_results_to_provider_messages(...)
 - local dispatch
 - append back
 
-所以这一层的关键词不是“某个类继承了谁”，而是：
-
-> **整个运行时被拆成了稳定步骤的编排流水线。**
+因此，这里更适合用“编排器”或“流水线”来描述。
 
 ---
 
-## 十一、State Machine：`GatewaySession` 已经很像状态机
+## 十一、Session State / State Machine：`GatewaySession`
 
-`GatewaySession` 是这份代码后期演化里很重要的一步。
+`GatewaySession` 在当前版本中承担了明确的状态管理职责：
 
 ```python title="dispatch_envelope_demo.py"
 @dataclass
@@ -508,31 +443,28 @@ class GatewaySession:
     final_response: Optional[Dict[str, Any]] = None
 ```
 
-它持有一整套 session state：
+它维护的是一组 session state：
 
 - 当前请求
-- 已经跑过的 turns
+- 审计上下文
+- 已执行轮次
 - 是否完成
-- 为什么停止
+- 停止原因
 - 最终响应
 
-然后 `step()` 会推进一次状态转移：
+`step()` 则推进一次状态转移：
 
-- 未完成 -> 再跑一轮
+- 未完成 -> 进入下一次 step
 - 有 tool calls -> append back 后进入下一轮
 - 无 tool calls -> 标记 completed
 
-从软件结构上看，这已经非常接近一个小型状态机。
-
-所以你完全可以说：
-
-> **`GatewaySession` 是一个带状态推进能力的 Session Object，也可以视作轻量状态机。**
+从职责上看，这里已经比较接近一个轻量状态机。
 
 ---
 
-## 十二、Facade：`GatewayRuntime` 把复杂子系统收口了
+## 十二、Facade：`GatewayRuntime`
 
-再往上一层，是 `GatewayRuntime`：
+更高一层是 `GatewayRuntime`：
 
 ```python title="dispatch_envelope_demo.py"
 class GatewayRuntime:
@@ -545,16 +477,14 @@ class GatewayRuntime:
     def run_session(self, session_id: int, *, max_turns: int = 8) -> Dict[str, Any]: ...
 ```
 
-它没有去发明新协议，也没有自己做细节转换。
+它本身不处理底层协议细节，而是把多个子系统收口为一组更高层接口：
 
-它做的是：
-
-- session 管理
+- session 生命周期管理
 - adapter route 管理
 - trace 管理
-- step/run 生命周期管理
+- step / run 入口管理
 
-如果没有它，调用方得自己拼：
+如果没有这一层，调用方需要自行组合：
 
 - `get_adapter()`
 - `GatewaySession(...)`
@@ -562,17 +492,13 @@ class GatewayRuntime:
 - `step()`
 - `run()`
 
-有了它以后，外部看到的是一组更高层的 API。
-
-这就是 Facade：
-
-> **把底下多个子对象和子流程，包装成一组更容易用的高层接口。**
+因此，这里比较适合归类为 `Facade`。
 
 ---
 
-## 十三、Event Log / Trace：不是 GoF，但很重要
+## 十三、Event Log / Trace：运行时事件记录
 
-`TraceEvent` 和 `_record_trace()` 不属于经典设计模式，但在 runtime 里极有价值。
+`TraceEvent` 和 `_record_trace()` 不属于经典设计模式，但在 runtime 中有明确作用。
 
 ```python title="dispatch_envelope_demo.py"
 @dataclass
@@ -594,7 +520,7 @@ self._record_trace(
 )
 ```
 
-它记录的不是“最终状态快照”，而是**状态变化事件**：
+它记录的不是最终状态快照，而是状态变化事件，例如：
 
 - `session_created`
 - `turn_started`
@@ -603,128 +529,117 @@ self._record_trace(
 - `session_completed`
 - `session_stopped`
 
-这类设计的价值在于：
+这类结构的主要价值在于：
 
-- 好调试
-- 好回放
-- 好审计
-- 好做可视化
+- 便于调试
+- 便于回放
+- 便于审计
+- 便于做可视化
 
-如果以后这套 teaching runtime 继续演化，这部分很自然会继续长成真正的 observability/trace 体系。
+如果 runtime 继续演化，这部分也很自然会延伸为更完整的 observability / trace 体系。
 
 ---
 
-## 十四、哪些东西不要硬叫成“模式”
+## 十四、哪些结构不宜直接归类为经典设计模式
 
-一个成熟的设计讨论，不只是会认模式，也要会**克制地不乱认**。
+在模式分析中，除了识别模式本身，也需要控制归类边界。
 
-### 14.1 不是所有 dataclass 都是模式
+### 14.1 数据对象
 
-这些对象：
+下面这些对象更适合首先视为数据对象：
 
 - `AdapterRoute`
 - `NormalizedToolCall`
 - `GatewayTurn`
 - `TraceEvent`
 
-更准确的说法是：
+更准确的说法通常是：
 
 - DTO
 - Value Object
 - State Snapshot
 
-它们的价值主要在于：
+它们的主要价值在于：
 
-- 明确数据边界
+- 明确边界
 - 降低隐式耦合
 - 提高可读性
 
-而不是某种复杂行为模式。
+### 14.2 `dispatch_tool_call()` 不太适合归类为 `Template Method`
 
-### 14.2 `dispatch_tool_call()` 不太适合硬叫 Template Method
+有时会有人把它归类为 `Template Method`，但这里并不完全符合该模式的标准定义。
 
-有些人会把它叫 `Template Method`，但我不建议。
-
-因为 Template Method 的标准形态是：
+`Template Method` 的典型形态通常是：
 
 - 父类定义算法骨架
-- 子类覆盖可变步骤
+- 子类覆写可变步骤
 
-而这里并没有通过继承让子类覆写步骤。
+而这里并没有通过继承机制来覆写步骤，因此更适合用 `Pipeline Orchestrator` 或 `Workflow Coordinator` 来描述。
 
-它更准确的说法是：
+### 14.3 `normalize` 与 `transform` 不应混为一类
 
-- pipeline orchestrator
-- workflow coordinator
+这也是边界上最容易混淆的地方：
 
-### 14.3 “normalize” 和 “transform” 不是一个模式
+- `normalize_tool_call()`：处理**单个 envelope 的语义提纯**
+- `transform_request()` / `transform_response()`：处理**整包 provider body 的协议转换**
 
-这也是最容易混的地方。
-
-- `normalize_tool_call()`：是**单个 envelope 的语义提纯**
-- `transform_request()` / `transform_response()`：是**整包 provider body 的协议转换**
-
-两者都在做“改写”，但它们不是一回事。
-
-如果把它们混成一层，代码会很快失控。
+两者都在做结构改写，但职责并不相同。
 
 ---
 
-## 十五、如果只允许保留 4 个关键词，我会保留哪 4 个
+## 十五、从实现角度看最关键的 4 个概念
 
-如果有人只愿意花 30 秒理解这份代码，我会让他记住这 4 个词：
+如果只保留最关键的 4 个概念，可以优先关注下面这些：
 
 ### 1. Adapter
 
-因为第二层 gateway 本质上就是 provider protocol adapter。
+因为第二层 gateway 的核心就是 provider protocol adapter。
 
 ### 2. Registry
 
-因为这份设计可扩展的关键，不在于某个类多优雅，而在于：
+因为这份设计的扩展性，主要依赖运行时绑定：
 
-- tool 是通过 registry 绑定的
-- adapter 也是通过 registry 绑定的
+- tool 通过 registry 绑定
+- adapter 也通过 registry 绑定
 
 ### 3. Command
 
-因为一旦你意识到 `NormalizedToolCall` 是“命令对象”，整个 dispatch 设计会立刻清楚很多。
+因为把 `NormalizedToolCall` 视为命令对象后，dispatch 层的职责关系会更容易理解。
 
-### 4. State Machine
+### 4. Session State
 
-因为一旦进入多轮 gateway loop，问题就不再只是“函数调用”，而是“session 状态推进”。
+因为进入多轮 gateway loop 后，问题已经不只是单次函数调用，而是 session 状态推进。
 
 ---
 
-## 十六、把这些模式拼在一起，为什么这份结构会稳
+## 十六、组合后的整体结构
 
-单个模式并不稀奇。
-
-真正值得看的，是它们在这里是怎么咬合起来的：
+更重要的不是单个模式本身，而是这些结构在同一套 runtime 中的组合方式：
 
 1. `normalize_tool_call()` 先把异构输入压成统一命令对象
-2. `TOOL_REGISTRY` 再把命令路由到具体 handler
+2. `TOOL_REGISTRY` 把命令路由到具体 handler
 3. `build_tool_result_envelope()` 把内部结果翻回边界格式
-4. `ProviderAdapter` 再把整包 request/response 在 provider 之间双向改写
-5. `GatewaySession` 把多轮循环状态接起来
+4. `ProviderAdapter` 对整包 request / response 做 provider 间双向转换
+5. `GatewaySession` 负责多轮 loop 的状态推进
 6. `GatewayRuntime` 再把 session 与 trace 管理收口
 
-这就是为什么这份代码读起来不像一坨胶水，而像几层彼此咬合的 runtime。
+从整体上看，这形成的是一套分层明确的 runtime，而不是简单堆叠的转换逻辑。
 
 ---
 
-## 十七、最终结论
+## 十七、总结
 
-如果你问：
+如果把问题表述为：
 
-> “我们的代码里到底用到了哪些设计模式？”
+> “这份代码中涉及哪些设计模式和架构模式？”
 
-最准确的回答不是只报几个名词，而是下面这句话：
+那么一个较准确的回答是：
 
-> **这份代码的核心不是炫技式地堆模式，而是在系统边界上用 Adapter 和 Anti-Corruption Layer 吸收异构性，在系统内部用 Registry、Strategy、Command 和 Session State 维持清晰的执行模型。**
+> **这份代码通过 Adapter 和 Anti-Corruption Layer 处理边界异构，通过 Registry、Strategy、Command 和 Session State 维持清晰的执行模型。**
 
-换句话说：
+换一种更中性的表述：
 
-> **模式在这里不是目的，边界清晰才是目的。模式只是边界清晰之后，自然浮出来的结果。**
+> **模式在这里不是目标本身，更重要的是用这些结构维持清晰的边界、稳定的扩展点和可追踪的执行流程。**
 
 ---
 
