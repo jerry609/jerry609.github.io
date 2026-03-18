@@ -17,28 +17,11 @@ type Props = {
 }
 
 const { stats } = Astro.props as Props
-
-async function fetchCount(item: SubstatsItem) {
-  if (!item.api) return
-  try {
-    const response = await fetch(`https://api.swo.moe/stats/${item.api}`)
-    const data = await response.json()
-    if (data.failed) {
-      throw new Error(data.message)
-    } else {
-      item.count = data.count
-    }
-  } catch (error) {
-    console.error('Error in Substats fetching: ' + error)
-  }
-}
-
-await Promise.all(stats.map(fetchCount))
 ---
 
 <div class='grid grid-cols-1 gap-3 rounded-xl border p-2 sm:grid-cols-2 sm:p-3'>
   {
-    stats.map(({ link, platform, icon, color, count, text }) => (
+    stats.map(({ link, platform, icon, color, count, text, api }) => (
       <a
         class='group text-muted-foreground no-underline'
         href={link}
@@ -50,19 +33,52 @@ await Promise.all(stats.map(fetchCount))
           <div class='flex-1 text-foreground transition-colors group-hover:text-primary'>
             {platform}
           </div>
-          {count ? (
-            <div class='flex items-center gap-1.5'>
-              <samp>{count}</samp>
+          {api || count !== undefined ? (
+            <div class='flex items-center gap-1.5' data-substats-api={api}>
+              <samp data-substats-count>{count ?? '...'}</samp>
               <span class='text-sm font-normal'>{text}</span>
             </div>
           ) : (
-            'null'
+            <span class='text-sm font-normal'>{text}</span>
           )}
         </div>
       </a>
     ))
   }
 </div>
+<script is:inline>
+  async function loadSubstats() {
+    const items = document.querySelectorAll('[data-substats-api]')
+
+    await Promise.all(
+      Array.from(items).map(async (item) => {
+        const api = item.getAttribute('data-substats-api')
+        const countEl = item.querySelector('[data-substats-count]')
+        if (!api || !countEl) return
+
+        try {
+          const response = await fetch(`https://api.swo.moe/stats/${api}`)
+          const data = await response.json()
+          if (!response.ok || data.failed) {
+            throw new Error(data.message || `HTTP ${response.status}`)
+          }
+          countEl.textContent = String(data.count)
+        } catch (error) {
+          console.warn(`Substats unavailable for ${api}:`, error)
+          countEl.textContent = 'N/A'
+        }
+      })
+    )
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadSubstats, { once: true })
+  } else {
+    loadSubstats()
+  }
+
+  document.addEventListener('swup:contentReplaced', loadSubstats)
+</script>
 <div class='mt-2 text-right text-sm'>
   Display real-time; powered by <a
     class='text-muted-foreground'

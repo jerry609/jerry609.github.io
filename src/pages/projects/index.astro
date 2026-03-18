@@ -1,6 +1,4 @@
 ---
-import { Image } from 'astro:assets'
-
 import PageLayout from '@/layouts/CommonPage.astro'
 
 const headings: { depth: number; slug: string; text: string }[] = []
@@ -9,11 +7,14 @@ const headings: { depth: number; slug: string; text: string }[] = []
 <PageLayout title='Projects' {headings} view>
   <p>Github Activities:</p>
   <p>
-    <Image
+    <img
+      class='w-full max-w-3xl rounded-lg border'
       src='https://ghchart.rshah.org/659eb9/jerry609'
       alt='github activities'
-      inferSize
+      width='800'
+      height='160'
       loading='lazy'
+      decoding='async'
     />
   </p>
 

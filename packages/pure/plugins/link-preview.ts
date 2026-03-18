@@ -27,6 +27,21 @@ class LRU<K, V> extends Map<K, V> {
 }
 
 const formatError = (...lines: string[]) => lines.join('\n         ')
+const warnedUrls = new Set<string>()
+const REQUEST_TIMEOUT_MS = 5000
+
+function warnOnce(url: string, error: unknown) {
+  if (warnedUrls.has(url)) return
+  warnedUrls.add(url)
+  console.warn(
+    formatError(
+      `[warn] astro-embed`,
+      (error as Error)?.message ?? String(error),
+      `URL: ${url}`,
+      `Falling back to a plain link preview.`
+    )
+  )
+}
 
 /**
  * Fetch a URL and parse it as JSON, but catch errors to stop builds erroring.
@@ -49,10 +64,12 @@ function makeSafeGetter<T>(
 ) {
   const cache = new LRU<string, T>(cacheSize)
   return async function safeGet(url: string): Promise<T | undefined> {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
       const cached = cache.get(url)
       if (cached) return cached
-      const response = await fetch(url)
+      const response = await fetch(url, { signal: controller.signal })
       if (!response.ok)
         throw new Error(
           formatError(`Failed to fetch ${url}`, `Error ${response.status}: ${response.statusText}`)
@@ -61,8 +78,10 @@ function makeSafeGetter<T>(
       cache.set(url, result)
       return result
     } catch (e) {
-      console.error(formatError(`[error] astro-embed`, (e as Error)?.message ?? e, `URL: ${url}`))
+      warnOnce(url, e)
       return undefined
+    } finally {
+      clearTimeout(timeout)
     }
   }
 }
