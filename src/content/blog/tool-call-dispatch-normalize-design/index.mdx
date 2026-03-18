@@ -1416,39 +1416,1811 @@ OpenAI Chat Completions 和 OpenAI Responses 的结果 envelope 根本不是一�
 
 ## 二十一、完整代码
 
-这篇文章对应的文件，已经不再是“只有 dispatch 的小脚本”，而是一个双层 teaching runtime。真正的骨架更接近下面这样：
+这篇文章对应的文件，已经不再是“只有 dispatch 的小脚本”，而是一个双层 teaching runtime。下面放的是当前完整实现，默认折叠：
 
-<details>
-<summary>展开查看完整代码骨架</summary>
+```python title="dispatch_envelope_demo.py" collapsed
+#!/usr/bin/env python3
+"""Dispatch envelope + provider adapter demo.
 
-```python
-class Provider(str, Enum): ...
-class ApiFormat(str, Enum): ...
+This module combines two related runtime boundaries:
+
+1. Local host runtime:
+   envelope -> normalize -> dispatch -> execute -> wrap_result -> append_context
+2. Provider gateway runtime (in the spirit of cc-switch):
+   provider request -> transform_request -> upstream format
+   upstream response -> transform_response -> downstream format
+
+The goal is to show both layers in one place:
+
+- the *tool dispatch* layer turns one tool-call envelope into a concrete local
+  function invocation plus a matching tool result envelope
+- the *provider adapter* layer rewrites whole request / response bodies between
+  Anthropic-style and OpenAI-style message formats
+
+This remains a teaching implementation, not the real Codex or cc-switch code.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import uuid
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Mapping, MutableSequence, Optional, Protocol, Sequence, Tuple
+
+
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CURRENT_DIR))
+
+# Allow the module to be imported as part of `src.*` or executed directly as a
+# standalone script from the demo directory.
+try:
+    from src.edit_validation_workflow import (
+        edit_file_with_validation,
+        restore_snapshot,
+        snapshot_before_edit,
+    )
+    from src.local_runtime import apply_patch, exec_command, view_image, write_stdin
+except ModuleNotFoundError:
+    from edit_validation_workflow import (
+        edit_file_with_validation,
+        restore_snapshot,
+        snapshot_before_edit,
+    )
+    from local_runtime import apply_patch, exec_command, view_image, write_stdin
+
+
+class EnvelopeDispatchError(Exception):
+    """Raised when a tool call envelope cannot be normalized or dispatched."""
+
+
+class ProviderAdapterError(Exception):
+    """Raised when a provider request or response cannot be transformed."""
+
+
+class Provider(str, Enum):
+    OPENAI = "openai"
+    CLAUDE = "claude"
+    GEMINI = "gemini"
+    CODEX = "codex"
+
+
+class ApiFormat(str, Enum):
+    OPENAI_CHAT_COMPLETIONS = "openai_chat_completions"
+    OPENAI_RESPONSES = "openai_responses"
+    ANTHROPIC_MESSAGES = "anthropic_messages"
+    GEMINI_CONTENTS = "gemini_contents"
+    CODEX_TERMINAL = "codex_terminal"
+
 
 @dataclass(frozen=True)
-class AdapterRoute: ...
+class AdapterRoute:
+    downstream_provider: Provider
+    downstream_format: ApiFormat
+    upstream_provider: Provider
+    upstream_format: ApiFormat
+
+    def key(self) -> Tuple[Provider, ApiFormat, Provider, ApiFormat]:
+        return (
+            self.downstream_provider,
+            self.downstream_format,
+            self.upstream_provider,
+            self.upstream_format,
+        )
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "downstream_provider": self.downstream_provider.value,
+            "downstream_format": self.downstream_format.value,
+            "upstream_provider": self.upstream_provider.value,
+            "upstream_format": self.upstream_format.value,
+        }
+
 
 @dataclass
-class NormalizedToolCall: ...
+class NormalizedToolCall:
+    source_format: str
+    source_variant: str
+    call_id: str
+    dispatch_key: str
+    arguments: Dict[str, Any]
+    raw_envelope: Dict[str, Any]
 
-class ProviderAdapter(Protocol): ...
-class IdentityAdapter: ...
-class ClaudeCodeOpenAIAdapter: ...
-class GeminiPassthroughAdapter(IdentityAdapter): ...
 
-def normalize_tool_call(...): ...
-def build_tool_result_envelope(...): ...
-def append_tool_interaction_to_context(...): ...
-def dispatch_tool_call(...): ...
+Handler = Callable[..., Dict[str, Any]]
+UpstreamResponder = Callable[[Dict[str, Any], int], Mapping[str, Any]]
 
-def get_adapter(...): ...
-def transform_gateway_exchange(...): ...
-def extract_tool_calls_from_provider_response(...): ...
-def append_tool_results_to_provider_messages(...): ...
-def run_gateway_tool_loop(...): ...
+
+@dataclass
+class GatewayTurn:
+    turn_index: int
+    upstream_request: Dict[str, Any]
+    upstream_response: Dict[str, Any]
+    downstream_response: Dict[str, Any]
+    tool_calls: List[Dict[str, Any]]
+    dispatch_results: List[Dict[str, Any]]
+    assistant_text: Optional[str] = None
+    next_request: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class TraceEvent:
+    session_id: int
+    kind: str
+    turn_index: Optional[int]
+    payload: Dict[str, Any]
+
+
+TOOL_REGISTRY: Dict[str, Handler] = {
+    "functions.exec_command": exec_command,
+    "functions.write_stdin": write_stdin,
+    "functions.apply_patch": apply_patch,
+    "functions.view_image": view_image,
+    "snapshot_before_edit": snapshot_before_edit,
+    "restore_snapshot": restore_snapshot,
+    "edit_file_with_validation": edit_file_with_validation,
+}
+
+
+def _generated_call_id(prefix: str = "call") -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
+
+
+def _json_compact(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _parse_arguments(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        parsed = json.loads(value)
+        if not isinstance(parsed, dict):
+            raise EnvelopeDispatchError(
+                "function.arguments JSON must decode to an object"
+            )
+        return parsed
+    raise EnvelopeDispatchError(
+        f"tool arguments must be object or JSON string, got {type(value).__name__}"
+    )
+
+
+def _stringify_tool_output(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return _json_compact(value)
+
+
+def _clone_jsonish(value: Any) -> Any:
+    return json.loads(json.dumps(value, ensure_ascii=False))
+
+
+def _expect_dict(value: Any, label: str, *, exc_type: type[Exception]) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        raise exc_type(f"{label} must be an object")
+    return dict(value)
+
+
+def normalize_tool_call(envelope: Mapping[str, Any]) -> NormalizedToolCall:
+    """Normalize provider-specific tool envelopes into one canonical shape."""
+
+    raw = dict(envelope)
+
+    # Codex terminal-style tool dispatch.
+    if "recipient_name" in raw:
+        parameters = raw.get("parameters")
+        if not isinstance(parameters, dict):
+            raise EnvelopeDispatchError(
+                "codex envelope requires an object 'parameters' field"
+            )
+        return NormalizedToolCall(
+            source_format="codex",
+            source_variant="codex_terminal",
+            call_id=str(raw.get("call_id") or raw.get("id") or _generated_call_id("codex")),
+            dispatch_key=str(raw["recipient_name"]),
+            arguments=dict(parameters),
+            raw_envelope=raw,
+        )
+
+    # OpenAI Responses API item:
+    # {"type": "function_call", "call_id": "...", "name": "...", "arguments": "..."}
+    if raw.get("type") == "function_call" and "name" in raw and "arguments" in raw:
+        return NormalizedToolCall(
+            source_format="openai",
+            source_variant="responses_api",
+            call_id=str(raw.get("call_id") or raw.get("id") or _generated_call_id("openai")),
+            dispatch_key=str(raw["name"]),
+            arguments=_parse_arguments(raw["arguments"]),
+            raw_envelope=raw,
+        )
+
+    # Teaching wrapper used in this repo:
+    # {"type": "function_call", "function": {"name": "...", "arguments": ...}}
+    if raw.get("type") == "function_call":
+        fn = raw.get("function")
+        if not isinstance(fn, dict):
+            raise EnvelopeDispatchError(
+                "openai-style function_call envelope requires a 'function' object"
+            )
+        if "name" not in fn or "arguments" not in fn:
+            raise EnvelopeDispatchError(
+                "openai-style function_call requires function.name and function.arguments"
+            )
+        return NormalizedToolCall(
+            source_format="openai",
+            source_variant="responses_wrapper",
+            call_id=str(raw.get("call_id") or raw.get("id") or _generated_call_id("openai")),
+            dispatch_key=str(fn["name"]),
+            arguments=_parse_arguments(fn["arguments"]),
+            raw_envelope=raw,
+        )
+
+    # OpenAI Chat Completions tool call item:
+    # {"id": "...", "type": "function", "function": {...}}
+    if raw.get("type") == "function":
+        fn = raw.get("function")
+        if not isinstance(fn, dict):
+            raise EnvelopeDispatchError(
+                "openai chat tool call requires a 'function' object"
+            )
+        if "name" not in fn or "arguments" not in fn:
+            raise EnvelopeDispatchError(
+                "openai chat tool call requires function.name and function.arguments"
+            )
+        return NormalizedToolCall(
+            source_format="openai",
+            source_variant="chat_completions",
+            call_id=str(raw.get("id") or raw.get("call_id") or _generated_call_id("openai")),
+            dispatch_key=str(fn["name"]),
+            arguments=_parse_arguments(fn["arguments"]),
+            raw_envelope=raw,
+        )
+
+    # Claude Messages API tool_use block.
+    if raw.get("type") == "tool_use":
+        if "name" not in raw or "input" not in raw:
+            raise EnvelopeDispatchError("claude-style tool_use requires name and input")
+        if not isinstance(raw["input"], dict):
+            raise EnvelopeDispatchError("claude-style tool_use input must be an object")
+        return NormalizedToolCall(
+            source_format="claude",
+            source_variant="messages_api",
+            call_id=str(raw.get("id") or _generated_call_id("claude")),
+            dispatch_key=str(raw["name"]),
+            arguments=dict(raw["input"]),
+            raw_envelope=raw,
+        )
+
+    raise EnvelopeDispatchError("unrecognized tool call envelope shape")
+
+
+def build_tool_result_envelope(
+    normalized_call: NormalizedToolCall,
+    output: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Wrap handler output back into the matching provider-style result shape."""
+
+    if normalized_call.source_format == "openai":
+        if normalized_call.source_variant == "chat_completions":
+            return {
+                "role": "tool",
+                "tool_call_id": normalized_call.call_id,
+                "name": normalized_call.dispatch_key,
+                "content": _stringify_tool_output(output),
+            }
+        return {
+            "type": "function_call_output",
+            "call_id": normalized_call.call_id,
+            "name": normalized_call.dispatch_key,
+            "output": output,
+        }
+
+    if normalized_call.source_format == "claude":
+        return {
+            "type": "tool_result",
+            "tool_use_id": normalized_call.call_id,
+            "name": normalized_call.dispatch_key,
+            "content": output,
+        }
+
+    if normalized_call.source_format == "codex":
+        return {
+            "type": "tool_result",
+            "call_id": normalized_call.call_id,
+            "recipient_name": normalized_call.dispatch_key,
+            "output": output,
+        }
+
+    raise EnvelopeDispatchError(
+        f"unsupported source format: {normalized_call.source_format}"
+    )
+
+
+def append_tool_interaction_to_context(
+    context: MutableSequence[Dict[str, Any]],
+    *,
+    call_envelope: Mapping[str, Any],
+    tool_result_envelope: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    """Append generic audit-friendly tool-call history into context."""
+
+    updated = list(context)
+    updated.append(
+        {
+            "role": "assistant",
+            "type": "tool_call",
+            "content": dict(call_envelope),
+        }
+    )
+    updated.append(
+        {
+            "role": "tool",
+            "type": "tool_result",
+            "content": dict(tool_result_envelope),
+        }
+    )
+    return updated
+
+
+def build_provider_native_context_entries(
+    normalized_call: NormalizedToolCall,
+    *,
+    call_envelope: Mapping[str, Any],
+    tool_result_envelope: Mapping[str, Any],
+) -> List[Dict[str, Any]]:
+    """Return provider-native context entries for the same tool interaction."""
+
+    if normalized_call.source_format == "claude":
+        return [
+            {
+                "role": "assistant",
+                "content": [dict(call_envelope)],
+            },
+            {
+                "role": "user",
+                "content": [dict(tool_result_envelope)],
+            },
+        ]
+
+    if normalized_call.source_format == "openai" and normalized_call.source_variant == "chat_completions":
+        return [
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [dict(call_envelope)],
+            },
+            dict(tool_result_envelope),
+        ]
+
+    return [
+        {
+            "role": "assistant",
+            "content": [dict(call_envelope)],
+        },
+        {
+            "role": "tool",
+            "content": [dict(tool_result_envelope)],
+        },
+    ]
+
+
+def dispatch_tool_call(
+    call_envelope: Mapping[str, Any],
+    *,
+    context: Optional[List[Dict[str, Any]]] = None,
+    registry: Optional[Mapping[str, Handler]] = None,
+) -> Dict[str, Any]:
+    """Dispatch one normalized tool call through the local registry."""
+
+    normalized = normalize_tool_call(call_envelope)
+    active_registry = dict(registry or TOOL_REGISTRY)
+
+    handler = active_registry.get(normalized.dispatch_key)
+    if handler is None:
+        raise EnvelopeDispatchError(
+            f"no handler registered for {normalized.dispatch_key!r}"
+        )
+
+    try:
+        output = handler(**normalized.arguments)
+    except TypeError as exc:
+        raise EnvelopeDispatchError(
+            f"handler argument mismatch for {normalized.dispatch_key}: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise EnvelopeDispatchError(
+            f"handler {normalized.dispatch_key!r} failed: {exc}"
+        ) from exc
+
+    if not isinstance(output, dict):
+        raise EnvelopeDispatchError(
+            f"handler {normalized.dispatch_key!r} returned "
+            f"{type(output).__name__}, expected dict"
+        )
+
+    tool_result_envelope = build_tool_result_envelope(normalized, output)
+    updated_context = append_tool_interaction_to_context(
+        context or [],
+        call_envelope=call_envelope,
+        tool_result_envelope=tool_result_envelope,
+    )
+    provider_native_context = build_provider_native_context_entries(
+        normalized,
+        call_envelope=call_envelope,
+        tool_result_envelope=tool_result_envelope,
+    )
+
+    return {
+        "normalized_call": {
+            "source_format": normalized.source_format,
+            "source_variant": normalized.source_variant,
+            "call_id": normalized.call_id,
+            "dispatch_key": normalized.dispatch_key,
+            "arguments": normalized.arguments,
+        },
+        "tool_output": output,
+        "tool_result_envelope": tool_result_envelope,
+        "updated_context": updated_context,
+        "provider_native_context": provider_native_context,
+    }
+
+
+class ProviderAdapter(Protocol):
+    """Small teaching protocol modeled after cc-switch style adapters."""
+
+    def name(self) -> str:
+        ...
+
+    def route(self) -> AdapterRoute:
+        ...
+
+    def transform_request(self, body: Mapping[str, Any]) -> Dict[str, Any]:
+        ...
+
+    def transform_response(self, body: Mapping[str, Any]) -> Dict[str, Any]:
+        ...
+
+
+class IdentityAdapter:
+    """Default passthrough adapter for providers that already match upstream."""
+
+    def __init__(self, *, adapter_name: str, adapter_route: AdapterRoute) -> None:
+        self._name = adapter_name
+        self._route = adapter_route
+
+    def name(self) -> str:
+        return self._name
+
+    def route(self) -> AdapterRoute:
+        return self._route
+
+    def transform_request(self, body: Mapping[str, Any]) -> Dict[str, Any]:
+        return dict(body)
+
+    def transform_response(self, body: Mapping[str, Any]) -> Dict[str, Any]:
+        return dict(body)
+
+
+def _anthropic_tool_to_openai(tool: Mapping[str, Any]) -> Dict[str, Any]:
+    raw = dict(tool)
+    return {
+        "type": "function",
+        "function": {
+            "name": raw["name"],
+            "description": raw.get("description", ""),
+            "parameters": raw.get("input_schema", {"type": "object", "properties": {}}),
+        },
+    }
+
+
+def _anthropic_text_from_blocks(content: Sequence[Any]) -> str:
+    parts: List[str] = []
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "text":
+            text = block.get("text")
+            if text:
+                parts.append(str(text))
+    return "\n".join(parts)
+
+
+def _anthropic_message_to_openai_messages(message: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    raw = dict(message)
+    role = str(raw.get("role", "user"))
+    content = raw.get("content", "")
+
+    if isinstance(content, str):
+        return [{"role": role, "content": content}]
+    if not isinstance(content, list):
+        raise ProviderAdapterError("anthropic message content must be string or list")
+
+    if role == "assistant":
+        text_parts: List[str] = []
+        tool_calls: List[Dict[str, Any]] = []
+        for block in content:
+            entry = _expect_dict(
+                block,
+                "anthropic assistant content block",
+                exc_type=ProviderAdapterError,
+            )
+            if entry.get("type") == "text":
+                if entry.get("text"):
+                    text_parts.append(str(entry["text"]))
+                continue
+            if entry.get("type") == "tool_use":
+                input_obj = entry.get("input")
+                if not isinstance(input_obj, dict):
+                    raise ProviderAdapterError("anthropic tool_use input must be an object")
+                tool_calls.append(
+                    {
+                        "id": str(entry.get("id") or _generated_call_id("toolu")),
+                        "type": "function",
+                        "function": {
+                            "name": str(entry["name"]),
+                            "arguments": _json_compact(input_obj),
+                        },
+                    }
+                )
+                continue
+            raise ProviderAdapterError(
+                f"unsupported anthropic assistant block type: {entry.get('type')!r}"
+            )
+
+        assistant_message: Dict[str, Any] = {
+            "role": "assistant",
+            "content": "\n".join(text_parts) if text_parts else None,
+        }
+        if tool_calls:
+            assistant_message["tool_calls"] = tool_calls
+        return [assistant_message]
+
+    if role == "user":
+        openai_messages: List[Dict[str, Any]] = []
+        text_parts: List[str] = []
+
+        for block in content:
+            entry = _expect_dict(
+                block,
+                "anthropic user content block",
+                exc_type=ProviderAdapterError,
+            )
+            if entry.get("type") == "text":
+                if entry.get("text"):
+                    text_parts.append(str(entry["text"]))
+                continue
+            if entry.get("type") == "tool_result":
+                if text_parts:
+                    openai_messages.append(
+                        {
+                            "role": "user",
+                            "content": "\n".join(text_parts),
+                        }
+                    )
+                    text_parts = []
+                openai_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": str(entry["tool_use_id"]),
+                        "content": _stringify_tool_output(entry.get("content", "")),
+                    }
+                )
+                continue
+            raise ProviderAdapterError(
+                f"unsupported anthropic user block type: {entry.get('type')!r}"
+            )
+
+        if text_parts:
+            openai_messages.append({"role": "user", "content": "\n".join(text_parts)})
+        return openai_messages
+
+    raise ProviderAdapterError(f"unsupported anthropic message role: {role!r}")
+
+
+def _responses_output_to_openai_message(output_items: Sequence[Any]) -> Dict[str, Any]:
+    text_parts: List[str] = []
+    tool_calls: List[Dict[str, Any]] = []
+
+    for item in output_items:
+        entry = _expect_dict(
+            item,
+            "openai responses output item",
+            exc_type=ProviderAdapterError,
+        )
+        item_type = entry.get("type")
+
+        if item_type in {"text", "output_text"}:
+            text = entry.get("text")
+            if text:
+                text_parts.append(str(text))
+            continue
+
+        if item_type == "message":
+            content = entry.get("content")
+            if isinstance(content, list):
+                text = _anthropic_text_from_blocks(content)
+                if text:
+                    text_parts.append(text)
+            continue
+
+        if item_type == "function_call":
+            arguments = entry.get("arguments", "{}")
+            if not isinstance(arguments, str):
+                arguments = _json_compact(arguments)
+            tool_calls.append(
+                {
+                    "id": str(entry.get("call_id") or entry.get("id") or _generated_call_id("call")),
+                    "type": "function",
+                    "function": {
+                        "name": str(entry["name"]),
+                        "arguments": arguments,
+                    },
+                }
+            )
+            continue
+
+    message: Dict[str, Any] = {
+        "role": "assistant",
+        "content": "\n".join(text_parts) if text_parts else None,
+    }
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+    return message
+
+
+def _extract_openai_assistant_message(body: Mapping[str, Any]) -> Dict[str, Any]:
+    raw = dict(body)
+
+    if isinstance(raw.get("choices"), list) and raw["choices"]:
+        choice = _expect_dict(
+            raw["choices"][0],
+            "openai choice",
+            exc_type=ProviderAdapterError,
+        )
+        return _expect_dict(
+            choice.get("message"),
+            "openai choice.message",
+            exc_type=ProviderAdapterError,
+        )
+
+    if raw.get("role") == "assistant":
+        return raw
+
+    if isinstance(raw.get("output"), list):
+        return _responses_output_to_openai_message(raw["output"])
+
+    raise ProviderAdapterError("could not extract assistant message from OpenAI body")
+
+
+class ClaudeCodeOpenAIAdapter:
+    """cc-switch-style adapter:
+
+    - downstream client speaks Anthropic Messages API-like payloads
+    - upstream provider speaks OpenAI chat-completions tool calling
+    """
+
+    _route = AdapterRoute(
+        downstream_provider=Provider.CLAUDE,
+        downstream_format=ApiFormat.ANTHROPIC_MESSAGES,
+        upstream_provider=Provider.OPENAI,
+        upstream_format=ApiFormat.OPENAI_CHAT_COMPLETIONS,
+    )
+
+    def name(self) -> str:
+        return "claude-code-openai"
+
+    def route(self) -> AdapterRoute:
+        return self._route
+
+    def transform_request(self, body: Mapping[str, Any]) -> Dict[str, Any]:
+        raw = dict(body)
+        transformed = {
+            key: value
+            for key, value in raw.items()
+            if key not in {"system", "messages", "tools"}
+        }
+
+        openai_messages: List[Dict[str, Any]] = []
+
+        system = raw.get("system")
+        if isinstance(system, str) and system.strip():
+            openai_messages.append({"role": "system", "content": system})
+        elif isinstance(system, list):
+            system_text = _anthropic_text_from_blocks(system)
+            if system_text:
+                openai_messages.append({"role": "system", "content": system_text})
+
+        for message in raw.get("messages", []):
+            openai_messages.extend(_anthropic_message_to_openai_messages(message))
+
+        transformed["messages"] = openai_messages
+        if isinstance(raw.get("tools"), list):
+            transformed["tools"] = [
+                _anthropic_tool_to_openai(tool) for tool in raw["tools"]
+            ]
+
+        return transformed
+
+    def transform_response(self, body: Mapping[str, Any]) -> Dict[str, Any]:
+        raw = dict(body)
+        message = _extract_openai_assistant_message(raw)
+
+        content_blocks: List[Dict[str, Any]] = []
+        if message.get("content"):
+            content_blocks.append(
+                {
+                    "type": "text",
+                    "text": str(message["content"]),
+                }
+            )
+
+        for tool_call in message.get("tool_calls") or []:
+            entry = _expect_dict(
+                tool_call,
+                "openai tool call",
+                exc_type=ProviderAdapterError,
+            )
+            fn = _expect_dict(
+                entry.get("function"),
+                "openai tool call function",
+                exc_type=ProviderAdapterError,
+            )
+            content_blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": str(entry.get("id") or _generated_call_id("toolu")),
+                    "name": str(fn["name"]),
+                    "input": _parse_arguments(fn.get("arguments", "{}")),
+                }
+            )
+
+        transformed: Dict[str, Any] = {
+            "role": "assistant",
+            "content": content_blocks,
+            "stop_reason": "tool_use"
+            if any(block["type"] == "tool_use" for block in content_blocks)
+            else "end_turn",
+        }
+
+        for key in ("id", "model", "usage"):
+            if key in raw:
+                transformed[key] = raw[key]
+
+        return transformed
+
+
+class GeminiPassthroughAdapter(IdentityAdapter):
+    def __init__(self) -> None:
+        super().__init__(
+            adapter_name="gemini-passthrough",
+            adapter_route=AdapterRoute(
+                downstream_provider=Provider.GEMINI,
+                downstream_format=ApiFormat.GEMINI_CONTENTS,
+                upstream_provider=Provider.GEMINI,
+                upstream_format=ApiFormat.GEMINI_CONTENTS,
+            ),
+        )
+
+
+REGISTERED_ADAPTERS: List[ProviderAdapter] = [
+    ClaudeCodeOpenAIAdapter(),
+    GeminiPassthroughAdapter(),
+]
+
+
+def build_adapter_registry(
+    adapters: Sequence[ProviderAdapter],
+) -> Dict[Tuple[Provider, ApiFormat, Provider, ApiFormat], ProviderAdapter]:
+    return {adapter.route().key(): adapter for adapter in adapters}
+
+
+ADAPTER_REGISTRY: Dict[Tuple[Provider, ApiFormat, Provider, ApiFormat], ProviderAdapter] = (
+    build_adapter_registry(REGISTERED_ADAPTERS)
+)
+
+
+def list_registered_adapters() -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": adapter.name(),
+            "route": adapter.route().to_dict(),
+        }
+        for adapter in REGISTERED_ADAPTERS
+    ]
+
+
+def get_adapter(
+    *,
+    downstream_provider: Provider,
+    downstream_format: ApiFormat,
+    upstream_provider: Provider,
+    upstream_format: ApiFormat,
+) -> ProviderAdapter:
+    route = AdapterRoute(
+        downstream_provider=downstream_provider,
+        downstream_format=downstream_format,
+        upstream_provider=upstream_provider,
+        upstream_format=upstream_format,
+    )
+    adapter = ADAPTER_REGISTRY.get(route.key())
+    if adapter is None:
+        raise ProviderAdapterError(
+            "no adapter registered for "
+            f"{downstream_provider.value}/{downstream_format.value} -> "
+            f"{upstream_provider.value}/{upstream_format.value}"
+        )
+    return adapter
+
+
+def transform_gateway_exchange(
+    *,
+    downstream_provider: Provider,
+    downstream_format: ApiFormat,
+    upstream_provider: Provider,
+    upstream_format: ApiFormat,
+    request_body: Mapping[str, Any],
+    response_body: Mapping[str, Any],
+) -> Dict[str, Any]:
+    adapter = get_adapter(
+        downstream_provider=downstream_provider,
+        downstream_format=downstream_format,
+        upstream_provider=upstream_provider,
+        upstream_format=upstream_format,
+    )
+    return {
+        "adapter": adapter.name(),
+        "route": adapter.route().to_dict(),
+        "input_request": dict(request_body),
+        "transformed_request": adapter.transform_request(request_body),
+        "input_response": dict(response_body),
+        "transformed_response": adapter.transform_response(response_body),
+    }
+
+
+def extract_tool_calls_from_provider_response(
+    response_body: Mapping[str, Any],
+    *,
+    provider: Provider,
+    api_format: ApiFormat,
+) -> List[Dict[str, Any]]:
+    """Extract provider-native tool call envelopes from one assistant response."""
+
+    raw = dict(response_body)
+
+    if provider == Provider.CLAUDE and api_format == ApiFormat.ANTHROPIC_MESSAGES:
+        if raw.get("role") != "assistant":
+            raise ProviderAdapterError("anthropic response must be an assistant message")
+        content = raw.get("content", [])
+        if not isinstance(content, list):
+            raise ProviderAdapterError("anthropic assistant content must be a list")
+        return [
+            dict(block)
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "tool_use"
+        ]
+
+    if provider == Provider.OPENAI and api_format == ApiFormat.OPENAI_CHAT_COMPLETIONS:
+        message = _extract_openai_assistant_message(raw)
+        return [
+            dict(tool_call)
+            for tool_call in message.get("tool_calls") or []
+            if isinstance(tool_call, dict)
+        ]
+
+    if provider == Provider.OPENAI and api_format == ApiFormat.OPENAI_RESPONSES:
+        if isinstance(raw.get("output"), list):
+            return [
+                dict(item)
+                for item in raw["output"]
+                if isinstance(item, dict) and item.get("type") == "function_call"
+            ]
+        if raw.get("type") == "function_call":
+            return [raw]
+        return []
+
+    if provider == Provider.GEMINI and api_format == ApiFormat.GEMINI_CONTENTS:
+        candidates = raw.get("candidates")
+        if not isinstance(candidates, list) or not candidates:
+            return []
+        first_candidate = _expect_dict(
+            candidates[0],
+            "gemini candidate",
+            exc_type=ProviderAdapterError,
+        )
+        content = _expect_dict(
+            first_candidate.get("content", {}),
+            "gemini candidate content",
+            exc_type=ProviderAdapterError,
+        )
+        parts = content.get("parts", [])
+        if not isinstance(parts, list):
+            raise ProviderAdapterError("gemini content.parts must be a list")
+
+        extracted: List[Dict[str, Any]] = []
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            function_call = part.get("functionCall")
+            if not isinstance(function_call, dict):
+                continue
+            extracted.append(
+                {
+                    "type": "function_call",
+                    "call_id": str(
+                        function_call.get("id")
+                        or function_call.get("call_id")
+                        or _generated_call_id("gemini")
+                    ),
+                    "name": str(function_call["name"]),
+                    "arguments": function_call.get("args", {}),
+                }
+            )
+        return extracted
+
+    raise ProviderAdapterError(
+        f"tool extraction not implemented for {provider.value}/{api_format.value}"
+    )
+
+
+def extract_text_from_provider_response(
+    response_body: Mapping[str, Any],
+    *,
+    provider: Provider,
+    api_format: ApiFormat,
+) -> Optional[str]:
+    """Extract the assistant's human-readable text from a provider-native response."""
+
+    raw = dict(response_body)
+
+    if provider == Provider.CLAUDE and api_format == ApiFormat.ANTHROPIC_MESSAGES:
+        if raw.get("role") != "assistant":
+            raise ProviderAdapterError("anthropic response must be an assistant message")
+        content = raw.get("content", [])
+        if not isinstance(content, list):
+            raise ProviderAdapterError("anthropic assistant content must be a list")
+        return _anthropic_text_from_blocks(content)
+
+    if provider == Provider.OPENAI and api_format == ApiFormat.OPENAI_CHAT_COMPLETIONS:
+        message = _extract_openai_assistant_message(raw)
+        content = message.get("content")
+        if content is None:
+            return None
+        return str(content)
+
+    if provider == Provider.OPENAI and api_format == ApiFormat.OPENAI_RESPONSES:
+        message = _extract_openai_assistant_message(raw)
+        content = message.get("content")
+        if content is None:
+            return None
+        return str(content)
+
+    if provider == Provider.GEMINI and api_format == ApiFormat.GEMINI_CONTENTS:
+        candidates = raw.get("candidates")
+        if not isinstance(candidates, list) or not candidates:
+            return None
+        first_candidate = _expect_dict(
+            candidates[0],
+            "gemini candidate",
+            exc_type=ProviderAdapterError,
+        )
+        content = _expect_dict(
+            first_candidate.get("content", {}),
+            "gemini candidate content",
+            exc_type=ProviderAdapterError,
+        )
+        parts = content.get("parts", [])
+        if not isinstance(parts, list):
+            raise ProviderAdapterError("gemini content.parts must be a list")
+        texts = [
+            str(part["text"])
+            for part in parts
+            if isinstance(part, dict) and part.get("text")
+        ]
+        return "\n".join(texts) if texts else None
+
+    raise ProviderAdapterError(
+        f"text extraction not implemented for {provider.value}/{api_format.value}"
+    )
+
+
+def append_tool_results_to_provider_messages(
+    *,
+    request_body: Mapping[str, Any],
+    response_body: Mapping[str, Any],
+    dispatch_results: Sequence[Mapping[str, Any]],
+    provider: Provider,
+    api_format: ApiFormat,
+) -> Dict[str, Any]:
+    """Append assistant tool-call output plus tool results into next-turn history."""
+
+    updated_request = _clone_jsonish(dict(request_body))
+
+    if provider == Provider.CLAUDE and api_format == ApiFormat.ANTHROPIC_MESSAGES:
+        messages = list(updated_request.get("messages", []))
+        messages.append(_clone_jsonish(dict(response_body)))
+
+        tool_result_blocks = [
+            _clone_jsonish(dict(result["tool_result_envelope"]))
+            for result in dispatch_results
+        ]
+        if tool_result_blocks:
+            messages.append({"role": "user", "content": tool_result_blocks})
+        updated_request["messages"] = messages
+        return updated_request
+
+    if provider == Provider.OPENAI and api_format == ApiFormat.OPENAI_CHAT_COMPLETIONS:
+        messages = list(updated_request.get("messages", []))
+        messages.append(_clone_jsonish(_extract_openai_assistant_message(response_body)))
+        messages.extend(
+            _clone_jsonish(dict(result["tool_result_envelope"]))
+            for result in dispatch_results
+        )
+        updated_request["messages"] = messages
+        return updated_request
+
+    if provider == Provider.OPENAI and api_format == ApiFormat.OPENAI_RESPONSES:
+        inputs = list(updated_request.get("input", []))
+        if raw_output := dict(response_body).get("output"):
+            if isinstance(raw_output, list):
+                inputs.extend(_clone_jsonish(raw_output))
+        for result in dispatch_results:
+            inputs.append(_clone_jsonish(dict(result["tool_result_envelope"])))
+        updated_request["input"] = inputs
+        return updated_request
+
+    if provider == Provider.GEMINI and api_format == ApiFormat.GEMINI_CONTENTS:
+        contents = list(updated_request.get("contents", []))
+
+        candidates = dict(response_body).get("candidates")
+        if isinstance(candidates, list) and candidates:
+            first_candidate = _expect_dict(
+                candidates[0],
+                "gemini candidate",
+                exc_type=ProviderAdapterError,
+            )
+            if isinstance(first_candidate.get("content"), dict):
+                contents.append(_clone_jsonish(first_candidate["content"]))
+
+        response_parts = []
+        for result in dispatch_results:
+            response_parts.append(
+                {
+                    "functionResponse": {
+                        "name": result["normalized_call"]["dispatch_key"],
+                        "response": result["tool_output"],
+                    }
+                }
+            )
+        if response_parts:
+            contents.append({"role": "user", "parts": response_parts})
+
+        updated_request["contents"] = contents
+        return updated_request
+
+    raise ProviderAdapterError(
+        f"tool-result append not implemented for {provider.value}/{api_format.value}"
+    )
+
+
+def _gateway_turn_to_dict(turn: GatewayTurn) -> Dict[str, Any]:
+    return {
+        "turn_index": turn.turn_index,
+        "upstream_request": turn.upstream_request,
+        "upstream_response": turn.upstream_response,
+        "downstream_response": turn.downstream_response,
+        "tool_calls": turn.tool_calls,
+        "dispatch_results": turn.dispatch_results,
+        "assistant_text": turn.assistant_text,
+        "next_request": turn.next_request,
+    }
+
+
+def _trace_event_to_dict(event: TraceEvent) -> Dict[str, Any]:
+    return {
+        "session_id": event.session_id,
+        "kind": event.kind,
+        "turn_index": event.turn_index,
+        "payload": event.payload,
+    }
+
+
+@dataclass
+class GatewaySession:
+    adapter: ProviderAdapter
+    downstream_provider: Provider
+    downstream_format: ApiFormat
+    upstream_provider: Provider
+    upstream_format: ApiFormat
+    current_request: Dict[str, Any]
+    registry: Mapping[str, Handler]
+    audit_context: List[Dict[str, Any]]
+    turns: List[GatewayTurn]
+    completed: bool = False
+    stop_reason: Optional[str] = None
+    final_response: Optional[Dict[str, Any]] = None
+
+    def step(self, upstream_responder: UpstreamResponder) -> GatewayTurn:
+        if self.completed:
+            raise ProviderAdapterError("gateway session already completed")
+
+        turn_index = len(self.turns)
+        upstream_request = self.adapter.transform_request(self.current_request)
+        upstream_response = dict(
+            upstream_responder(_clone_jsonish(upstream_request), turn_index)
+        )
+        downstream_response = self.adapter.transform_response(upstream_response)
+        tool_calls = extract_tool_calls_from_provider_response(
+            downstream_response,
+            provider=self.downstream_provider,
+            api_format=self.downstream_format,
+        )
+        assistant_text = extract_text_from_provider_response(
+            downstream_response,
+            provider=self.downstream_provider,
+            api_format=self.downstream_format,
+        )
+
+        dispatch_results: List[Dict[str, Any]] = []
+        next_request: Optional[Dict[str, Any]] = None
+
+        if not tool_calls:
+            self.completed = True
+            self.stop_reason = "assistant_response"
+            self.final_response = _clone_jsonish(downstream_response)
+        else:
+            for call in tool_calls:
+                result = dispatch_tool_call(
+                    call,
+                    context=self.audit_context,
+                    registry=self.registry,
+                )
+                dispatch_results.append(result)
+                self.audit_context = list(result["updated_context"])
+
+            next_request = append_tool_results_to_provider_messages(
+                request_body=self.current_request,
+                response_body=downstream_response,
+                dispatch_results=dispatch_results,
+                provider=self.downstream_provider,
+                api_format=self.downstream_format,
+            )
+            self.current_request = _clone_jsonish(next_request)
+
+        turn = GatewayTurn(
+            turn_index=turn_index,
+            upstream_request=_clone_jsonish(upstream_request),
+            upstream_response=_clone_jsonish(upstream_response),
+            downstream_response=_clone_jsonish(downstream_response),
+            tool_calls=_clone_jsonish(tool_calls),
+            dispatch_results=_clone_jsonish(dispatch_results),
+            assistant_text=assistant_text,
+            next_request=_clone_jsonish(next_request) if next_request is not None else None,
+        )
+        self.turns.append(turn)
+        return turn
+
+    def run(self, upstream_responder: UpstreamResponder, *, max_turns: int = 8) -> Dict[str, Any]:
+        while len(self.turns) < max_turns and not self.completed:
+            self.step(upstream_responder)
+
+        if not self.completed:
+            self.stop_reason = "max_turns_exceeded"
+
+        return self.to_dict()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "completed": self.completed,
+            "stop_reason": self.stop_reason,
+            "adapter": self.adapter.name(),
+            "route": self.adapter.route().to_dict(),
+            "turns": [_gateway_turn_to_dict(turn) for turn in self.turns],
+            "final_request": self.current_request,
+            "final_response": self.final_response,
+            "runtime_audit_context": self.audit_context,
+        }
+
+
+def create_gateway_session(
+    *,
+    initial_request: Mapping[str, Any],
+    downstream_provider: Provider,
+    downstream_format: ApiFormat,
+    upstream_provider: Provider,
+    upstream_format: ApiFormat,
+    registry: Optional[Mapping[str, Handler]] = None,
+) -> GatewaySession:
+    adapter = get_adapter(
+        downstream_provider=downstream_provider,
+        downstream_format=downstream_format,
+        upstream_provider=upstream_provider,
+        upstream_format=upstream_format,
+    )
+    return GatewaySession(
+        adapter=adapter,
+        downstream_provider=downstream_provider,
+        downstream_format=downstream_format,
+        upstream_provider=upstream_provider,
+        upstream_format=upstream_format,
+        current_request=_clone_jsonish(dict(initial_request)),
+        registry=dict(registry or TOOL_REGISTRY),
+        audit_context=[],
+        turns=[],
+    )
+
+
+class GatewayRuntime:
+    """Higher-level teaching runtime that manages gateway sessions and traces."""
+
+    def __init__(
+        self,
+        *,
+        adapters: Optional[Sequence[ProviderAdapter]] = None,
+        registry: Optional[Mapping[str, Handler]] = None,
+        upstream_responder: Optional[UpstreamResponder] = None,
+    ) -> None:
+        self.adapters = list(adapters or REGISTERED_ADAPTERS)
+        self.adapter_registry = build_adapter_registry(self.adapters)
+        self.registry = dict(registry or TOOL_REGISTRY)
+        self.upstream_responder = upstream_responder or _demo_upstream_responder
+        self._sessions: Dict[int, GatewaySession] = {}
+        self._traces: Dict[int, List[TraceEvent]] = {}
+        self._next_session_id = 1
+
+    def list_routes(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                "name": adapter.name(),
+                "route": adapter.route().to_dict(),
+            }
+            for adapter in self.adapters
+        ]
+
+    def get_adapter(
+        self,
+        *,
+        downstream_provider: Provider,
+        downstream_format: ApiFormat,
+        upstream_provider: Provider,
+        upstream_format: ApiFormat,
+    ) -> ProviderAdapter:
+        route = AdapterRoute(
+            downstream_provider=downstream_provider,
+            downstream_format=downstream_format,
+            upstream_provider=upstream_provider,
+            upstream_format=upstream_format,
+        )
+        adapter = self.adapter_registry.get(route.key())
+        if adapter is None:
+            raise ProviderAdapterError(
+                "no adapter registered for "
+                f"{downstream_provider.value}/{downstream_format.value} -> "
+                f"{upstream_provider.value}/{upstream_format.value}"
+            )
+        return adapter
+
+    def create_session(
+        self,
+        *,
+        initial_request: Mapping[str, Any],
+        downstream_provider: Provider,
+        downstream_format: ApiFormat,
+        upstream_provider: Provider,
+        upstream_format: ApiFormat,
+    ) -> int:
+        adapter = self.get_adapter(
+            downstream_provider=downstream_provider,
+            downstream_format=downstream_format,
+            upstream_provider=upstream_provider,
+            upstream_format=upstream_format,
+        )
+        session_id = self._next_session_id
+        self._next_session_id += 1
+        session = GatewaySession(
+            adapter=adapter,
+            downstream_provider=downstream_provider,
+            downstream_format=downstream_format,
+            upstream_provider=upstream_provider,
+            upstream_format=upstream_format,
+            current_request=_clone_jsonish(dict(initial_request)),
+            registry=self.registry,
+            audit_context=[],
+            turns=[],
+        )
+        self._sessions[session_id] = session
+        self._traces[session_id] = [
+            TraceEvent(
+                session_id=session_id,
+                kind="session_created",
+                turn_index=None,
+                payload={
+                    "adapter": adapter.name(),
+                    "route": adapter.route().to_dict(),
+                    "initial_request": _clone_jsonish(dict(initial_request)),
+                },
+            )
+        ]
+        return session_id
+
+    def get_session(self, session_id: int) -> GatewaySession:
+        session = self._sessions.get(session_id)
+        if session is None:
+            raise ProviderAdapterError(f"unknown gateway session: {session_id}")
+        return session
+
+    def get_trace(self, session_id: int) -> List[Dict[str, Any]]:
+        if session_id not in self._traces:
+            raise ProviderAdapterError(f"unknown gateway session: {session_id}")
+        return [_trace_event_to_dict(event) for event in self._traces[session_id]]
+
+    def _record_trace(
+        self,
+        session_id: int,
+        *,
+        kind: str,
+        turn_index: Optional[int],
+        payload: Mapping[str, Any],
+    ) -> None:
+        self._traces[session_id].append(
+            TraceEvent(
+                session_id=session_id,
+                kind=kind,
+                turn_index=turn_index,
+                payload=_clone_jsonish(dict(payload)),
+            )
+        )
+
+    def step_session(self, session_id: int) -> Dict[str, Any]:
+        session = self.get_session(session_id)
+        turn_index = len(session.turns)
+        self._record_trace(
+            session_id,
+            kind="turn_started",
+            turn_index=turn_index,
+            payload={"request": _clone_jsonish(session.current_request)},
+        )
+        try:
+            turn = session.step(self.upstream_responder)
+        except Exception as exc:
+            self._record_trace(
+                session_id,
+                kind="turn_failed",
+                turn_index=turn_index,
+                payload={
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+            )
+            raise
+        self._record_trace(
+            session_id,
+            kind="turn_completed",
+            turn_index=turn.turn_index,
+            payload={
+                "tool_call_count": len(turn.tool_calls),
+                "assistant_text": turn.assistant_text,
+                "completed": session.completed,
+                "stop_reason": session.stop_reason,
+            },
+        )
+        return {
+            "session_id": session_id,
+            "turn": _gateway_turn_to_dict(turn),
+            "completed": session.completed,
+            "stop_reason": session.stop_reason,
+        }
+
+    def run_session(self, session_id: int, *, max_turns: int = 8) -> Dict[str, Any]:
+        session = self.get_session(session_id)
+        starting_turns = len(session.turns)
+        while len(session.turns) - starting_turns < max_turns and not session.completed:
+            self.step_session(session_id)
+        last_kind = self._traces[session_id][-1].kind if self._traces[session_id] else None
+        if not session.completed and len(session.turns) - starting_turns >= max_turns:
+            session.stop_reason = "max_turns_exceeded"
+            if last_kind != "session_stopped":
+                self._record_trace(
+                    session_id,
+                    kind="session_stopped",
+                    turn_index=None,
+                    payload={"stop_reason": session.stop_reason},
+                )
+        elif session.completed:
+            if last_kind != "session_completed":
+                self._record_trace(
+                    session_id,
+                    kind="session_completed",
+                    turn_index=None,
+                    payload={"stop_reason": session.stop_reason},
+                )
+
+        return {
+            "session_id": session_id,
+            "session": session.to_dict(),
+            "trace": self.get_trace(session_id),
+        }
+
+
+def run_gateway_tool_loop(
+    *,
+    initial_request: Mapping[str, Any],
+    downstream_provider: Provider,
+    downstream_format: ApiFormat,
+    upstream_provider: Provider,
+    upstream_format: ApiFormat,
+    upstream_responder: UpstreamResponder,
+    registry: Optional[Mapping[str, Handler]] = None,
+    max_turns: int = 8,
+) -> Dict[str, Any]:
+    """Run a full gateway loop until the upstream model stops requesting tools."""
+
+    session = create_gateway_session(
+        initial_request=initial_request,
+        downstream_provider=downstream_provider,
+        downstream_format=downstream_format,
+        upstream_provider=upstream_provider,
+        upstream_format=upstream_format,
+        registry=registry,
+    )
+    return session.run(upstream_responder, max_turns=max_turns)
+
+
+def _demo_context() -> List[Dict[str, Any]]:
+    return [
+        {"role": "system", "content": "You are a coding agent."},
+        {"role": "user", "content": "Create a snapshot before editing demo.py."},
+    ]
+
+
+def _demo_call() -> Dict[str, Any]:
+    return {
+        "id": "call_demo_snapshot",
+        "type": "function_call",
+        "function": {
+            "name": "snapshot_before_edit",
+            "arguments": {
+                "file_path": str((Path.cwd() / "README.md").resolve()),
+                "snapshot_root": str((Path.cwd() / ".snapshots-demo").resolve()),
+                "workspace_root": str(Path.cwd().resolve()),
+            },
+        },
+    }
+
+
+def _demo_claude_request() -> Dict[str, Any]:
+    return {
+        "model": "claude-sonnet-demo",
+        "system": "You are a careful coding assistant.",
+        "messages": [
+            {"role": "user", "content": "Find TODO comments under src."},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "I will inspect the repo with ripgrep."},
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_demo_exec",
+                        "name": "functions.exec_command",
+                        "input": {
+                            "cmd": "rg -n TODO src",
+                            "workdir": "/workspace/demo",
+                            "yield_time_ms": 250,
+                        },
+                    },
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_demo_exec",
+                        "content": "src/app.py:10:# TODO refactor parser",
+                    }
+                ],
+            },
+        ],
+        "tools": [
+            {
+                "name": "functions.exec_command",
+                "description": "Execute a shell command in the workspace.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "cmd": {"type": "string"},
+                        "workdir": {"type": "string"},
+                        "yield_time_ms": {"type": "integer"},
+                    },
+                    "required": ["cmd"],
+                },
+            }
+        ],
+    }
+
+
+def _demo_openai_response() -> Dict[str, Any]:
+    return {
+        "id": "chatcmpl_demo_001",
+        "model": "gpt-4.1-demo",
+        "choices": [
+            {
+                "finish_reason": "tool_calls",
+                "message": {
+                    "role": "assistant",
+                    "content": "I found one TODO and will surface it.",
+                    "tool_calls": [
+                        {
+                            "id": "call_demo_exec",
+                            "type": "function",
+                            "function": {
+                                "name": "functions.exec_command",
+                                "arguments": _json_compact(
+                                    {
+                                        "cmd": "printf 'src/app.py:10:# TODO refactor parser\\n'",
+                                        "workdir": str(Path.cwd().resolve()),
+                                        "yield_time_ms": 250,
+                                    }
+                                ),
+                            },
+                        }
+                    ],
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 18,
+            "total_tokens": 138,
+        },
+    }
+
+
+def _demo_claude_loop_request() -> Dict[str, Any]:
+    return {
+        "model": "claude-sonnet-demo",
+        "system": "You are a careful coding assistant.",
+        "messages": [
+            {"role": "user", "content": "Find TODO comments under src."},
+        ],
+        "tools": [
+            {
+                "name": "functions.exec_command",
+                "description": "Execute a shell command in the workspace.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "cmd": {"type": "string"},
+                        "workdir": {"type": "string"},
+                        "yield_time_ms": {"type": "integer"},
+                    },
+                    "required": ["cmd"],
+                },
+            }
+        ],
+    }
+
+
+def _demo_gemini_request() -> Dict[str, Any]:
+    return {
+        "model": "gemini-2.5-flash-demo",
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": "Summarize the repository structure and suggest a first search command."
+                    }
+                ],
+            }
+        ],
+        "tools": [
+            {
+                "functionDeclarations": [
+                    {
+                        "name": "functions.exec_command",
+                        "description": "Execute a shell command in the current workspace.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "cmd": {"type": "string"},
+                            },
+                            "required": ["cmd"],
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+
+
+def _demo_gemini_response() -> Dict[str, Any]:
+    return {
+        "candidates": [
+            {
+                "content": {
+                    "role": "model",
+                    "parts": [
+                        {
+                            "text": "Start with `rg --files src` to inspect the repository quickly."
+                        }
+                    ],
+                },
+                "finishReason": "STOP",
+            }
+        ],
+        "usageMetadata": {
+            "promptTokenCount": 41,
+            "candidatesTokenCount": 17,
+            "totalTokenCount": 58,
+        },
+    }
+
+
+def _demo_upstream_responder(
+    transformed_request: Dict[str, Any],
+    turn_index: int,
+) -> Mapping[str, Any]:
+    if turn_index == 0:
+        return _demo_openai_response()
+
+    messages = transformed_request.get("messages", [])
+    tool_summary = "No tool output received."
+    for message in messages:
+        if isinstance(message, dict) and message.get("role") == "tool":
+            tool_summary = str(message.get("content"))
+
+    return {
+        "id": "chatcmpl_demo_002",
+        "model": "gpt-4.1-demo",
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": f"Based on the tool result, here is the answer:\n{tool_summary}",
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 182,
+            "completion_tokens": 28,
+            "total_tokens": 210,
+        },
+    }
+
+
+def run_dispatch_demo() -> Dict[str, Any]:
+    return dispatch_tool_call(_demo_call(), context=_demo_context())
+
+
+def run_cc_switch_adapter_demo() -> Dict[str, Any]:
+    return transform_gateway_exchange(
+        downstream_provider=Provider.CLAUDE,
+        downstream_format=ApiFormat.ANTHROPIC_MESSAGES,
+        upstream_provider=Provider.OPENAI,
+        upstream_format=ApiFormat.OPENAI_CHAT_COMPLETIONS,
+        request_body=_demo_claude_request(),
+        response_body=_demo_openai_response(),
+    )
+
+
+def run_gemini_passthrough_demo() -> Dict[str, Any]:
+    return transform_gateway_exchange(
+        downstream_provider=Provider.GEMINI,
+        downstream_format=ApiFormat.GEMINI_CONTENTS,
+        upstream_provider=Provider.GEMINI,
+        upstream_format=ApiFormat.GEMINI_CONTENTS,
+        request_body=_demo_gemini_request(),
+        response_body=_demo_gemini_response(),
+    )
+
+
+def run_registry_demo() -> Dict[str, Any]:
+    selected = get_adapter(
+        downstream_provider=Provider.CLAUDE,
+        downstream_format=ApiFormat.ANTHROPIC_MESSAGES,
+        upstream_provider=Provider.OPENAI,
+        upstream_format=ApiFormat.OPENAI_CHAT_COMPLETIONS,
+    )
+    return {
+        "registered_adapters": list_registered_adapters(),
+        "selected_adapter": {
+            "name": selected.name(),
+            "route": selected.route().to_dict(),
+        },
+    }
+
+
+def run_gateway_loop_demo() -> Dict[str, Any]:
+    return run_gateway_tool_loop(
+        initial_request=_demo_claude_loop_request(),
+        downstream_provider=Provider.CLAUDE,
+        downstream_format=ApiFormat.ANTHROPIC_MESSAGES,
+        upstream_provider=Provider.OPENAI,
+        upstream_format=ApiFormat.OPENAI_CHAT_COMPLETIONS,
+        upstream_responder=_demo_upstream_responder,
+    )
+
+
+def run_gateway_session_demo() -> Dict[str, Any]:
+    session = create_gateway_session(
+        initial_request=_demo_claude_loop_request(),
+        downstream_provider=Provider.CLAUDE,
+        downstream_format=ApiFormat.ANTHROPIC_MESSAGES,
+        upstream_provider=Provider.OPENAI,
+        upstream_format=ApiFormat.OPENAI_CHAT_COMPLETIONS,
+    )
+    session.run(_demo_upstream_responder, max_turns=8)
+    return session.to_dict()
+
+
+def run_gateway_runtime_demo() -> Dict[str, Any]:
+    runtime = GatewayRuntime(upstream_responder=_demo_upstream_responder)
+    session_id = runtime.create_session(
+        initial_request=_demo_claude_loop_request(),
+        downstream_provider=Provider.CLAUDE,
+        downstream_format=ApiFormat.ANTHROPIC_MESSAGES,
+        upstream_provider=Provider.OPENAI,
+        upstream_format=ApiFormat.OPENAI_CHAT_COMPLETIONS,
+    )
+    run_result = runtime.run_session(session_id, max_turns=8)
+    return {
+        "routes": runtime.list_routes(),
+        **run_result,
+    }
+
+
+def run_all_demos() -> Dict[str, Any]:
+    return {
+        "dispatch_demo": run_dispatch_demo(),
+        "registry_demo": run_registry_demo(),
+        "cc_switch_adapter_demo": run_cc_switch_adapter_demo(),
+        "gemini_passthrough_demo": run_gemini_passthrough_demo(),
+        "gateway_loop_demo": run_gateway_loop_demo(),
+        "gateway_session_demo": run_gateway_session_demo(),
+        "gateway_runtime_demo": run_gateway_runtime_demo(),
+    }
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Teaching demo for tool envelope dispatch and cc-switch-style provider transforms."
+    )
+    parser.add_argument(
+        "demo",
+        nargs="?",
+        choices=["dispatch", "adapter", "registry", "gemini", "loop", "session", "runtime", "all"],
+        default="all",
+        help="Which demo payload to print.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.demo == "dispatch":
+        payload = run_dispatch_demo()
+    elif args.demo == "adapter":
+        payload = run_cc_switch_adapter_demo()
+    elif args.demo == "registry":
+        payload = run_registry_demo()
+    elif args.demo == "gemini":
+        payload = run_gemini_passthrough_demo()
+    elif args.demo == "loop":
+        payload = run_gateway_loop_demo()
+    elif args.demo == "session":
+        payload = run_gateway_session_demo()
+    elif args.demo == "runtime":
+        payload = run_gateway_runtime_demo()
+    else:
+        payload = run_all_demos()
+
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 ```
-
-</details>
 
 如果你要抓住这份代码最核心的阅读顺序，我建议这样看：
 
