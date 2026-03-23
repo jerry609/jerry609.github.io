@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="130" viewBox="0 0 720 130">
+  <defs>
+    <marker id="arrow4" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#718057" stroke-width="1.5"/>
+    </marker>
+    <filter id="shadow4" x="-4%" y="-4%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="130" rx="8" fill="#F9F9F7"/>
+
+  <text x="360" y="24" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="600" fill="#1E1E1E">实验验证链：从观测到因果</text>
+
+  <!-- Step 1 -->
+  <rect x="16" y="45" width="140" height="50" rx="8" fill="#E8F0E8" stroke="#A0C0A0" stroke-width="1" filter="url(#shadow4)"/>
+  <text x="86" y="65" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="600" fill="#1E1E1E">Fig 1: 概率偏移</text>
+  <text x="86" y="82" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8.5" fill="#888">现象坐实</text>
+
+  <line x1="160" y1="70" x2="184" y2="70" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow4)"/>
+
+  <!-- Step 2 -->
+  <rect x="188" y="45" width="150" height="50" rx="8" fill="#D4E4D8" stroke="#718057" stroke-width="1" filter="url(#shadow4)"/>
+  <text x="263" y="65" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="600" fill="#1E1E1E">Fig 2–4, 6: 注意力追踪</text>
+  <text x="263" y="82" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8.5" fill="#888">相关性观测</text>
+
+  <line x1="342" y1="70" x2="366" y2="70" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow4)"/>
+
+  <!-- Step 3 -->
+  <rect x="370" y="45" width="150" height="50" rx="8" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1.4" filter="url(#shadow4)"/>
+  <text x="445" y="65" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="600" fill="#1E1E1E">Fig 5a–d: KV 消融</text>
+  <text x="445" y="82" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8.5" fill="#3A5A2E">因果（必要性）</text>
+
+  <line x1="524" y1="70" x2="548" y2="70" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow4)"/>
+
+  <!-- Step 4 -->
+  <rect x="552" y="42" width="150" height="56" rx="8" fill="#8BB88B" stroke="#4A6B3E" stroke-width="1.8" filter="url(#shadow4)"/>
+  <text x="627" y="63" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="700" fill="#FFF">Fig 7: 激活修补</text>
+  <text x="627" y="80" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8.5" font-weight="600" fill="#E8F8E8">因果（充分性）★</text>
+
+  <!-- 底部说明 -->
+  <text x="360" y="118" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9" fill="#757575" font-style="italic">证据链逐步收紧：描述 → 相关 → 必要 → 充分</text>
+</svg>

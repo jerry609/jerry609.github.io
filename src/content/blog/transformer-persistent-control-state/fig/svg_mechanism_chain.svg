@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="260" viewBox="0 0 720 260">
+  <defs>
+    <marker id="arrow1" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#718057" stroke-width="1.5"/>
+    </marker>
+    <filter id="shadow1" x="-4%" y="-4%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="260" rx="8" fill="#F9F9F7"/>
+
+  <text x="360" y="28" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="600" fill="#1E1E1E">五步机制链：从 Token 到决策</text>
+
+  <!-- Step 1: Token 输入 -->
+  <rect x="18" y="55" width="110" height="52" rx="10" fill="#D4E4D8" stroke="#718057" stroke-width="1.2" filter="url(#shadow1)"/>
+  <text x="73" y="76" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#1E1E1E">① 状态编码</text>
+  <text x="73" y="93" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#555">token → h_t</text>
+
+  <!-- Arrow 1→2 -->
+  <line x1="132" y1="81" x2="152" y2="81" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow1)"/>
+
+  <!-- Step 2: Q/K/V -->
+  <rect x="156" y="55" width="110" height="52" rx="10" fill="#D4E4D8" stroke="#718057" stroke-width="1.2" filter="url(#shadow1)"/>
+  <text x="211" y="76" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#1E1E1E">② Q/K/V 投影</text>
+  <text x="211" y="93" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#555">W_Q, W_K, W_V</text>
+
+  <!-- Arrow 2→3 -->
+  <line x1="270" y1="81" x2="290" y2="81" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow1)"/>
+
+  <!-- Step 3: KV Cache -->
+  <rect x="294" y="50" width="130" height="62" rx="10" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1.6" filter="url(#shadow1)"/>
+  <text x="359" y="72" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="700" fill="#1E1E1E">③ KV Cache</text>
+  <text x="359" y="88" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#3A5A2E">跨步持久化</text>
+  <text x="359" y="102" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8" fill="#555">{k_s, v_s} 被缓存</text>
+
+  <!-- Arrow 3→4 -->
+  <line x1="428" y1="81" x2="448" y2="81" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow1)"/>
+
+  <!-- Step 4: Query 读回 -->
+  <rect x="452" y="55" width="120" height="52" rx="10" fill="#D4E4D8" stroke="#718057" stroke-width="1.2" filter="url(#shadow1)"/>
+  <text x="512" y="76" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#1E1E1E">④ Query 读回</text>
+  <text x="512" y="93" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#555">q_t · k_s → a · v_s</text>
+
+  <!-- Arrow 4→5 -->
+  <line x1="576" y1="81" x2="596" y2="81" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow1)"/>
+
+  <!-- Step 5: Logits -->
+  <rect x="600" y="55" width="100" height="52" rx="10" fill="#FDF6F2" stroke="#D4A27F" stroke-width="1.4" filter="url(#shadow1)"/>
+  <text x="650" y="76" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#1E1E1E">⑤ Logits</text>
+  <text x="650" y="93" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#8B6B50">z_t = W_U · h_t</text>
+
+  <!-- 底部注释行 -->
+  <rect x="18" y="132" width="684" height="110" rx="8" fill="#FAFAF8" stroke="#E8E8E4" stroke-width="1"/>
+
+  <!-- 三层载体标注 -->
+  <text x="36" y="155" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#1E1E1E">三层载体</text>
+
+  <!-- Residual Stream -->
+  <circle cx="50" cy="178" r="6" fill="#D4E4D8" stroke="#718057" stroke-width="1"/>
+  <text x="64" y="182" font-family="system-ui,sans-serif" font-size="10" fill="#555">残差流 — 当前步工作区（瞬时激活值）</text>
+
+  <!-- KV Cache -->
+  <circle cx="50" cy="202" r="6" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1.4"/>
+  <text x="64" y="206" font-family="system-ui,sans-serif" font-size="10" fill="#555">KV Cache — 可寻址寄存器组（跨步持久化的 K/V）</text>
+
+  <!-- Scaffold -->
+  <circle cx="50" cy="226" r="6" fill="#FDF6F2" stroke="#D4A27F" stroke-width="1"/>
+  <text x="64" y="230" font-family="system-ui,sans-serif" font-size="10" fill="#555">Agent Scaffold — 外部执行器（把输出解释成动作的运行时）</text>
+</svg>

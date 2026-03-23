@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="340" viewBox="0 0 720 340">
+  <defs>
+    <marker id="arrow2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#718057" stroke-width="1.5"/>
+    </marker>
+    <marker id="arrow2o" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#D4A27F" stroke-width="1.5"/>
+    </marker>
+    <filter id="shadow2" x="-4%" y="-4%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <rect width="720" height="340" rx="8" fill="#F9F9F7"/>
+
+  <text x="360" y="28" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="600" fill="#1E1E1E">两条传播路径</text>
+
+  <!-- ============ 路径一：直接 KV 读回 ============ -->
+  <rect x="18" y="48" width="684" height="115" rx="8" fill="#F4F9F4" stroke="#C8DCC8" stroke-width="1"/>
+  <text x="36" y="68" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#3A5A2E">路径一：直接 KV 读回</text>
+
+  <!-- System Prompt -->
+  <rect x="36" y="82" width="140" height="42" rx="8" fill="#B4D4B8" stroke="#718057" stroke-width="1.2" filter="url(#shadow2)"/>
+  <text x="106" y="100" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="600" fill="#1E1E1E">System Prompt</text>
+  <text x="106" y="114" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8" fill="#555">K/V 写入 Cache</text>
+
+  <line x1="180" y1="103" x2="230" y2="103" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow2)" stroke-dasharray="6,3"/>
+  <text x="205" y="96" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#757575">持久化</text>
+
+  <!-- KV Cache -->
+  <rect x="234" y="82" width="120" height="42" rx="8" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1.4" filter="url(#shadow2)"/>
+  <text x="294" y="100" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="700" fill="#1E1E1E">KV Cache</text>
+  <text x="294" y="114" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8" fill="#3A5A2E">跨步保留</text>
+
+  <line x1="358" y1="103" x2="418" y2="103" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow2)"/>
+  <text x="388" y="96" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#757575">query 命中 key</text>
+
+  <!-- Decision Token -->
+  <rect x="422" y="82" width="130" height="42" rx="8" fill="#D4E4D8" stroke="#718057" stroke-width="1.2" filter="url(#shadow2)"/>
+  <text x="487" y="100" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="600" fill="#1E1E1E">Decision Token</text>
+  <text x="487" y="114" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8" fill="#555">value 搬回 → logits</text>
+
+  <line x1="556" y1="103" x2="606" y2="103" stroke="#718057" stroke-width="1.4" marker-end="url(#arrow2)"/>
+
+  <!-- Action -->
+  <rect x="610" y="86" width="74" height="34" rx="8" fill="#FDF6F2" stroke="#D4A27F" stroke-width="1.2"/>
+  <text x="647" y="107" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" font-weight="600" fill="#8B6B50">tool_call</text>
+
+  <!-- ============ 路径二：写入新 Token ============ -->
+  <rect x="18" y="180" width="684" height="140" rx="8" fill="#FDF9F5" stroke="#E8D8C8" stroke-width="1"/>
+  <text x="36" y="200" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#8B6B50">路径二：控制被写进新 Token</text>
+
+  <!-- Step A: Prompt -->
+  <rect x="36" y="215" width="120" height="38" rx="8" fill="#B4D4B8" stroke="#718057" stroke-width="1" filter="url(#shadow2)"/>
+  <text x="96" y="237" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" font-weight="600" fill="#1E1E1E">Prompt: "先规划"</text>
+
+  <line x1="160" y1="234" x2="196" y2="234" stroke="#D4A27F" stroke-width="1.4" marker-end="url(#arrow2o)"/>
+
+  <!-- Step B: Model generates plan -->
+  <rect x="200" y="215" width="140" height="38" rx="8" fill="#FDF6F2" stroke="#D4A27F" stroke-width="1.2" filter="url(#shadow2)"/>
+  <text x="270" y="231" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" font-weight="600" fill="#1E1E1E">模型生成 Plan</text>
+  <text x="270" y="245" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8" fill="#8B6B50">新 token 写入上下文</text>
+
+  <line x1="344" y1="234" x2="380" y2="234" stroke="#D4A27F" stroke-width="1.4" marker-end="url(#arrow2o)"/>
+
+  <!-- Step C: Plan 成为新 KV -->
+  <rect x="384" y="215" width="140" height="38" rx="8" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1.4" filter="url(#shadow2)"/>
+  <text x="454" y="231" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" font-weight="700" fill="#1E1E1E">Plan → 新 KV</text>
+  <text x="454" y="245" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8" fill="#3A5A2E">次级控制状态</text>
+
+  <line x1="528" y1="234" x2="564" y2="234" stroke="#D4A27F" stroke-width="1.4" marker-end="url(#arrow2o)"/>
+
+  <!-- Step D: 后续步骤读回 -->
+  <rect x="568" y="215" width="116" height="38" rx="8" fill="#D4E4D8" stroke="#718057" stroke-width="1" filter="url(#shadow2)"/>
+  <text x="626" y="231" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" font-weight="600" fill="#1E1E1E">后续步骤读回</text>
+  <text x="626" y="245" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8" fill="#555">持续控制</text>
+
+  <!-- 回环箭头 -->
+  <path d="M626,257 L626,280 Q626,290 616,290 L270,290 Q260,290 260,280 L260,257" fill="none" stroke="#D4A27F" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arrow2o)"/>
+  <text x="440" y="304" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8.5" fill="#8B6B50" font-style="italic">控制闭环：新 token 再次被未来 query 寻址</text>
+</svg>
