@@ -130,13 +130,15 @@ $$
 
 ### 4.2 Q / K / V 投影
 
+![Q / K / V 投影：输入 x 通过三组权重矩阵得到 query、key、value（图源 [^2]）](fig/qkv_projection.png)
+
 每层有三组投影矩阵：
 
 $$
 W_Q^{(l)},\; W_K^{(l)},\; W_V^{(l)} \in \mathbb{R}^{d \times d}
 $$
 
-线性投影：
+线性投影——每个 token 的隐藏状态分别乘以三个矩阵：
 
 $$
 Q = \hat{X}^{(l)} W_Q^{(l)},\quad K = \hat{X}^{(l)} W_K^{(l)},\quad V = \hat{X}^{(l)} W_V^{(l)}
@@ -145,6 +147,19 @@ $$
 $$
 Q, K, V \in \mathbb{R}^{B \times T \times d}
 $$
+
+展开来看，对序列中第 $i$ 个 token：
+
+$$
+q_i = \hat{x}_i \cdot W_Q, \quad k_i = \hat{x}_i \cdot W_K, \quad v_i = \hat{x}_i \cdot W_V
+$$
+
+其中 $\hat{x}_i \in \mathbb{R}^{d}$ 是该 token 的 $d$ 维隐藏向量，$q_i, k_i \in \mathbb{R}^{d_h}$（单头维度），$v_i \in \mathbb{R}^{d_h}$。
+
+直觉：
+- **Query** 编码的是"这个 token 正在找什么"
+- **Key** 编码的是"这个 token 在什么情况下会被找到"
+- **Value** 编码的是"被找到后能提供什么信息"
 
 ### 4.3 拆成多头
 
@@ -162,24 +177,41 @@ $$
 
 ### 4.4 计算 attention score
 
-每个 head 内做矩阵乘法（在最后两维）：
+![未归一化注意力权重 ω：每个 query 和所有 key 做点积（图源 [^2]）](fig/unnormalized_weights.png)
+
+每个 head 内，用 query 和 key 的点积衡量"相关性"：
+
+$$
+\omega_{ij} = q_i \cdot k_j = \sum_{m=1}^{d_h} q_{i,m} \cdot k_{j,m}
+$$
+
+写成矩阵形式（在最后两维做乘法）：
 
 $$
 S = \frac{Q K^\top}{\sqrt{d_h}}
 $$
 
-- $Q$: $(T \times d_h)$
-- $K^\top$: $(d_h \times T)$
+- $Q$: $(T \times d_h)$ — 每行是一个 query 向量
+- $K^\top$: $(d_h \times T)$ — 每列是一个 key 向量
+- $S$: $(T \times T)$ — 位置 $i$ 对位置 $j$ 的打分
 
 $$
 S \in \mathbb{R}^{B \times H \times T \times T}
 $$
 
-含义：对 batch 中每个样本、每个 head、每个 query 位置，都得到对全部 key 位置的相关性打分。
+**具体例子**（$T=6, d_h=2$）：假设第 2 个 token 的 query 是 $q_2 = [0.3,\; 1.2]$，第 4 个 token 的 key 是 $k_4 = [0.8,\; 0.5]$，那么：
+
+$$
+\omega_{2,4} = 0.3 \times 0.8 + 1.2 \times 0.5 = 0.24 + 0.60 = 0.84
+$$
+
+对所有 key 位置做同样计算，就得到 $q_2$ 对整个序列的打分向量。
 
 ### 4.5 加 causal mask
 
-decoder-only 模型需要因果 mask，禁止看未来 token：
+![因果 Mask：上三角被遮蔽，每个位置只能看到自己和之前的 token（图源 [^2]）](fig/causal_mask.png)
+
+decoder-only 模型需要因果 mask，禁止看未来 token。mask 矩阵是一个下三角全 0、上三角全 $-\infty$ 的矩阵：
 
 $$
 M \in \mathbb{R}^{1 \times 1 \times T \times T}
@@ -189,11 +221,32 @@ $$
 S' = S + M \in \mathbb{R}^{B \times H \times T \times T}
 $$
 
-上三角部分被置为 $-\infty$，softmax 后这些位置的权重变为 0。这是 **pre-softmax masking**——因为 $e^{-\infty} \approx 0$，softmax 自然会把被 mask 的位置归零，无需额外的归一化步骤 [^2]。
+展开看 $T=6$ 的情况，mask 矩阵长这样：
+
+$$
+M = \begin{pmatrix}
+0 & -\infty & -\infty & -\infty & -\infty & -\infty \\
+0 & 0 & -\infty & -\infty & -\infty & -\infty \\
+0 & 0 & 0 & -\infty & -\infty & -\infty \\
+0 & 0 & 0 & 0 & -\infty & -\infty \\
+0 & 0 & 0 & 0 & 0 & -\infty \\
+0 & 0 & 0 & 0 & 0 & 0
+\end{pmatrix}
+$$
+
+加到 $S$ 上后，softmax 中 $e^{-\infty} \approx 0$，被 mask 的位置权重自然归零。这是 **pre-softmax masking**，无需额外归一化 [^2]。
 
 另一种做法是 **post-softmax masking**（先 softmax 再置零再归一化），但 pre-softmax 更高效，也是主流实现。
 
 ### 4.6 softmax → 注意力权重
+
+![归一化注意力权重 α：softmax 将打分转成概率分布（图源 [^2]）](fig/normalized_weights.png)
+
+$$
+\alpha_{ij} = \frac{\exp(S'_{ij})}{\sum_{m=1}^{t} \exp(S'_{im})}
+$$
+
+写成矩阵形式：
 
 $$
 A = \mathrm{softmax}(S',\; \text{dim}=-1) \in \mathbb{R}^{B \times H \times T \times T}
@@ -201,16 +254,36 @@ $$
 
 每个 query 位置对所有可见历史位置的权重和为 1。
 
-之所以要除以 $\sqrt{d_h}$（scaled dot-product），是因为当 $d_h$ 较大时，$QK^\top$ 的方差会随维度线性增长，导致 softmax 输出趋向 one-hot，梯度几乎消失。除以 $\sqrt{d_h}$ 可以将方差控制在稳定范围内 [^1][^2]。
+**为什么要 scaled（除以 $\sqrt{d_h}$）？** 当 $d_h$ 较大时，$q \cdot k$ 的方差约为 $d_h$（假设 $q, k$ 各分量独立、均值 0、方差 1），导致 softmax 输入值很大，输出趋向 one-hot，梯度几乎消失。除以 $\sqrt{d_h}$ 可以将方差控制回 1 [^1][^2]。
+
+**具体例子**：假设 $d_h = 64$，原始点积可能是 $\omega = 51.2$，softmax 几乎全给这一个位置。除以 $\sqrt{64} = 8$ 后变成 $6.4$，分布就平滑很多。
 
 ### 4.7 加权求和 V
+
+![上下文向量：用注意力权重对 value 向量加权求和，得到融合了上下文的输出（图源 [^2]）](fig/context_vector.png)
+
+对第 $i$ 个 token，它的输出是所有可见位置的 value 的加权和：
+
+$$
+z_i = \sum_{j=1}^{i} \alpha_{ij} \cdot v_j
+$$
+
+展开来看——假设第 2 个 token 的注意力权重是 $[\alpha_{2,1}, \alpha_{2,2}] = [0.3, 0.7]$：
+
+$$
+z_2 = 0.3 \cdot v_1 + 0.7 \cdot v_2
+$$
+
+也就是说，$z_2$ 更多地包含了 $v_2$ 的信息，同时带入了 30% 的 $v_1$。
+
+写成矩阵形式：
 
 $$
 O_{\text{head}} = A \cdot V
 $$
 
-- $A$: $(T \times T)$
-- $V$: $(T \times d_h)$
+- $A$: $(T \times T)$ — 注意力权重
+- $V$: $(T \times d_h)$ — value 矩阵
 
 $$
 O_{\text{head}} \in \mathbb{R}^{B \times H \times T \times d_h}
@@ -218,13 +291,23 @@ $$
 
 ### 4.8 拼接各头 + 输出投影
 
-转回 $(B, T, H, d_h)$，reshape 为 $(B, T, H \cdot d_h) = (B, T, d)$：
+![多头注意力：多个 head 并行计算后拼接（图源 [^2]）](fig/multi_head_parallel.png)
+
+多头机制让模型同时关注不同类型的关系。每个 head 独立计算自己的 $Q_h, K_h, V_h$，得到 $\text{head}_h \in \mathbb{R}^{T \times d_h}$。
+
+拼接所有 head（$H$ 个，每个 $d_h$ 维）：
+
+$$
+\mathrm{MultiHead} = \mathrm{Concat}(\text{head}_1, \ldots, \text{head}_H) \in \mathbb{R}^{B \times T \times (H \cdot d_h)}
+$$
+
+因为 $H \cdot d_h = d$：
 
 $$
 O_{\text{cat}} \in \mathbb{R}^{B \times T \times d}
 $$
 
-输出投影矩阵 $W_O^{(l)} \in \mathbb{R}^{d \times d}$：
+再经过输出投影矩阵 $W_O^{(l)} \in \mathbb{R}^{d \times d}$，把多头信息混合回统一空间：
 
 $$
 O_{\text{attn}} = O_{\text{cat}} \cdot W_O^{(l)} \in \mathbb{R}^{B \times T \times d}
@@ -235,6 +318,16 @@ $$
 $$
 Y^{(l)} = X^{(l)} + O_{\text{attn}} \in \mathbb{R}^{B \times T \times d}
 $$
+
+### 4.10 Self-Attention 完整流程回顾
+
+![Self-Attention 完整机制总结（图源 [^2]）](fig/self_attention_summary.png)
+
+把 4.1–4.9 串起来看：输入 $X$ 经 LayerNorm → 投影出 $Q, K, V$ → 点积打分 → scaling + mask → softmax 得到注意力权重 → 加权 $V$ → 拼接多头 → 输出投影 → 加残差。整个过程的输入和输出都是 $(B, T, d)$。
+
+下图展示了真实模型中注意力权重的可视化——颜色越深表示注意力越强。可以看到 "making" 这个词主要关注 "more" 和 "difficult"，体现了语义依赖 [^1]：
+
+![注意力权重热力图：单词 "making" 对其他单词的注意力分布（图源 [^1]）](fig/attention_heatmap.png)
 
 ---
 
@@ -252,9 +345,19 @@ $$
 W_1^{(l)} \in \mathbb{R}^{d \times d_{ff}}
 $$
 
+对每个 token 位置 $i$，独立做同一个线性变换：
+
+$$
+z_i = \tilde{y}_i \cdot W_1^{(l)} + b_1
+$$
+
+写成矩阵形式：
+
 $$
 Z = \tilde{Y}^{(l)} W_1^{(l)} + b_1 \in \mathbb{R}^{B \times T \times d_{ff}}
 $$
+
+**具体例子**：$d = 768, d_{ff} = 3072$，相当于每个 token 的 768 维表示被映射到 3072 维——"升维"让模型有更大的空间做非线性变换。
 
 ### 5.2 激活函数
 
@@ -262,7 +365,21 @@ $$
 G = \mathrm{GELU}(Z) \in \mathbb{R}^{B \times T \times d_{ff}}
 $$
 
-现代模型常用 SwiGLU / GEGLU 等门控变体。
+GELU 的公式（近似形式）：
+
+$$
+\mathrm{GELU}(x) = x \cdot \Phi(x) \approx x \cdot \sigma(1.702x)
+$$
+
+其中 $\Phi$ 是标准正态分布的 CDF。直觉：GELU 类似一个"软门控"——正值基本保留，负值被平滑抑制。
+
+现代模型常用 **SwiGLU** 变体，引入门控机制：
+
+$$
+\mathrm{SwiGLU}(x) = \mathrm{SiLU}(x W_a) \odot (x W_b)
+$$
+
+其中 $\odot$ 是逐元素乘法，$W_a, W_b$ 是两组独立参数。这让 FFN 有更强的特征选择能力。
 
 ### 5.3 第二层线性：降回 hidden size
 
