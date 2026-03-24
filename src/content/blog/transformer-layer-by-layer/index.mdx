@@ -15,7 +15,7 @@ draft: false
 
 - [Transformer 的持续控制状态：KV Cache 与残差流如何塑造 Agent 决策](/blog/transformer-persistent-control-state/)
 
-以下所有推导基于 **decoder-only / GPT 风格**的 Pre-LN Transformer，这也是目前主流大模型（GPT、LLaMA、Qwen 等）的标准结构。
+以下所有推导基于 **decoder-only / GPT 风格**的 Pre-LN Transformer，这也是目前主流大模型（GPT、LLaMA、Qwen 等）的标准结构。部分图示参考了原始 Transformer 论文 [^1] 以及 Sebastian Raschka 的 self-attention 教程 [^2]。
 
 ---
 
@@ -108,6 +108,18 @@ $$
 
 ## 四、Attention 子层：完整维度推导
 
+下图展示了单个 attention head 的完整计算流水线（图源 [^2]）：
+
+![单头 Attention 流水线：从输入 X 到归一化注意力矩阵 A 和输出 Z](fig/single_head_pipeline.png)
+
+核心三步：输入 $X$ 经过 $W_Q, W_K, W_V$ 投影得到 Query / Key / Value，通过点积计算注意力权重，再加权求和 Value 得到输出。
+
+在实际模型中，多个 head 并行执行上述流程，最后拼接。下图是原始 Transformer 论文 [^1] 中的多头注意力架构：
+
+![原始 Transformer 的多头注意力模块](fig/multi_head_attention.png)
+
+每个 head 学习不同的关系模式——有的偏局部邻近，有的偏语法依赖，有的偏长距离引用。下面逐步追踪维度变化。
+
 ### 4.1 LayerNorm
 
 $$
@@ -177,7 +189,9 @@ $$
 S' = S + M \in \mathbb{R}^{B \times H \times T \times T}
 $$
 
-上三角部分被置为 $-\infty$，softmax 后这些位置的权重变为 0。
+上三角部分被置为 $-\infty$，softmax 后这些位置的权重变为 0。这是 **pre-softmax masking**——因为 $e^{-\infty} \approx 0$，softmax 自然会把被 mask 的位置归零，无需额外的归一化步骤 [^2]。
+
+另一种做法是 **post-softmax masking**（先 softmax 再置零再归一化），但 pre-softmax 更高效，也是主流实现。
 
 ### 4.6 softmax → 注意力权重
 
@@ -186,6 +200,8 @@ A = \mathrm{softmax}(S',\; \text{dim}=-1) \in \mathbb{R}^{B \times H \times T \t
 $$
 
 每个 query 位置对所有可见历史位置的权重和为 1。
+
+之所以要除以 $\sqrt{d_h}$（scaled dot-product），是因为当 $d_h$ 较大时，$QK^\top$ 的方差会随维度线性增长，导致 softmax 输出趋向 one-hot，梯度几乎消失。除以 $\sqrt{d_h}$ 可以将方差控制在稳定范围内 [^1][^2]。
 
 ### 4.7 加权求和 V
 
@@ -437,3 +453,31 @@ $$
 $$
 
 四行核心公式，描述了从输入到输出的完整计算过程。主干张量始终是 $(B, T, d)$，每层内部临时展开为 $(B, H, T, d_h)$ 和 $(B, T, d_{ff})$，最后都收回 $(B, T, d)$ 传给下一层。
+
+---
+
+## 附录 A：Cross-Attention
+
+在 encoder-decoder 架构（如原始 Transformer [^1]）中，decoder 的每一层除了 masked self-attention 和 FFN，还有一个 **cross-attention** 子层。
+
+与 self-attention 的区别只有一点：Q 来自 decoder，K/V 来自 encoder：
+
+$$
+Q = X_{\text{dec}} W_Q, \quad K = X_{\text{enc}} W_K, \quad V = X_{\text{enc}} W_V
+$$
+
+$$
+\text{CrossAttn}(Q, K, V) = \mathrm{softmax}\!\left(\frac{Q K^\top}{\sqrt{d_h}}\right) V
+$$
+
+也就是说，decoder 用自己当前的状态去"查询" encoder 的输出。维度流与 self-attention 完全一致，只是 Q 和 K/V 来自不同序列 [^2]。
+
+在 decoder-only 模型（GPT、LLaMA 等）中不存在 cross-attention，所有 attention 都是 self-attention。
+
+---
+
+## 参考
+
+[^1]: Vaswani, A., et al. *Attention Is All You Need*. NeurIPS 2017. [arXiv:1706.03762](https://arxiv.org/abs/1706.03762)
+
+[^2]: Raschka, S. *Understanding and Coding Self-Attention, Multi-Head Attention, Cross-Attention, and Causal-Attention in LLMs*. [sebastianraschka.com](https://magazine.sebastianraschka.com/p/understanding-and-coding-self-attention)
