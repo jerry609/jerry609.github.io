@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="280" viewBox="0 0 700 280">
+  <defs>
+    <marker id="a2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#718057" stroke-width="1.5"/>
+    </marker>
+    <filter id="s2" x="-4%" y="-4%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="700" height="280" rx="8" fill="#F9F9F7"/>
+  <text x="350" y="26" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="600" fill="#1E1E1E">多层堆叠：残差驱动的增量演化</text>
+
+  <!-- X0 -->
+  <rect x="16" y="60" width="80" height="50" rx="8" fill="#E8F0E8" stroke="#A0C0A0" stroke-width="1" filter="url(#s2)"/>
+  <text x="56" y="80" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="600" fill="#555">X⁰</text>
+  <text x="56" y="96" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#888">(B,T,d)</text>
+
+  <line x1="100" y1="85" x2="118" y2="85" stroke="#718057" stroke-width="1.2" marker-end="url(#a2)"/>
+
+  <!-- Block 0 -->
+  <rect x="122" y="65" width="76" height="40" rx="6" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1.2" filter="url(#s2)"/>
+  <text x="160" y="89" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" font-weight="600" fill="#1E1E1E">Block⁰</text>
+
+  <line x1="202" y1="85" x2="218" y2="85" stroke="#718057" stroke-width="1.2" marker-end="url(#a2)"/>
+
+  <!-- X1 -->
+  <rect x="222" y="60" width="80" height="50" rx="8" fill="#D4E4D8" stroke="#718057" stroke-width="1" filter="url(#s2)"/>
+  <text x="262" y="80" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="600" fill="#555">X¹</text>
+  <text x="262" y="96" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#888">(B,T,d)</text>
+
+  <line x1="306" y1="85" x2="322" y2="85" stroke="#718057" stroke-width="1.2" marker-end="url(#a2)"/>
+
+  <!-- Block 1 -->
+  <rect x="326" y="65" width="76" height="40" rx="6" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1.2" filter="url(#s2)"/>
+  <text x="364" y="89" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" font-weight="600" fill="#1E1E1E">Block¹</text>
+
+  <line x1="406" y1="85" x2="418" y2="85" stroke="#718057" stroke-width="1.2" marker-end="url(#a2)"/>
+
+  <!-- dots -->
+  <text x="432" y="89" font-family="system-ui,sans-serif" font-size="14" fill="#888">···</text>
+
+  <line x1="454" y1="85" x2="470" y2="85" stroke="#718057" stroke-width="1.2" marker-end="url(#a2)"/>
+
+  <!-- Block L-1 -->
+  <rect x="474" y="65" width="82" height="40" rx="6" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1.2" filter="url(#s2)"/>
+  <text x="515" y="89" text-anchor="middle" font-family="system-ui,sans-serif" font-size="9.5" font-weight="600" fill="#1E1E1E">Block^{L-1}</text>
+
+  <line x1="560" y1="85" x2="576" y2="85" stroke="#718057" stroke-width="1.2" marker-end="url(#a2)"/>
+
+  <!-- X^L -->
+  <rect x="580" y="60" width="100" height="50" rx="8" fill="#8BB88B" stroke="#4A6B3E" stroke-width="1.6" filter="url(#s2)"/>
+  <text x="630" y="78" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" font-weight="700" fill="#FFF">X^L</text>
+  <text x="630" y="96" text-anchor="middle" font-family="system-ui,sans-serif" font-size="8" fill="#E8F8E8">(B,T,d)</text>
+
+  <!-- 下方：每层做了什么 -->
+  <rect x="16" y="135" width="664" height="130" rx="8" fill="#FAFAF8" stroke="#E8E8E4" stroke-width="1"/>
+
+  <text x="36" y="158" font-family="system-ui,sans-serif" font-size="11" font-weight="600" fill="#1E1E1E">每层的增量更新</text>
+
+  <!-- 公式 -->
+  <text x="36" y="182" font-family="ui-monospace,monospace" font-size="10" fill="#555">X^(l+1) = X^(l) + Δ_attn^(l) + Δ_ffn^(l)</text>
+
+  <!-- 三个要点 -->
+  <circle cx="50" cy="208" r="5" fill="#D4E4D8" stroke="#718057" stroke-width="1"/>
+  <text x="64" y="212" font-family="system-ui,sans-serif" font-size="9.5" fill="#555">Attention：让每个 token 读到上下文 → 跨位置信息聚合</text>
+
+  <circle cx="50" cy="230" r="5" fill="#FDF6F2" stroke="#D4A27F" stroke-width="1"/>
+  <text x="64" y="234" font-family="system-ui,sans-serif" font-size="9.5" fill="#555">FFN：对聚合后的表示做非线性重编码 → 特征提炼</text>
+
+  <circle cx="50" cy="252" r="5" fill="#B4D4B8" stroke="#4A6B3E" stroke-width="1"/>
+  <text x="64" y="256" font-family="system-ui,sans-serif" font-size="9.5" fill="#555">残差：保留原信息，每层只学增量修正 → 稳定训练、信息不丢</text>
+</svg>
