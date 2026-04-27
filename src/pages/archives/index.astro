@@ -1,14 +1,16 @@
 ---
-import { PostPreview } from 'astro-pure/components/pages'
+import type { CollectionEntry } from 'astro:content'
+
 import { getBlogCollection, groupCollectionsByYear, sortMDByDate } from 'astro-pure/server'
 import { Button } from 'astro-pure/user'
 import PageLayout from '@/layouts/BaseLayout.astro'
+import PostPreview from '@/components/blog/PostPreview.astro'
 
 export const prerender = true
 
-const allPosts = await getBlogCollection()
+const allPosts = (await getBlogCollection('blog')) as CollectionEntry<'blog'>[]
 const allPostsByDate = sortMDByDate(allPosts)
-const allPostsByYear = groupCollectionsByYear(allPostsByDate)
+const allPostsByYear = groupCollectionsByYear<'blog'>(allPostsByDate)
 
 const meta = {
   description: 'A list of all the years of creating my posts',

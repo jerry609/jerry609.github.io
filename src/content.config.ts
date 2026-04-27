@@ -35,6 +35,11 @@ const blog = defineCollection({
       tags: z.array(z.string()).default([]).transform(removeDupsAndLowerCase),
       language: z.string().optional(),
       draft: z.boolean().default(false),
+      // `true` pins a post; larger numbers sort higher when multiple posts are pinned.
+      pinned: z
+        .union([z.boolean(), z.number().int().nonnegative()])
+        .default(false)
+        .transform((value) => (typeof value === 'number' ? value : value ? 1 : 0)),
       // Special fields
       comment: z.boolean().default(true)
     })

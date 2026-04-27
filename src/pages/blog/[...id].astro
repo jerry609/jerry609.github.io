@@ -1,13 +1,14 @@
 ---
 import { render, type CollectionEntry } from 'astro:content'
 
-import { getBlogCollection, sortMDByDate } from 'astro-pure/server'
 import PostLayout from '@/layouts/BlogPost.astro'
+import { getBlogCollection } from 'astro-pure/server'
+import { sortBlogPosts } from '@/utils/blog'
 
 export const prerender = true
 
 export async function getStaticPaths() {
-  const posts = sortMDByDate(await getBlogCollection())
+  const posts = sortBlogPosts((await getBlogCollection('blog')) as CollectionEntry<'blog'>[])
   return posts.map((post) => ({
     params: { id: post.id },
     props: { post, posts }
