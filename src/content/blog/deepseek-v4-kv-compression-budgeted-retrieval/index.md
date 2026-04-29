@@ -353,7 +353,216 @@ $$
 4. 训练能让模型适应这种记忆格式。V4 在长上下文训练中逐步引入 sparse attention，并 warm up indexer，记忆格式从训练阶段就进入模型能力边界。
 5. 真实任务分布通常避开最坏情况。用户如果构造一个必须均匀读取全上下文的算法题，top-k sparse attention 会更吃力。
 
-## 9. 压成一句话
+## 9. 从官方 inference 源码再看一遍
+
+上面的解释还偏机制图景。DeepSeek-V4 官方 Hugging Face 仓库里的 `inference/model.py` 和 `inference/kernel.py`，能把这件事落到具体读写路径上。
+
+先提醒一句：这个 `inference` 目录是官方本地推理实现，适合看推理时怎么读 KV cache；训练细节和线上服务端的完整工程实现，需要看别的资料。模型卡把本地运行入口指向 `inference` 文件夹，仓库和模型权重是 MIT license。
+
+### 9.1 配置先决定每层怎么读历史
+
+`ModelArgs` 里的小默认配置有几个醒目的字段：
+
+```python
+window_size = 128
+compress_ratios = (0, 0, 4, 128, 4, 128, 4, 0)
+index_topk = 512
+```
+
+这只是默认/示例参数。真实 V4-Pro 的 `config.json` 写得更大：最大位置是 `1048576`，`sliding_window` 是 `128`，`index_topk` 是 `1024`，`compress_ratios` 里混着 `4`、`128`，最后还有一个 `0`。
+
+这三个 ratio 可以直接读成三种层：
+
+| ratio | 这一层怎么读 |
+| --- | --- |
+| `4` | c4a/CSA，先 4 倍附近压缩，再用 learned indexer 选 top-k |
+| `128` | c128a/HCA，重压缩后读可见 compressed stream |
+| `0` | 只保留 sliding window，不走远程压缩 |
+
+源码里也这么分叉：`compress_ratio == 4` 才创建 `Indexer`；其他压缩层没有 learned indexer。到了 forward，如果有 indexer 就走 learned top-k；如果没有，就生成所有因果可见的 compressed positions。
+
+### 9.2 Compressor 做的是 learned gated pooling
+
+`Compressor` 的注释已经把事情说得很直：它通过 learned gated pooling 压缩 KV cache。代码路径大概是：
+
+```python
+kv = self.wkv(x)
+score = self.wgate(x)
+kv = (kv * score.softmax(dim=2)).sum(dim=2)
+```
+
+中间还有 reshape、`ape` 位置偏置、overlap 处理和 RMSNorm。把它写成式子，大概是：
+
+$$
+z_j =
+\mathrm{Norm}\left(
+\sum_{r\in B_j}
+\mathrm{softmax}_r(s_r+a_r)\odot W_{kv}h_r
+\right)
+$$
+
+这里的 $B_j$ 是第 $j$ 个压缩块，$W_{kv}h_r$ 对应 `wkv(x)`，$s_r$ 对应 `wgate(x)`，$a_r$ 对应 `ape`。这个 gate 是按维度作用的，不只是一个 scalar 权重。
+
+所以源码里的压缩更像“给后续 attention 准备一个 KV 摘要向量”。vLLM 的解读也提到，`c4a` 大致是 1/4 压缩，一个 compressed token 来自 8 个 uncompressed tokens 的加权和，stride 是 4；`c128a` 则是 128 个 token 压成 1 个，stride 是 128。
+
+这也解释了 top-k 外 token 的去处：很多信息已经被写进 compressed KV entry 里了。
+
+### 9.3 decode 时凑到边界才写 compressed cache
+
+生成阶段不会每来一个 token 就立刻写一个长期 compressed entry。源码里先把当前 token 的候选 KV 和 gate 分数放进 `kv_state` / `score_state`；只有到压缩边界，才把这一组状态合成一个 compressed KV 写入 cache。
+
+可以把逻辑压成这样：
+
+```python
+if boundary_reached:
+    kv = weighted_pool(kv_state, score_state)
+    compressed_cache[block_id] = kv
+```
+
+因此省 KV cache 的方式很具体：长期 cache 存的是压缩块；还没凑满的尾巴先留在 state cache 和 sliding window 里。
+
+### 9.4 top-k 是单独的 learned indexer
+
+`Indexer` 自己有一套 query projection 和一套用于打分的 compressed KV。源码注释说得很明白：它通过 learned scoring 为 sparse attention 选择 top-k compressed KV positions，并且有自己的 `Compressor` 来构建 indexer 专用压缩 KV。
+
+核心打分可以简化成：
+
+$$
+s_{t,j} =
+\sum_h
+w_{t,h}\cdot
+\mathrm{ReLU}\left(
+q^{idx}_{t,h}\cdot z^{idx}_j
+\right)
+$$
+
+然后：
+
+$$
+S_t=\mathrm{TopK}_k(s_{t,j})
+$$
+
+这条路径有两个重要含义。
+
+第一，top-k 的位置在 dense attention 之前。它是一个便宜检索器，先预测哪些 compressed blocks 值得读。
+
+第二，top-k 只发生在 `compress_ratio == 4` 的层。`c128a` 层压得更狠，1M token 变成大约 8192 个 compressed entries，可以直接读可见压缩流。vLLM 也把这件事解释成：`c4a` 后还有约 250K compressed tokens，所以需要 DSA top-k；`c128a` 后最多约 8K compressed tokens，计算上可以承受。
+
+### 9.5 SWA 和 compressed indices 会拼到一起
+
+`Attention.forward` 里先拿最近窗口：
+
+```python
+topk_idxs = get_window_topk_idxs(...)
+```
+
+如果这一层有压缩，再把远程 compressed indices 拼进去：
+
+```python
+topk_idxs = torch.cat([topk_idxs, compress_topk_idxs], dim=-1)
+```
+
+所以每层实际送进 sparse attention kernel 的索引，是近邻原始 KV 加远程压缩 KV 的并集：
+
+$$
+\text{read set}
+=
+\text{recent raw KV}
+\cup
+\text{visible compressed KV}
+$$
+
+对 c4a 层，远程 compressed KV 会先经过 learned top-k。对 c128a 层，远程 compressed KV 基本是所有因果可见的压缩项。对 ratio 为 0 的层，只有 sliding window。
+
+### 9.6 sparse kernel 只读 index 指到的 KV row
+
+`kernel.py` 里的 `sparse_attn_kernel` 注释说得很直接：它根据 index gather top-k KV positions，然后做 online softmax 风格的 attention。
+
+简化后就是：
+
+```python
+idx = topk_idxs(...)
+kv_row = kv[idx]
+score = q @ kv_row.T
+out = softmax(score) @ kv_row
+```
+
+这条 kernel 路径把问题钉死了：没进入 `topk_idxs` 的 KV row，在这一次 attention 里不会被读。注意这里的 `kv` 是共享 K/V 表示；kernel 先用它算 score，再用同一个表示形成输出，后面还会对 RoPE 维度做 inverse rotation。
+
+### 9.7 cache 在源码里是分区的
+
+`Attention.__init__` 里按窗口和压缩长度分配 cache：
+
+```python
+kv_cache_size = window_size + max_seq_len // compress_ratio
+```
+
+随后把 `kv_cache` 的前半段留给 sliding window，把 `win:` 之后的区域交给 compressor：
+
+```python
+compressor.kv_cache = kv_cache[:, win:]
+```
+
+decode 时，最近 token 写入 ring buffer；compressed KV 到边界后写入压缩数组。也就是说每个压缩层的 KV cache 更像：
+
+$$
+\text{KV cache}
+=
+\text{128-token SWA ring buffer}
++
+\text{compressed KV array}
+$$
+
+vLLM 给了一个很直观的 1M context 估算：bf16 KV cache 下，DeepSeek V4 单序列约 9.62 GiB；对比 61 层 DeepSeek-V3.2 风格栈的 83.9 GiB，大约小 8.7 倍。实际部署还可以用 FP4 indexer cache 和 FP8 attention cache 继续省。
+
+### 9.8 因果性靠 mask 和边界条件守住
+
+压缩 attention 最容易出 bug 的地方，是 compressed block 里混进未来 token。源码里靠两类约束挡住这件事。
+
+一类是普通 compressed index 的 mask：不可见的 compressed index 会被写成 `-1`。
+
+另一类是 learned indexer 的 mask：prefill 时给未来 compressed block 加 `-inf`，top-k 之后再把非法位置置为 `-1`。
+
+vLLM 的位置解释也很清楚：`c4a` 的第 $j$ 个 compressed token 聚合大约 $[4j-4,4j+3]$ 的范围，query 只有到 $i\ge 4j+3$ 才能看；`c128a` 则需要 $i\ge 128j+127$。这也是 SWA 必须存在的原因：压缩块完成前，当前 query 仍要能读到本地历史。
+
+### 9.9 把源码路径合成一段伪代码
+
+把官方实现压扁后，可以写成：
+
+```python
+def deepseek_v4_attention(x, start_pos, layer):
+    q = make_query_with_rope(x)
+    kv_raw = make_raw_kv_with_rope(x)
+
+    local_idxs = sliding_window_indices(start_pos, win=128)
+
+    if layer.compress_ratio == 4:
+        remote_idxs = learned_indexer_topk(x, q)
+    elif layer.compress_ratio == 128:
+        remote_idxs = all_visible_compressed_indices()
+    else:
+        remote_idxs = []
+
+    write_raw_kv_to_swa_ring(kv_raw)
+    maybe_write_compressed_kv(x, layer.compress_ratio)
+
+    return sparse_attention(q, kv_cache, local_idxs + remote_idxs)
+```
+
+这段伪代码比源码少了量化、RoPE 细节、overlap、RMSNorm、分布式 all-reduce 和 kernel 优化，但保住了主干：query 先决定读哪些位置，cache 同时维护短窗口和压缩流，kernel 只 gather 被选中的 KV row。
+
+### 9.10 源码给出的六个结论
+
+读完 inference 源码后，前面的机制解释可以再压实一点：
+
+1. DeepSeek-V4 没有简单丢 token。`Compressor` 会把多个 token 的 KV 合成 learned weighted summary；c4a 还带 overlap。
+2. learned top-k 只出现在 c4a 层。`compress_ratio == 4` 创建 `Indexer`；`compress_ratio == 128` 读可见 compressed entries。
+3. top-k 选择的是 compressed memory block，粒度已经从原始 token 升到压缩块。
+4. 最近 128 个 token 仍以未压缩形式留在 SWA 里。
+5. 省显存来自 cache 形态变化：全量 raw KV 变成短窗口 raw KV、sequence-compressed KV，以及 c4a indexer cache。
+6. 源码展示的是推理瓶颈怎么落地；质量还要靠训练阶段让压缩器、indexer、attention 后续层一起适应这种记忆格式。
+
+## 10. 压成一句话
 
 DeepSeek-V4 的 KV 压缩可以这样理解：
 
