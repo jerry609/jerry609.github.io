@@ -1,38 +1,38 @@
 ---
 title: 'DeepSeek-V4 的 KV 压缩：从删 token 误解到预算检索'
-description: '从 CSA、HCA 和 SWA 的分工出发，把 DeepSeek-V4 的百万上下文注意力理解为带预算的检索、压缩与端到端损失最小化问题。'
+description: '从 CSA、HCA 和 SWA 的分工出发，将 DeepSeek-V4 的百万上下文注意力理解为带预算的检索、压缩与端到端损失最小化问题。'
 publishDate: '2026-04-30'
 tags: ['ai', 'deepseek', 'transformer', 'attention', 'kv-cache']
 language: 'zh-CN'
 draft: false
 ---
 
-DeepSeek-V4 的百万上下文，最容易被读成下面这句话：
+DeepSeek-V4 的百万上下文能力常被简化为如下判断：
 
-> 模型只看 top-k，所以其他 token 对生成没意义。
+> 模型只读取 top-k，因此其余 token 对生成没有贡献。
 
-这句话把事情说歪了。
+该判断省略了压缩表示、检索预算和多分支注意力之间的分工。
 
-我更愿意把它看成一个工程取舍：长上下文 attention 到头来会变成有预算的检索和汇聚。每个 query 都在问一件很朴素的事：这段旧记忆值不值得现在打开？
+更合适的建模方式是：长上下文 attention 可视为带预算的检索与汇聚。每个 query 都需要在给定计算预算内决定访问哪些历史记忆。
 
-DeepSeek-V4 的混合注意力设计，可以压成一句顺口的话：
+DeepSeek-V4 的混合注意力设计可以概括为：
 
-> 近处细看，远处摘要，需要时再检索。
+> 近邻原始读取，远程分辨率压缩，相关记忆预算检索。
 
-top-k 外面的 token 仍然可能有用。它只是在**当前层、当前 query、当前 head/分支**里，没有被单独展开读。它可能已经进了 block 摘要，可能还躺在 HCA 的全局粗记忆里，也可能对这一次预测的边际贡献确实很小。
+top-k 之外的 token 仍然可能携带有效信息。这些 token 只是在**当前层、当前 query、当前 head/分支**里，未被单独展开读取。相关信息可能已经进入 block 摘要，可能保留在 HCA 的全局粗粒度记忆中，也可能对当前预测的边际贡献较小。
 
-本文主要参考 [DeepSeek-V4 技术报告](https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/blob/main/DeepSeek_V4.pdf) 和 Hugging Face 的 [DeepSeek-V4 解读](https://huggingface.co/blog/deepseekv4)。报告里给出的配置很有意思：V4-Pro 支持 1M token 上下文，CSA 压缩率 $m=4$、attention top-k 为 1024，HCA 压缩率 $m'=128$，SWA 窗口为 128；V4-Flash 的 CSA top-k 为 512。
+主要参考资料包括 [DeepSeek-V4 技术报告](https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/blob/main/DeepSeek_V4.pdf) 和 Hugging Face 的 [DeepSeek-V4 解读](https://huggingface.co/blog/deepseekv4)。报告给出的配置包括：V4-Pro 支持 1M token 上下文，CSA 压缩率 $m=4$、attention top-k 为 1024，HCA 压缩率 $m'=128$，SWA 窗口为 128；V4-Flash 的 CSA top-k 为 512。
 
 ## 符号表
 
-先把后面会用到的符号放在这里。读公式时可以随时回来对照。
+下表列出后续公式使用的主要符号。
 
 | 符号 | 含义 |
 | --- | --- |
 | $t$ | 当前生成位置，也就是当前 query 的位置 |
 | $i,\ell,r$ | 历史 token 的位置下标 |
 | $b,j$ | 压缩块或 compressed memory entry 的下标 |
-| $\mathcal{P}_t$ | 位置 $t$ 能看到的历史 token 集合，通常是 $i<t$ |
+| $\mathcal{P}_t$ | 位置 $t$ 的可见历史 token 集合，通常是 $i<t$ |
 | $h_i$ | 第 $i$ 个 token 在某层的 hidden state |
 | $q_t,k_i,v_i$ | query、key、value 向量 |
 | $e_{t,i}$ | attention 的原始打分，通常是 $q_t^\top k_i$ |
@@ -47,7 +47,7 @@ top-k 外面的 token 仍然可能有用。它只是在**当前层、当前 quer
 | $g_\psi$ | 带参数 $\psi$ 的 indexer 打分函数 |
 | $S_t$ | 位置 $t$ 被选中的 compressed block 集合 |
 | $k$ | top-k 里的预算，V4-Pro 的 CSA attention top-k 是 1024 |
-| $R_t(S)$ | 没有被集合 $S$ 捕获的残余 attention mass |
+| $R_t(S)$ | 未被集合 $S$ 捕获的残余 attention mass |
 | $V$ | value 向量范数的上界 |
 | $M,C$ | KV memory 和 FLOPs 预算 |
 | $\theta,\phi,\psi$ | 主模型、压缩器、检索器的参数 |
@@ -59,9 +59,9 @@ top-k 外面的 token 仍然可能有用。它只是在**当前层、当前 quer
 | $\mathcal{I}_{\mathrm{attn}}$ | 当前 sparse kernel 实际会读取的 KV row 集合 |
 | $\odot$ | 按维度相乘 |
 
-## 1. 先看清楚它到底压了什么
+## 1. 压缩对象与表示形态
 
-完整 attention 先从可见历史集合开始。当前位置是 $t$，它能看到的历史位置写成：
+完整 attention 先从可见历史集合开始。当前位置是 $t$，可见历史位置写成：
 
 $$
 \mathcal{P}_t=\{i:0\le i<t\}
@@ -92,15 +92,15 @@ o_t
 \sum_{i\in\mathcal{P}_t}\alpha_{t,i}v_i
 $$
 
-直觉上，只要少看一些 token，就会丢信息。这个直觉没错，但它太粗。
+若直接减少可见 token，确实会引入信息损失；DeepSeek-V4 的机制首先改变历史信息的表示形式，再在压缩表示上执行预算检索。
 
-DeepSeek-V4 的 CSA（Compressed Sparse Attention）先把一小段历史压成一个可以检索的 memory entry。第 $b$ 个压缩块包含：
+DeepSeek-V4 的 CSA（Compressed Sparse Attention）先将一小段历史压缩为一个可以检索的 memory entry。第 $b$ 个压缩块包含：
 
 $$
 B_b=\{bm,bm+1,\ldots,bm+m-1\}
 $$
 
-压缩器把这个 block 的 hidden states 变成一个 compressed KV entry：
+压缩器将该 block 的 hidden states 转换为一个 compressed KV entry：
 
 $$
 H_b=(h_i)_{i\in B_b}
@@ -128,21 +128,21 @@ $$
 
 然后只对选中的 compressed KV entries 做 attention。
 
-所以，如果把它讲成：
+若表述为：
 
 > 这 100 万 token 里只保留 1024 个 token。
 
-读者很容易误会。更贴近实际机制的讲法是：
+该表述会混淆原始 token 与 compressed memory entry。更贴近实际机制的描述是：
 
-> 历史先被压成很多局部摘要；当前 query 从这些摘要里挑一批来读；最近 token 继续交给 SWA 原样处理；更远处的背景由 HCA 用粗粒度记忆覆盖。
+> 历史先被压缩为局部摘要；当前 query 从摘要中选择一批读取；最近 token 由 SWA 保持原始粒度；更远处的背景由 HCA 以粗粒度记忆覆盖。
 
-CSA 的访问单位从原始 token 变成了压缩记忆块。问题也跟着变了：当前 query 要不要访问这个块？
+CSA 的访问单位从原始 token 变成压缩记忆块。访问决策也随之转化为：当前 query 是否需要访问该压缩块。
 
-## 2. top-k 为什么经常够用
+## 2. top-k 近似的成立条件
 
-对某个 query 来说，完整 attention 的输出是很多 value 的加权和。要看的其实是 attention mass 怎么分布。
+对于某个 query，完整 attention 的输出是 value 的加权和。核心变量是 attention mass 的分布。
 
-设选中的历史集合是 $S$。先把 full attention 拆成两个部分：选中的 token 和没选中的 token。
+设选中的历史集合是 $S$。先将 full attention 拆成两个部分：选中的 token 和未选中的 token。
 
 $$
 o_t
@@ -170,7 +170,7 @@ R_t(S)
 1-A_t(S)
 $$
 
-现在把两个部分各自重新归一化。选中部分的平均输出是：
+进一步将两个部分各自重新归一化。选中部分的平均输出是：
 
 $$
 o_S
@@ -188,7 +188,7 @@ o_{\bar S}
 \sum_{i\in\mathcal{P}_t\setminus S}\alpha_{t,i}v_i
 $$
 
-把这两个定义代回 full attention：
+将这两个定义代回 full attention：
 
 $$
 o_t
@@ -204,7 +204,7 @@ o_t
 (1-R_t(S))o_S+R_t(S)o_{\bar S}
 $$
 
-如果稀疏 attention 只保留 $S$，它的近似输出可以写成：
+如果稀疏 attention 只保留 $S$，近似输出可以写成：
 
 $$
 \hat{o}_t=o_S
@@ -230,7 +230,7 @@ $$
 \|v_i\|\le V
 $$
 
-因为 $o_S$ 和 $o_{\bar S}$ 都是 value 的凸组合，所以：
+由于 $o_S$ 和 $o_{\bar S}$ 都是 value 的凸组合，因此：
 
 $$
 \|o_S\|\le V,\qquad \|o_{\bar S}\|\le V
@@ -250,7 +250,7 @@ R_t(S)(\|o_{\bar S}\|+\|o_S\|)\\
 \end{aligned}
 $$
 
-这里的判断标准很朴素：这个 token 或 block 在当前输出里分到了多少质量？
+该推导给出一个直接判据：token 或 block 在当前输出中分配到多少 attention mass。
 
 DeepSeek-V4 选的是 compressed block，粒度已经从 token 升到了 block。可以先引入一个中间输出：如果只选这些 block，但仍然读 block 内原始 token，输出记为 $o_t^{\mathrm{raw}\text{-}S}$；实际 CSA 读压缩 entry，输出记为 $o_t^{\mathrm{csa}}$。于是：
 
@@ -282,25 +282,25 @@ $$
 
 于是问题变成两个小问题。
 
-第一个问题：重要信息会不会集中在少数 block 里？很多语言任务里会。下一 token 往往强依赖最近上下文、当前指令、几个实体、几段证据。它通常不会均匀依赖整整 100 万 token。
+问题一：重要信息是否集中在少数 block 里。许多语言任务满足这一性质。下一 token 往往强依赖最近上下文、当前指令、若干实体和若干证据段，通常不会均匀依赖整整 100 万 token。
 
-第二个问题：压缩后的 block 能不能保留未来会被问到的特征？DeepSeek-V4 的压缩采用 learned weighted summary。报告里的 CSA 会生成 trainable projection、compression weights 和 positional bias，再通过 softmax 权重合成 compressed entry。这比平均池化细得多，也比“把一段文本缩成一句话”更像神经网络内部的记忆整理。
+问题二：压缩后的 block 是否保留未来 query 需要的特征。DeepSeek-V4 的压缩采用 learned weighted summary。报告里的 CSA 会生成 trainable projection、compression weights 和 positional bias，再通过 softmax 权重合成 compressed entry。该过程比平均池化更细粒度，也更接近神经网络内部的记忆整理。
 
 ## 3. top-k 外面的 token 去了哪里
 
-一个 token 在这套架构里大概会有几种去处。
+一个 token 在该架构中有几种典型状态。
 
-它可能进入了某个 compressed KV entry。原 token 虽然没有以独立 KV 的形式留下，但信息仍可能进了 block 摘要。
+第一种状态：token 进入某个 compressed KV entry。原 token 虽然没有以独立 KV 的形式留下，但信息仍可能进了 block 摘要。
 
-它所在的 compressed block 可能被 top-k 选中。模型不会逐 token 展开这段历史，但会读到这个 block 的压缩表示。
+该 token 所在的 compressed block 可能被 top-k 选中。模型不逐 token 展开该段历史，只读取该 block 的压缩表示。
 
-它也可能没进 CSA 的候选集合，却被 HCA 看到了。HCA 用更大的压缩率 $m'=128$ 把远程上下文变成更短的全局记忆流，然后在这条重压缩序列上做 dense attention。
+该 token 也可能未进入 CSA 的候选集合，但仍被 HCA 的全局压缩分支覆盖。HCA 使用更大的压缩率 $m'=128$ 将远程上下文变成更短的全局记忆流，然后在该重压缩序列上做 dense attention。
 
-还有一种情况更简单：当前 query 确实没有用到它。这个判断很局部。下一层、下一个 query、另一个 head，完全可能选到另一个 block。
+还有一种情况是：当前 query 对该 token 的使用量确实较低。该判断只在当前层、当前 query、当前 head/分支内成立；下一层、下一个 query 或另一个 head 可能选择不同 block。
 
-所以，“无意义”这个词太重了。可以换成一个局部定义：
+因此，“无意义”不适合作为绝对判断。更合适的是局部贡献定义：
 
-> token $i$ 对 query $t$ 在某层是 $\varepsilon$-irrelevant，如果删除、合并或不展开它之后，最终输出分布变化小于 $\varepsilon$。
+> token $i$ 对 query $t$ 在某层是 $\varepsilon$-irrelevant，如果删除、合并或不展开该 token 之后，最终输出分布变化小于 $\varepsilon$。
 
 用 KL divergence 可以写成。先定义 full attention 下的输出分布：
 
@@ -329,7 +329,7 @@ p_t^{-i}
 \right)
 $$
 
-把 KL 展开到词表 $\mathcal{Y}$ 上，就是：
+将 KL 展开到词表 $\mathcal{Y}$ 上：
 
 $$
 \Delta_i
@@ -340,15 +340,15 @@ p_t^{\mathrm{full}}(y)
 \frac{p_t^{\mathrm{full}}(y)}{p_t^{-i}(y)}
 $$
 
-如果 $\Delta_i$ 很小，它对这一次预测的贡献就低。这个结论不要外推成永久判决。
+如果 $\Delta_i$ 足够小，该 token 对本次预测的贡献就低。该结论不能外推为永久判决。
 
 ## 4. top-k 旁边还站着 SWA 和 HCA
 
-只做远程 top-k 会很危险。局部语法、短程引用、当前句子结构、代码缩进、括号匹配，这些都吃最近 token 的细节。
+仅使用远程 top-k 会丢失局部细节。局部语法、短程引用、当前句子结构、代码缩进、括号匹配等依赖最近 token 的未压缩信息。
 
-所以 DeepSeek-V4 还保留了 Sliding Window Attention。报告给出的理由也直接：CSA/HCA 的 query 只能 attend 到 preceding compressed blocks，不能访问自己所在压缩块内部的全部细节；语言建模里 recent tokens 往往更相关。因此 V4 额外保留最近 $n_{\mathrm{win}}$ 个未压缩 KV entries 来处理局部依赖。
+因此 DeepSeek-V4 还保留了 Sliding Window Attention。报告给出的理由是：CSA/HCA 的 query 只能 attend 到 preceding compressed blocks，不能访问自己所在压缩块内部的全部细节；语言建模中 recent tokens 往往更相关。因此 V4 额外保留最近 $n_{\mathrm{win}}$ 个未压缩 KV entries 来处理局部依赖。
 
-三条分支的分工很清楚：
+三条分支的分工如下：
 
 | 分支 | 作用 | 信息形态 |
 | --- | --- | --- |
@@ -356,28 +356,28 @@ $$
 | CSA | 远程重点证据 | 中等压缩 + top-k 检索 |
 | HCA | 全局背景/粗摘要 | 重压缩 + dense attention |
 
-这套方案没有把全部压力压到 top-k 上。它更像一套多分辨率记忆：近处用高清，远处用缩略图，需要时再点开最相关的缩略图。
+该方案没有将全部压力放在 top-k 上。该方案构成一套多分辨率记忆：近处保留高分辨率表示，远处保留压缩表示，需要时再访问最相关的压缩块。
 
-## 5. 为什么训练后能跑起来
+## 5. 训练阶段的适配机制
 
-如果拿一个 full-attention 模型，推理时突然把 KV 压缩再 top-k，效果大概率会崩。原模型没学过怎么把信息写进这种记忆格式，也没学过怎么从这种格式里读。
+若对一个只按 full attention 训练的模型在推理阶段临时加入 KV 压缩和 top-k，质量通常会显著下降。原因在于模型没有学习如何将信息写入这种记忆格式，也没有学习如何从这种格式读取信息。
 
 DeepSeek-V4 的压缩器、indexer、attention、后面的 MLP/MoE 是一起训练的。
 
-报告里的训练路径别跳过：模型从较短序列开始训练，逐步扩到 16K、64K、1M；稀疏注意力没有从第一天就启用，前面先做 dense attention warmup；到 64K 阶段再引入 sparse attention，并先 warm up CSA 的 lightning indexer，随后在大部分训练中使用 sparse attention。
+报告给出的训练路径显示：模型从较短序列开始训练，逐步扩到 16K、64K、1M；稀疏注意力没有从第一阶段启用，前期先做 dense attention warmup；到 64K 阶段再引入 sparse attention，并先 warm up CSA 的 lightning indexer，随后在大部分训练中使用 sparse attention。
 
 这会逼模型学会几件事：
 
-1. 早期层把局部信息写进更容易压缩的 hidden state。
+1. 早期层将局部信息写入更容易压缩的 hidden state。
 2. 压缩器保留未来 query 可能需要的特征。
 3. indexer 根据 query 找相关 block。
 4. 后续层适应这种不完整但高效的记忆。
 
-所以这里没有魔法。模型从训练时就被放进这种读取方式里，内部表示也会跟着改。
+因此，质量来自训练阶段对读取方式的适配。模型从训练时就处在这种记忆访问约束下，内部表示也会随之调整。
 
-## 6. 把它写成优化问题
+## 6. 形式化为优化问题
 
-可以把这套机制写成一个带 KV/FLOPs 预算的 attention 近似问题。
+该机制可以写成一个带 KV/FLOPs 预算的 attention 近似问题。
 
 先写普通语言建模。给定训练样本 $x=(x_1,\ldots,x_T)$，第 $t$ 个位置的目标 token 是 $y_t=x_{t+1}$。full attention 模型的单位置损失是：
 
@@ -459,7 +459,7 @@ $$
 \sum_{b\in S_t}\hat{\alpha}_{t,b}z_b
 $$
 
-把它放进语言建模损失里：
+将该输出放进语言建模损失：
 
 $$
 \ell_t^{\mathrm{sparse}}(\theta,\phi,\psi)
@@ -500,7 +500,7 @@ $$
 \mathrm{FLOPs}(\phi,\psi,T)\le C
 $$
 
-如果只看一层的粗略 cache 项，窗口和压缩流会给出：
+如果只评估一层的粗略 cache 项，窗口和压缩流会给出：
 
 $$
 N_{\mathrm{cache}}
@@ -518,7 +518,7 @@ $$
 N_{\mathrm{cache}}\cdot d_{\mathrm{kv}}\cdot \mathrm{bytes}
 $$
 
-这件事可以从三层看。
+该问题可从三层分析。
 
 ### A. Rate-distortion / 信息瓶颈
 
@@ -532,7 +532,7 @@ H_b-\widehat{H}_b(z_b)
 \right\|^2
 $$
 
-这里 $\widehat{H}_b$ 表示“如果只拿 $z_b$ 反推 block 信息，能还原到什么程度”。更贴近 attention 的失真可以写成：
+其中，$\widehat{H}_b$ 表示仅使用 $z_b$ 反推 block 信息时的重构结果。更贴近 attention 的失真可以写成：
 
 $$
 D_{\mathrm{attn}}(q,B_b)
@@ -552,7 +552,7 @@ D_{\mathrm{nll}}
 \ell_t^{\mathrm{sparse}}-\ell_t^{\mathrm{full}}
 $$
 
-所以 rate-distortion 版本可以写成：
+因此，rate-distortion 版本可以写成：
 
 $$
 \min_{\Phi_\phi}
@@ -572,13 +572,13 @@ $$
 \mathrm{memory\ rate}(\Phi_\phi)\le \rho
 $$
 
-这里的 $\lambda_h,\lambda_a,\lambda_n$ 是权重，$\rho$ 是允许的压缩后存储率。
+其中，$\lambda_h,\lambda_a,\lambda_n$ 是权重，$\rho$ 是允许的压缩后存储率。
 
 ### B. Learned retrieval / 学出来的检索器
 
-top-k 选择可以看成检索问题：给定 query $q_t$，从所有 block memory $z_b$ 里找相关 block。
+top-k 选择可建模为检索问题：给定 query $q_t$，从所有 block memory $z_b$ 里找相关 block。
 
-理想相关性可以用 dense attention 下的 block mass 表示。先把 token-level attention 聚合到 block：
+理想相关性可以用 dense attention 下的 block mass 表示。先将 token-level attention 聚合到 block：
 
 $$
 r_{t,b}
@@ -614,7 +614,7 @@ a_{t,b}
 g_\psi(q_t,z_b)
 $$
 
-训练目标希望这个分数排序接近 oracle 排序：
+训练目标要求该分数排序接近 oracle 排序：
 
 $$
 \operatorname{rank}(a_{t,b})
@@ -624,7 +624,7 @@ $$
 
 ### C. End-to-end loss minimization
 
-最终目标还是生成质量。某个 block 在 dense attention 里有质量，不代表它一定要被选；只要拿掉它之后最终 token 分布几乎不变，模型就可以把预算留给别处。
+最终目标仍然是生成质量。某个 block 在 dense attention 中具有非零质量，并不意味着该 block 一定需要进入预算集合；如果移除该 block 后最终 token 分布变化很小，预算可以分配给剩余 block。
 
 更贴近训练目标的标准是。先定义两个输出分布：
 
@@ -667,7 +667,7 @@ p_t^{\mathrm{full}}(y)
 \frac{p_t^{\mathrm{full}}(y)}{p_t^{\mathrm{sparse}}(y)}
 $$
 
-或者直接看负对数似然差：
+或者直接使用负对数似然差：
 
 $$
 \Delta \mathrm{NLL}
@@ -677,7 +677,7 @@ $$
 \log p_{\mathrm{full}}(y_t)
 $$
 
-把单步损失写出来，就是：
+单步损失差可以写为：
 
 $$
 \Delta \mathrm{NLL}
@@ -687,13 +687,13 @@ $$
 \ell_t^{\mathrm{full}}
 $$
 
-## 7. 怎么看它有没有选对
+## 7. 选择质量评估
 
-如果要分析 CSA/HCA 的近似质量，可以看几类信号。
+CSA/HCA 的近似质量可通过几类信号分析。
 
 ### 1. Captured Attention Mass
 
-在较短 context 上跑 full attention，得到 dense attention mass，再把 token-level mass 聚合到 block：
+在较短 context 上运行 full attention，得到 dense attention mass，再将 token-level mass 聚合到 block：
 
 $$
 r_{t,b}
@@ -701,7 +701,7 @@ r_{t,b}
 \sum_{i\in B_b}\alpha_{t,i}
 $$
 
-然后看模型 indexer 选出来的 block 捕获了多少 mass：
+然后计算模型 indexer 选出的 block 捕获了多少 mass：
 
 $$
 \mathrm{CapturedMass@k}
@@ -709,7 +709,7 @@ $$
 \sum_{b\in S_t}r_{t,b}
 $$
 
-把 $r_{t,b}$ 展开进去，就是：
+将 $r_{t,b}$ 展开：
 
 $$
 \mathrm{CapturedMass@k}
@@ -718,7 +718,7 @@ $$
 \sum_{i\in B_b}\alpha_{t,i}
 $$
 
-如果要看没捕获到的部分：
+未捕获部分可写为：
 
 $$
 \mathrm{MissedMass@k}
@@ -726,7 +726,7 @@ $$
 1-\mathrm{CapturedMass@k}
 $$
 
-CapturedMass@k 越高，top-k 在这个分布下越靠谱。
+CapturedMass@k 越高，top-k 在该数据分布下越接近 dense attention 的主要质量分布。
 
 ### 2. Oracle top-k vs learned top-k
 
@@ -750,7 +750,7 @@ S_t^{\mathrm{model}}
 \operatorname{TopK}_k\{a_{t,b}\}_b
 $$
 
-可以看 Recall@k：
+Recall@k 可定义为：
 
 $$
 \mathrm{Recall@k}
@@ -768,7 +768,7 @@ $$
 {k}
 $$
 
-报告中提到，CSA indexer 的 QK path 使用 FP4、index scores 从 FP32 量化到 BF16 后，top-k selector 获得 2x 加速，同时保持 99.7% 的 KV entry recall。这个 recall 验证的是“低精度加速后选出来的 KV entry 是否接近原 selector”，还不能直接推出 sparse attention 和 full attention 完全等价。
+报告中提到，CSA indexer 的 QK path 使用 FP4、index scores 从 FP32 量化到 BF16 后，top-k selector 获得 2x 加速，同时保持 99.7% 的 KV entry recall。该 recall 验证的是“低精度加速后选出的 KV entry 是否接近原 selector”，不能直接推出 sparse attention 和 full attention 完全等价。
 
 ### 3. Compression distortion
 
@@ -791,7 +791,7 @@ $$
 \sum_{i\in B_b}\alpha_i^{B}v_i
 $$
 
-压缩路径先把这个 block 变成 $z_b$，再用 $z_b$ 作为可读的 compressed memory。若只看单个 block 的表达误差，可以写成：
+压缩路径先将该 block 变成 $z_b$，再用 $z_b$ 作为可读的 compressed memory。若评估单个 block 的表达误差，可以写成：
 
 $$
 \mathrm{Attn}_{\mathrm{compressed}}(q,z_b)
@@ -811,7 +811,7 @@ D_b(q)
 \right\|
 $$
 
-把前面的定义代入：
+代入前面的定义：
 
 $$
 D_b(q)
@@ -826,11 +826,11 @@ z_b
 \right\|
 $$
 
-差异越小，说明 compressed entry 对当前 query 的表达越够用。
+差异越小，说明 compressed entry 对当前 query 的表达越充分。
 
 ### 4. Ablation 曲线
 
-改变 $m,k,m',n_{\mathrm{win}}$，看 perplexity、LongBench、needle-in-haystack、多证据问答、代码任务怎么变。通常会得到一条 Pareto curve：
+改变 $m,k,m',n_{\mathrm{win}}$，评估 perplexity、LongBench、needle-in-haystack、多证据问答、代码任务的变化。通常会得到一条 Pareto curve：
 
 $$
 \mathrm{cost}(m,k,m',n_{\mathrm{win}})
@@ -855,37 +855,37 @@ $$
 \right\}
 $$
 
-报告里，LongBench-V2 上 DeepSeek-V3.2-Base 为 40.2，V4-Flash-Base 为 44.7，V4-Pro-Base 为 51.5。这个结果说明 V4 系列长上下文评测更强，但别把提升全算到 CSA/HCA 头上。数据、规模、训练策略、优化器也一起变了。
+报告中，LongBench-V2 上 DeepSeek-V3.2-Base 为 40.2，V4-Flash-Base 为 44.7，V4-Pro-Base 为 51.5。该结果说明 V4 系列在长上下文评测上更强，但提升不能全部归因于 CSA/HCA；数据、规模、训练策略和优化器也发生了变化。
 
 ### 5. Adversarial / worst-case 测试
 
-最容易暴露稀疏检索问题的，是那些必须均匀读取全文的任务：
+最易暴露稀疏检索问题的是必须均匀读取全文的任务：
 
 1. 统计全文某个词出现次数。
 2. 比较 1000 个分散证据。
 3. 每段都有一个小事实，最终答案依赖全部事实。
-4. needle 很短，且和 query 的语义相关性很弱。
-5. 需要逐 token 级别精确复原。
+4. needle 较短，且和 query 的语义相关性较弱。
+5. 需要逐 token 精确复原。
 
-这类任务会挑战“少数 top-k block 足够”的前提。HCA 可以保留一些全局 aggregate；任务一旦要求精确保留所有细节，压缩就会付出代价。
+此类任务会挑战“少数 top-k block 足够”的前提。HCA 可以保留部分全局 aggregate；当任务要求精确保留所有细节时，压缩会产生信息损失。
 
 ## 8. DeepSeek-V4 押了哪些经验判断
 
-我会把这套设计背后的判断拆成几条：
+该设计背后的经验判断可拆成几条：
 
 1. 远程依赖通常比较稀疏。百万 token 里，对当前生成真正有用的远程片段往往只有一小部分。
-2. 局部依赖很重要。最近 token 需要原样保留，这就是 SWA 的位置。
+2. 局部依赖重要。最近 token 需要原样保留，对应 SWA 的位置。
 3. 远处信息有相当一部分可以摘要化。模型不一定需要每个 token 的完整 KV，只需要面向未来 query 的 memory representation。
 4. 训练能让模型适应这种记忆格式。V4 在长上下文训练中逐步引入 sparse attention，并 warm up indexer，记忆格式从训练阶段就进入模型能力边界。
-5. 真实任务分布通常避开最坏情况。用户如果构造一个必须均匀读取全上下文的算法题，top-k sparse attention 会更吃力。
+5. 真实任务分布通常避开最坏情况。如果输入任务必须均匀读取全上下文，top-k sparse attention 的近似误差会增大。
 
-## 9. 从官方 inference 源码再看一遍
+## 9. 官方 inference 源码路径
 
-上面的解释还偏机制图景。DeepSeek-V4 官方 Hugging Face 仓库里的 `inference/model.py` 和 `inference/kernel.py`，能把这件事落到具体读写路径上。
+前文提供了机制层面的解释。DeepSeek-V4 官方 Hugging Face 仓库里的 `inference/model.py` 和 `inference/kernel.py`，能够将该机制对应到具体读写路径。
 
-先提醒一句：这个 `inference` 目录是官方本地推理实现，适合看推理时怎么读 KV cache；训练细节和线上服务端的完整工程实现，需要看别的资料。模型卡把本地运行入口指向 `inference` 文件夹，仓库和模型权重是 MIT license。
+需要限定分析范围：`inference` 目录是官方本地推理实现，适合观察推理时如何读取 KV cache；训练细节和线上服务端的完整工程实现需要补充资料。模型卡将本地运行入口指向 `inference` 文件夹，仓库和模型权重是 MIT license。
 
-### 9.1 配置先决定每层怎么读历史
+### 9.1 配置决定层级读取路径
 
 `ModelArgs` 里的小默认配置有几个醒目的字段：
 
@@ -899,17 +899,17 @@ index_topk = 512
 
 这三个 ratio 可以直接读成三种层：
 
-| ratio | 这一层怎么读 |
+| ratio | 历史读取路径 |
 | --- | --- |
 | `4` | c4a/CSA，先 4 倍附近压缩，再用 learned indexer 选 top-k |
 | `128` | c128a/HCA，重压缩后读可见 compressed stream |
 | `0` | 只保留 sliding window，不走远程压缩 |
 
-源码里也这么分叉：`compress_ratio == 4` 才创建 `Indexer`；其他压缩层没有 learned indexer。到了 forward，如果有 indexer 就走 learned top-k；如果没有，就生成所有因果可见的 compressed positions。
+源码也按该逻辑分叉：`compress_ratio == 4` 才创建 `Indexer`；非 c4a 压缩层没有 learned indexer。到了 forward，如果有 indexer 就走 learned top-k；如果没有，就生成所有因果可见的 compressed positions。
 
 ### 9.2 Compressor 做的是 learned gated pooling
 
-`Compressor` 的注释已经把事情说得很直：它通过 learned gated pooling 压缩 KV cache。代码路径大概是：
+`Compressor` 的注释直接说明：`Compressor` 通过 learned gated pooling 压缩 KV cache。代码路径可简化为：
 
 ```python
 kv = self.wkv(x)
@@ -917,7 +917,7 @@ score = self.wgate(x)
 kv = (kv * score.softmax(dim=2)).sum(dim=2)
 ```
 
-中间还有 reshape、`ape` 位置偏置、overlap 处理和 RMSNorm。把它写成式子，可以分四步。
+中间还有 reshape、`ape` 位置偏置、overlap 处理和 RMSNorm。对应公式可以分四步。
 
 第一步，先生成候选 KV：
 
@@ -931,7 +931,7 @@ $$
 s_r=W_{\mathrm{gate}}h_r
 $$
 
-第三步，加上压缩块内部的位置偏置。若 $r\in B_j$，把 $r$ 在 block 内的位置写成 $\rho(r)$：
+第三步，加上压缩块内部的位置偏置。若 $r\in B_j$，将 $r$ 在 block 内的位置写成 $\rho(r)$：
 
 $$
 \tilde{s}_r=s_r+a_{\rho(r)}
@@ -969,7 +969,7 @@ $$
 z_j=\mathrm{Norm}(\bar{z}_j)
 $$
 
-把四步合在一起：
+合并四步：
 
 $$
 z_j
@@ -982,17 +982,17 @@ W_{kv}h_r
 \right)
 $$
 
-这里的 $B_j$ 是第 $j$ 个压缩块，$W_{kv}h_r$ 对应 `wkv(x)`，$W_{\mathrm{gate}}h_r$ 对应 `wgate(x)`，$a_{\rho(r)}$ 对应 `ape`。这个 gate 是按维度作用的，不只是一个 scalar 权重。
+其中，$B_j$ 是第 $j$ 个压缩块，$W_{kv}h_r$ 对应 `wkv(x)`，$W_{\mathrm{gate}}h_r$ 对应 `wgate(x)`，$a_{\rho(r)}$ 对应 `ape`。该 gate 按维度作用，不只是一个 scalar 权重。
 
-所以源码里的压缩更像“给后续 attention 准备一个 KV 摘要向量”。vLLM 的解读也提到，`c4a` 大致是 1/4 压缩，一个 compressed token 来自 8 个 uncompressed tokens 的加权和，stride 是 4；`c128a` 则是 128 个 token 压成 1 个，stride 是 128。
+因此，源码里的压缩可视为“为后续 attention 准备一个 KV 摘要向量”。vLLM 的解读也提到，`c4a` 近似为 1/4 压缩，一个 compressed token 来自 8 个 uncompressed tokens 的加权和，stride 是 4；`c128a` 则是 128 个 token 压缩为 1 个，stride 是 128。
 
-这也解释了 top-k 外 token 的去处：很多信息已经被写进 compressed KV entry 里了。
+这也解释了 top-k 外 token 的去处：大量信息已经写入 compressed KV entry。
 
 ### 9.3 decode 时凑到边界才写 compressed cache
 
-生成阶段不会每来一个 token 就立刻写一个长期 compressed entry。源码里先把当前 token 的候选 KV 和 gate 分数放进 `kv_state` / `score_state`；只有到压缩边界，才把这一组状态合成一个 compressed KV 写入 cache。
+生成阶段不会每来一个 token 就立刻写一个长期 compressed entry。源码先将当前 token 的候选 KV 和 gate 分数放进 `kv_state` / `score_state`；只有到压缩边界，才将这一组状态合成一个 compressed KV 写入 cache。
 
-可以把逻辑压成这样：
+该逻辑可简化为：
 
 ```python
 if boundary_reached:
@@ -1000,11 +1000,11 @@ if boundary_reached:
     compressed_cache[block_id] = kv
 ```
 
-因此省 KV cache 的方式很具体：长期 cache 存的是压缩块；还没凑满的尾巴先留在 state cache 和 sliding window 里。
+因此，KV cache 节省来自长期 cache 的存储对象变化：长期 cache 存储压缩块；尚未凑满一个压缩块的尾部 token 暂存在 state cache 和 sliding window 中。
 
 ### 9.4 top-k 是单独的 learned indexer
 
-`Indexer` 自己有一套 query projection 和一套用于打分的 compressed KV。源码注释说得很明白：它通过 learned scoring 为 sparse attention 选择 top-k compressed KV positions，并且有自己的 `Compressor` 来构建 indexer 专用压缩 KV。
+`Indexer` 自身包含 query projection 和用于打分的 compressed KV。源码注释说明：`Indexer` 通过 learned scoring 为 sparse attention 选择 top-k compressed KV positions，并且有自己的 `Compressor` 来构建 indexer 专用压缩 KV。
 
 核心打分可以简化成：
 
@@ -1028,7 +1028,7 @@ u_{t,h,j}
 q^{idx}_{t,h}\cdot z^{idx}_j
 $$
 
-源码里对这个相似度做 ReLU：
+源码对该相似度做 ReLU：
 
 $$
 \tilde{u}_{t,h,j}
@@ -1063,11 +1063,11 @@ S_t
 \operatorname{TopK}_k\{s_{t,j}\}_j
 $$
 
-这条路径有两个重要含义。
+该路径有两个重要含义。
 
-第一，top-k 的位置在 dense attention 之前。它是一个便宜检索器，先预测哪些 compressed blocks 值得读。
+第一，top-k 的位置在 dense attention 之前。该路径使用一个便宜检索器，先预测哪些 compressed blocks 值得读。
 
-第二，top-k 只发生在 `compress_ratio == 4` 的层。`c128a` 层压得更狠，1M token 变成大约 8192 个 compressed entries，可以直接读可见压缩流。vLLM 也把这件事解释成：`c4a` 后还有约 250K compressed tokens，所以需要 DSA top-k；`c128a` 后最多约 8K compressed tokens，计算上可以承受。
+第二，top-k 只发生在 `compress_ratio == 4` 的层。`c128a` 层压缩率更高，1M token 变成约 8192 个 compressed entries，可以直接读可见压缩流。vLLM 也将该机制解释为：`c4a` 后还有约 250K compressed tokens，因此需要 DSA top-k；`c128a` 后最多约 8K compressed tokens，计算上可以承受。
 
 ### 9.5 SWA 和 compressed indices 会拼到一起
 
@@ -1077,13 +1077,13 @@ $$
 topk_idxs = get_window_topk_idxs(...)
 ```
 
-如果这一层有压缩，再把远程 compressed indices 拼进去：
+如果这一层有压缩，再拼接远程 compressed indices：
 
 ```python
 topk_idxs = torch.cat([topk_idxs, compress_topk_idxs], dim=-1)
 ```
 
-所以每层实际送进 sparse attention kernel 的索引，是近邻原始 KV 加远程压缩 KV 的并集。先写本地窗口：
+因此，每层实际送进 sparse attention kernel 的索引，是近邻原始 KV 加远程压缩 KV 的并集。先写本地窗口：
 
 $$
 \mathcal{I}_{\mathrm{local}}(t)
@@ -1121,7 +1121,7 @@ $$
 
 ### 9.6 sparse kernel 只读 index 指到的 KV row
 
-`kernel.py` 里的 `sparse_attn_kernel` 注释说得很直接：它根据 index gather top-k KV positions，然后做 online softmax 风格的 attention。
+`kernel.py` 里的 `sparse_attn_kernel` 注释说明：该 kernel 根据 index gather top-k KV positions，然后做 online softmax 风格的 attention。
 
 简化后就是：
 
@@ -1170,7 +1170,7 @@ $$
 \sum_{a=1}^{K}\tilde{\alpha}_{t,a}\tilde{v}_a
 $$
 
-这条 kernel 路径把问题钉死了：没进入 `topk_idxs` 的 KV row，在这一次 attention 里不会被读。注意这里的 `kv` 是共享 K/V 表示；kernel 先用它算 score，再用同一个表示形成输出，后面还会对 RoPE 维度做 inverse rotation。
+该 kernel 路径说明：未进入 `topk_idxs` 的 KV row，在一次 attention 中不会被读取。其中，`kv` 是共享 K/V 表示；kernel 先使用该表示计算 score，再用同一个表示形成输出，后续还会对 RoPE 维度做 inverse rotation。
 
 ### 9.7 cache 在源码里是分区的
 
@@ -1180,13 +1180,13 @@ $$
 kv_cache_size = window_size + max_seq_len // compress_ratio
 ```
 
-随后把 `kv_cache` 的前半段留给 sliding window，把 `win:` 之后的区域交给 compressor：
+随后将 `kv_cache` 的前半段留给 sliding window，将 `win:` 之后的区域交给 compressor：
 
 ```python
 compressor.kv_cache = kv_cache[:, win:]
 ```
 
-decode 时，最近 token 写入 ring buffer；compressed KV 到边界后写入压缩数组。也就是说每个压缩层的 KV cache 更像：
+decode 时，最近 token 写入 ring buffer；compressed KV 到边界后写入压缩数组。因此，每个压缩层的 KV cache 可表示为：
 
 $$
 N_{\mathrm{SWA}}
@@ -1225,25 +1225,25 @@ n_{\mathrm{win}}
 d_{\mathrm{kv}}b_{\mathrm{bytes}}
 $$
 
-vLLM 给了一个很直观的 1M context 估算：bf16 KV cache 下，DeepSeek V4 单序列约 9.62 GiB；对比 61 层 DeepSeek-V3.2 风格栈的 83.9 GiB，大约小 8.7 倍。实际部署还可以用 FP4 indexer cache 和 FP8 attention cache 继续省。
+vLLM 给出一个 1M context 估算：bf16 KV cache 下，DeepSeek V4 单序列约 9.62 GiB；对比 61 层 DeepSeek-V3.2 风格栈的 83.9 GiB，约降低 8.7 倍。实际部署还可以用 FP4 indexer cache 和 FP8 attention cache 继续降低占用。
 
 ### 9.8 因果性靠 mask 和边界条件守住
 
-压缩 attention 最容易出 bug 的地方，是 compressed block 里混进未来 token。源码里靠两类约束挡住这件事。
+压缩 attention 最容易出现错误的位置，是 compressed block 混入未来 token。源码依赖两类约束避免该问题。
 
 一类是普通 compressed index 的 mask：不可见的 compressed index 会被写成 `-1`。
 
-另一类是 learned indexer 的 mask：prefill 时给未来 compressed block 加 `-inf`，top-k 之后再把非法位置置为 `-1`。
+另一类是 learned indexer 的 mask：prefill 时对未来 compressed block 加 `-inf`，top-k 之后再将非法位置置为 `-1`。
 
-vLLM 的位置解释也很清楚：`c4a` 的第 $j$ 个 compressed token 聚合大约 $[4j-4,4j+3]$ 的范围，query 只有到 $i\ge 4j+3$ 才能看；`c128a` 则需要 $i\ge 128j+127$。这也是 SWA 必须存在的原因：压缩块完成前，当前 query 仍要能读到本地历史。
+vLLM 的位置解释为：`c4a` 的第 $j$ 个 compressed token 聚合大约 $[4j-4,4j+3]$ 的范围，query 只有到 $i\ge 4j+3$ 才可见；`c128a` 则需要 $i\ge 128j+127$。SWA 的必要性来源于该边界条件：压缩块完成前，当前 query 仍需要读取本地历史。
 
-把这个因果条件写成通用形式。若第 $j$ 个 compressed block 覆盖的最后一个原始 token 是：
+将该因果条件写成通用形式。若第 $j$ 个 compressed block 覆盖的最后一个原始 token 是：
 
 $$
 e_j=\max B_j
 $$
 
-当前位置 $t$ 能读取这个 block 的条件是：
+当前位置 $t$ 能读取该 block 的条件是：
 
 $$
 t\ge e_j
@@ -1255,7 +1255,7 @@ $$
 e_j^{c4a}=4j+3
 $$
 
-所以可见条件是：
+因此可见条件是：
 
 $$
 t\ge 4j+3
@@ -1267,15 +1267,15 @@ $$
 e_j^{c128a}=128j+127
 $$
 
-所以可见条件是：
+因此可见条件是：
 
 $$
 t\ge 128j+127
 $$
 
-### 9.9 把源码路径合成一段伪代码
+### 9.9 源码路径的最小伪代码
 
-把官方实现压扁后，可以写成：
+官方实现可简化为：
 
 ```python
 def deepseek_v4_attention(x, start_pos, layer):
@@ -1301,22 +1301,22 @@ def deepseek_v4_attention(x, start_pos, layer):
 
 ### 9.10 源码给出的六个结论
 
-读完 inference 源码后，前面的机制解释可以再压实一点：
+基于 inference 源码，可进一步得到以下结论：
 
-1. DeepSeek-V4 没有简单丢 token。`Compressor` 会把多个 token 的 KV 合成 learned weighted summary；c4a 还带 overlap。
+1. DeepSeek-V4 通过 `Compressor` 将多个 token 的 KV 合成 learned weighted summary；c4a 还带 overlap。
 2. learned top-k 只出现在 c4a 层。`compress_ratio == 4` 创建 `Indexer`；`compress_ratio == 128` 读可见 compressed entries。
 3. top-k 选择的是 compressed memory block，粒度已经从原始 token 升到压缩块。
 4. 最近 128 个 token 仍以未压缩形式留在 SWA 里。
 5. 省显存来自 cache 形态变化：全量 raw KV 变成短窗口 raw KV、sequence-compressed KV，以及 c4a indexer cache。
-6. 源码展示的是推理瓶颈怎么落地；质量还要靠训练阶段让压缩器、indexer、attention 后续层一起适应这种记忆格式。
+6. 源码展示的是推理瓶颈的实现方式；质量依赖训练阶段让压缩器、indexer、attention 后续层一起适应这种记忆格式。
 
-## 10. 压成一句话
+## 10. 总结
 
-DeepSeek-V4 的 KV 压缩可以这样理解：
+DeepSeek-V4 的 KV 压缩可以总结为：
 
-> 在给定生成位置上，大多数历史 token 不需要以原始 KV 形式逐个读取；它们要么可被局部摘要表示，要么当前 query 用不上，要么由全局压缩分支覆盖。真正要优化的是在 KV/FLOPs 预算下，让 next-token loss 尽量接近 full attention。
+> 在给定生成位置上，大多数历史 token 不需要以原始 KV 形式逐个读取；这些 token 可由局部摘要表示，或者对当前 query 的贡献不足以占用预算，或者由全局压缩分支覆盖。真正要优化的是在 KV/FLOPs 预算下，让 next-token loss 尽量接近 full attention。
 
-我会把它压成这个流程。先有长上下文 hidden states：
+该机制可以整理为如下流程。先有长上下文 hidden states：
 
 $$
 H_{1:T}=(h_1,h_2,\ldots,h_T)
@@ -1368,4 +1368,4 @@ $$
 }
 $$
 
-top-k 判断的是：当前 query 值不值得花计算预算，把这个 memory block 打开读。
+top-k 的作用是判断当前 query 是否应当为某个 memory block 分配读取预算。
