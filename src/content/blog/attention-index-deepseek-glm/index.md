@@ -4,7 +4,7 @@ description: '从普通 attention 的位置索引、DeepSeek 的 lightning index
 publishDate: '2026-05-02'
 tags: ['ai', 'transformer', 'attention', 'deepseek', 'glm']
 language: 'zh-CN'
-draft: true
+draft: false
 ---
 
 注意力机制里的 index 常被简化为如下判断：
