@@ -8288,6 +8288,91 @@ const topics: Record<string, Topic> = {
     prerequisites: [],
     problems: []
   },
+  'linear-models-sparse-roadmap': {
+    title: '拟合、稀疏与对偶',
+    prerequisites: [
+      { name: '线性代数：向量、矩阵、点积、范数', course: 'Phase 1' },
+      { name: '优化基础：arg min、梯度、凸性', course: 'Phase 2-6' }
+    ],
+    rootSection: {
+      title: '从拟合到稳定、稀疏与可解释',
+      desc:
+        '主线：线性组合表示数据 -> 最小二乘拟合 -> 发现不稳定 -> Ridge 稳定化 -> 想要稀疏 -> LASSO -> 凸优化 / 对偶 / KKT -> 算法与现代模型解释。\n\n核心问题：给定数据 x 和字典/特征矩阵 D，如何找到好的系数 h，使 x ≈ Dh。目标是从“怎么拟合数据”走到“怎么稳定、稀疏、可解释地拟合数据”。\n\n记忆线：拟合 -> 稳定 -> 稀疏 -> 可解释 -> 可计算。',
+      children: [
+        {
+          title: 'Phase 1：线性代数基础',
+          desc:
+            '目标：看懂 x ≈ Dh。x 是数据、信号或 activation；D 的列向量 d_j 是特征、方向、基向量或字典原子；Dh = h_1 d_1 + ... + h_k d_k；残差 r = x - Dh 是后续优化问题的起点。',
+          problems: [
+            { id: 'ML-1.1', title: '维度检查、矩阵乘法与线性组合', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-1.2', title: '残差 r = x - Dh 与范数度量', url: '/blog/math-toolkit-collection' }
+          ]
+        },
+        {
+          title: 'Phase 2：最小二乘 Least Squares',
+          desc:
+            '目标：理解为什么最自然的拟合目标是 min_h ||x - Dh||_2^2。它解决的是数据有误差、方程组无法完全满足时，找整体平方误差最小的近似解。',
+          problems: [
+            { id: 'ML-2.1', title: '平方误差目标与 arg min', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-2.2', title: '正规方程 D^T D h = D^T x', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-2.3', title: '解析解 h* = (D^T D)^(-1) D^T x', url: '/blog/math-toolkit-collection' }
+          ]
+        },
+        {
+          title: 'Phase 3：最小二乘为什么不稳定',
+          desc:
+            '目标：理解为什么需要 Ridge。普通最小二乘只关心 ||x - Dh||_2^2，不关心 h 本身是否很大。若 d_1 ≈ d_2，可能出现 h_1 = 1000, h_2 = -999 这样的脆弱系数组合；若存在 Da = 0，则同一个 Dh 可以对应很多 h。',
+          problems: [
+            { id: 'ML-3.1', title: '线性相关、秩与零空间', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-3.2', title: 'Gram matrix D^T D 与病态问题', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-3.3', title: '特征值、奇异值与条件数', url: '/blog/math-toolkit-collection' }
+          ]
+        },
+        {
+          title: 'Phase 4：Ridge 稳定化',
+          desc:
+            '目标：理解 L2 正则化。Ridge 把最小二乘改成 1/2 ||x - Dh||_2^2 + lambda/2 ||h||_2^2，既拟合数据，又压小系数。核心线性代数变化是 D^T D -> D^T D + lambda I；如果 D^T D 的特征值是 mu_i，Ridge 会把它们抬成 mu_i + lambda。',
+          problems: [
+            { id: 'ML-4.1', title: 'L2 正则项 ||h||_2^2', url: '/blog/ridge-regression-l2-regularization' },
+            { id: 'ML-4.2', title: 'Ridge 解析解', url: '/blog/ridge-regression-l2-regularization' },
+            { id: 'ML-4.3', title: '特征值平移 mu_i -> mu_i + lambda', url: '/blog/ridge-regression-l2-regularization' }
+          ]
+        },
+        {
+          title: 'Phase 5：LASSO 与稀疏性',
+          desc:
+            '目标：理解为什么 L1 会让系数变成 0。真正想要的稀疏性是 ||h||_0，但 L0 优化涉及组合搜索；LASSO 用 ||h||_1 替代，得到 1/2 ||x - Dh||_2^2 + lambda ||h||_1。绝对值在 0 点的尖角触发 soft-thresholding，从而产生稀疏。',
+          problems: [
+            { id: 'ML-5.1', title: 'L0 稀疏性与支持集', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-5.2', title: 'L1 正则与 LASSO', url: '/blog/lasso-textbook' },
+            { id: 'ML-5.3', title: 'Soft-thresholding 软阈值机制', url: '/blog/lasso-textbook' }
+          ]
+        },
+        {
+          title: 'Phase 6：凸优化、对偶与 KKT',
+          desc:
+            '目标：理解约束形式、惩罚形式和最优性证书。Least Squares、Ridge、LASSO 都是凸优化；LASSO 不光滑，所以需要子梯度、KKT、对偶和近端算子。KKT 给出的核心解释是：只有和残差相关性顶到阈值的特征，才会被激活。',
+          problems: [
+            { id: 'ML-6.1', title: '凸函数、子梯度与 L1 不光滑性', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-6.2', title: '拉格朗日函数与惩罚/约束互换', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-6.3', title: 'KKT、Slater 条件与对偶间隙证书', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-6.4', title: 'LASSO KKT：残差相关性阈值', url: '/blog/lasso-textbook' }
+          ]
+        },
+        {
+          title: 'Phase 7：算法与应用',
+          desc:
+            '目标：从公式走到求解和应用。Least Squares 与 Ridge 可以走矩阵解析解；LASSO 没有普通矩阵逆形式，常用 coordinate descent、ISTA、FISTA、ADMM。应用上，这条线通向 linear regression、sparse coding、dictionary learning、feature selection 和 SAE / mechanistic interpretability。',
+          problems: [
+            { id: 'ML-7.1', title: 'Coordinate descent 求 LASSO', url: '/blog/lasso-textbook' },
+            { id: 'ML-7.2', title: 'ISTA / FISTA：梯度步 + soft-thresholding', url: '/blog/lasso-textbook' },
+            { id: 'ML-7.3', title: 'Sparse coding 与 dictionary learning', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-7.4', title: 'SAE：重构误差 + 稀疏约束', url: '/blog/math-toolkit-collection' }
+          ]
+        }
+      ]
+    }
+  },
   'greedy-thinking': {
     title: '贪心与思维',
     prerequisites: [],
@@ -8317,6 +8402,7 @@ const nodes = [
   { id: 'greedy-thinking', x: 650, y: 500 },
   { id: 'math', x: 150, y: 650 },
   { id: 'bit-manipulation', x: 400, y: 650 },
+  { id: 'linear-models-sparse-roadmap', x: 650, y: 650 },
   { id: 'dynamic-programming', x: 400, y: 800 }
 ]
 
@@ -8348,6 +8434,8 @@ const edges = [
   ['graph-algorithms', 'math'],
   ['graph-algorithms', 'bit-manipulation'],
   ['math', 'dynamic-programming'],
+  ['math', 'linear-models-sparse-roadmap'],
+  ['linear-models-sparse-roadmap', 'dynamic-programming'],
   ['bit-manipulation', 'dynamic-programming'],
   ['greedy-thinking', 'dynamic-programming']
 ]
