@@ -8297,12 +8297,22 @@ const topics: Record<string, Topic> = {
     rootSection: {
       title: '从拟合到稳定、稀疏与可解释',
       desc:
-        '主线：线性组合表示数据 -> 最小二乘拟合 -> 发现不稳定 -> Ridge 稳定化 -> 想要稀疏 -> LASSO -> 凸优化 / 对偶 / KKT -> 算法与现代模型解释。\n\n核心问题：给定数据 x 和字典/特征矩阵 D，如何找到好的系数 h，使 x ≈ Dh。目标是从“怎么拟合数据”走到“怎么稳定、稀疏、可解释地拟合数据”。\n\n记忆线：拟合 -> 稳定 -> 稀疏 -> 可解释 -> 可计算。',
+        '这套内容不是一堆散知识，而是一条自然的研究路线：用线性组合表示数据 -> 最小二乘拟合 -> 发现不稳定 -> Ridge 稳定化 -> 想要稀疏 -> LASSO -> 凸优化 / 对偶 / KKT -> 算法与现代模型解释。\n\n核心问题只有一个：给定数据 x 和字典/特征矩阵 D，如何找到一个好的系数 h，使 x ≈ Dh。后面每一层都不是凭空出现的，而是上一层暴露出的缺口：最小二乘暴露稳定性问题，Ridge 解决稳定但不做特征选择，LASSO 引入稀疏但带来非光滑优化，于是需要子梯度、KKT、对偶和近端算法。\n\n最终主线：拟合 -> 稳定 -> 稀疏 -> 可解释 -> 可计算。',
       children: [
+        {
+          title: '0. 总地图：一个问题生出整条路线',
+          desc:
+            '起点是 x ≈ Dh，其中 D = [d_1, ..., d_k]，Dh = h_1 d_1 + ... + h_k d_k。也就是说，用 D 的列向量通过系数 h 线性组合出 x。\n\n如果 x 不能被精确表示，就看残差 r = x - Dh。Least Squares、Ridge、LASSO、KKT 和算法工具，本质上都是围绕“如何选择 h，以及如何判断这个 h 好不好”展开。\n\n关系链：\n1. 先问能不能拟合：min ||x - Dh||_2^2。\n2. 再问拟合是否稳定：h 会不会因为 D 的相关性变得巨大。\n3. 再问能不能只用少数特征：让很多 h_j 变成 0。\n4. 再问最优解有什么证书：KKT、对偶、对偶间隙。\n5. 最后问如何计算：坐标下降、ISTA、FISTA、ADMM。',
+          problems: [
+            { id: 'ML-0.1', title: '核心表示：x ≈ Dh', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-0.2', title: '主线：拟合 -> 稳定 -> 稀疏 -> 可解释 -> 可计算', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-0.3', title: '残差 r = x - Dh 是所有优化目标的起点', url: '/blog/math-toolkit-collection' }
+          ]
+        },
         {
           title: 'Phase 1：线性代数基础',
           desc:
-            '目标：看懂 x ≈ Dh。x 是数据、信号或 activation；D 的列向量 d_j 是特征、方向、基向量或字典原子；Dh = h_1 d_1 + ... + h_k d_k；残差 r = x - Dh 是后续优化问题的起点。',
+            '目标：看懂 x ≈ Dh。x 是数据、信号、activation 或观测向量；D 的列向量 d_j 是特征、方向、基向量或字典原子；h_j 表示第 j 个特征用多少。\n\n这一层的作用不是为了学抽象符号，而是为了看懂“数据表示”这件事：Dh 是线性组合，r = x - Dh 是误差。下一层最小二乘就是把“误差”变成一个可最小化的目标。',
           problems: [
             { id: 'ML-1.1', title: '维度检查、矩阵乘法与线性组合', url: '/blog/math-toolkit-collection' },
             { id: 'ML-1.2', title: '残差 r = x - Dh 与范数度量', url: '/blog/math-toolkit-collection' }
@@ -8311,7 +8321,7 @@ const topics: Record<string, Topic> = {
         {
           title: 'Phase 2：最小二乘 Least Squares',
           desc:
-            '目标：理解为什么最自然的拟合目标是 min_h ||x - Dh||_2^2。它解决的是数据有误差、方程组无法完全满足时，找整体平方误差最小的近似解。',
+            '目标：理解为什么最自然的拟合目标是 min_h ||x - Dh||_2^2。它解决的是数据有误差、方程组无法完全满足时，找整体平方误差最小的近似解。\n\n如果条件好，最小二乘给出 h* = (D^T D)^(-1)D^T x。这里第一次把问题推向更深的线性代数：D^T D 到底能不能逆？如果不能逆，或者接近不可逆，拟合就会变得脆弱，这正是 Phase 3 的入口。',
           problems: [
             { id: 'ML-2.1', title: '平方误差目标与 arg min', url: '/blog/math-toolkit-collection' },
             { id: 'ML-2.2', title: '正规方程 D^T D h = D^T x', url: '/blog/math-toolkit-collection' },
@@ -8321,7 +8331,7 @@ const topics: Record<string, Topic> = {
         {
           title: 'Phase 3：最小二乘为什么不稳定',
           desc:
-            '目标：理解为什么需要 Ridge。普通最小二乘只关心 ||x - Dh||_2^2，不关心 h 本身是否很大。若 d_1 ≈ d_2，可能出现 h_1 = 1000, h_2 = -999 这样的脆弱系数组合；若存在 Da = 0，则同一个 Dh 可以对应很多 h。',
+            '目标：理解为什么需要 Ridge。普通最小二乘的问题不是“不能拟合”，而是可能拟合得太脆弱。它只关心 ||x - Dh||_2^2，不关心 h 本身是不是很大。\n\n如果 d_1 ≈ d_2，就可能出现 1000 d_1 - 999 d_2 这种组合：预测看起来还行，但系数巨大，数据稍微扰动就会变。若存在 a != 0 使 Da = 0，则 D(h + ta) = Dh，同一个预测可以对应很多组 h。\n\n这说明问题不只是误差大小，还包括解的稳定性。于是 Ridge 出现：在拟合误差之外，惩罚过大的系数。',
           problems: [
             { id: 'ML-3.1', title: '线性相关、秩与零空间', url: '/blog/math-toolkit-collection' },
             { id: 'ML-3.2', title: 'Gram matrix D^T D 与病态问题', url: '/blog/math-toolkit-collection' },
@@ -8331,7 +8341,7 @@ const topics: Record<string, Topic> = {
         {
           title: 'Phase 4：Ridge 稳定化',
           desc:
-            '目标：理解 L2 正则化。Ridge 把最小二乘改成 1/2 ||x - Dh||_2^2 + lambda/2 ||h||_2^2，既拟合数据，又压小系数。核心线性代数变化是 D^T D -> D^T D + lambda I；如果 D^T D 的特征值是 mu_i，Ridge 会把它们抬成 mu_i + lambda。',
+            '目标：理解 L2 正则化。Ridge 的问题意识是：最小二乘只追求拟合好，但不管系数大小；那就同时要求“拟合数据 + 压小系数”。目标从 1/2 ||x - Dh||_2^2 变成 1/2 ||x - Dh||_2^2 + lambda/2 ||h||_2^2。\n\n求导后得到 (D^T D + lambda I)h = D^T x，所以解析解是 h* = (D^T D + lambda I)^(-1)D^T x。核心变化是 D^T D -> D^T D + lambda I。\n\n如果 D^T D 的特征值是 mu_i，Ridge 会把它们抬成 mu_i + lambda。它稳定了最小二乘，但通常只是把系数压小，不会让它们精确变成 0。于是下一步自然会问：能不能只用少数特征？这就走向 LASSO。',
           problems: [
             { id: 'ML-4.1', title: 'L2 正则项 ||h||_2^2', url: '/blog/ridge-regression-l2-regularization' },
             { id: 'ML-4.2', title: 'Ridge 解析解', url: '/blog/ridge-regression-l2-regularization' },
@@ -8341,7 +8351,7 @@ const topics: Record<string, Topic> = {
         {
           title: 'Phase 5：LASSO 与稀疏性',
           desc:
-            '目标：理解为什么 L1 会让系数变成 0。真正想要的稀疏性是 ||h||_0，但 L0 优化涉及组合搜索；LASSO 用 ||h||_1 替代，得到 1/2 ||x - Dh||_2^2 + lambda ||h||_1。绝对值在 0 点的尖角触发 soft-thresholding，从而产生稀疏。',
+            '目标：理解从“稳定”到“稀疏”的转折。Ridge 能压小系数，但通常不会真正选择特征。真正想要的稀疏性是 ||h||_0，也就是非零元素个数；但 L0 优化涉及组合搜索，很难直接求。\n\nLASSO 用 ||h||_1 替代 ||h||_0，得到 1/2 ||x - Dh||_2^2 + lambda ||h||_1。它和 Ridge 的关键区别是：Ridge shrink，LASSO select。\n\n为什么 L1 会 select？因为 |h| 在 0 点有尖角。一维问题 1/2(h - z)^2 + lambda |h| 的解是 soft-thresholding：当 |z| <= lambda 时，h* = 0。这就是 LASSO 稀疏的核心机制。',
           problems: [
             { id: 'ML-5.1', title: 'L0 稀疏性与支持集', url: '/blog/math-toolkit-collection' },
             { id: 'ML-5.2', title: 'L1 正则与 LASSO', url: '/blog/lasso-textbook' },
@@ -8351,7 +8361,7 @@ const topics: Record<string, Topic> = {
         {
           title: 'Phase 6：凸优化、对偶与 KKT',
           desc:
-            '目标：理解约束形式、惩罚形式和最优性证书。Least Squares、Ridge、LASSO 都是凸优化；LASSO 不光滑，所以需要子梯度、KKT、对偶和近端算子。KKT 给出的核心解释是：只有和残差相关性顶到阈值的特征，才会被激活。',
+            '目标：理解约束形式、惩罚形式和最优性证书。Least Squares、Ridge、LASSO 都是凸优化；但 LASSO 因为 ||h||_1 在 h_j = 0 处不可导，所以需要子梯度、KKT、对偶和近端算子。\n\n对偶性解释“约束形式”和“惩罚形式”为什么经常可以互相转化：min f(h) subject to ||h||_1 <= tau 对应到 Lagrangian 后，会出现 f(h) + lambda ||h||_1。\n\nKKT 则解释 LASSO 的最优解长什么样。令 r = x - Dh，最优条件可写成 D^T r* ∈ lambda ∂||h*||_1。分量看就是：h_j* > 0 时 d_j^T r* = lambda；h_j* < 0 时 d_j^T r* = -lambda；h_j* = 0 时 |d_j^T r*| <= lambda。\n\n这给出最关键的解释：只有和残差相关性顶到阈值的特征，才会被激活。',
           problems: [
             { id: 'ML-6.1', title: '凸函数、子梯度与 L1 不光滑性', url: '/blog/math-toolkit-collection' },
             { id: 'ML-6.2', title: '拉格朗日函数与惩罚/约束互换', url: '/blog/math-toolkit-collection' },
@@ -8362,12 +8372,23 @@ const topics: Record<string, Topic> = {
         {
           title: 'Phase 7：算法与应用',
           desc:
-            '目标：从公式走到求解和应用。Least Squares 与 Ridge 可以走矩阵解析解；LASSO 没有普通矩阵逆形式，常用 coordinate descent、ISTA、FISTA、ADMM。应用上，这条线通向 linear regression、sparse coding、dictionary learning、feature selection 和 SAE / mechanistic interpretability。',
+            '目标：从公式走到求解和应用。Least Squares 与 Ridge 可以走矩阵解析解；LASSO 没有普通矩阵逆形式，因为 L1 不光滑，所以常用 coordinate descent、ISTA、FISTA、ADMM。\n\nISTA 的结构正好体现整条路线：先沿平方误差的梯度下降一步，再做 soft-thresholding 产生稀疏。也就是“拟合误差的光滑部分 + L1 的非光滑稀疏部分”被算法拆开处理。\n\n应用上，这条线通向 linear regression、sparse coding、dictionary learning、feature selection 和 SAE / mechanistic interpretability。SAE 里的重构误差 + 稀疏约束，和 LASSO / sparse coding 属于同一思想谱系。',
           problems: [
             { id: 'ML-7.1', title: 'Coordinate descent 求 LASSO', url: '/blog/lasso-textbook' },
             { id: 'ML-7.2', title: 'ISTA / FISTA：梯度步 + soft-thresholding', url: '/blog/lasso-textbook' },
             { id: 'ML-7.3', title: 'Sparse coding 与 dictionary learning', url: '/blog/math-toolkit-collection' },
             { id: 'ML-7.4', title: 'SAE：重构误差 + 稀疏约束', url: '/blog/math-toolkit-collection' }
+          ]
+        },
+        {
+          title: '关系图与主线记忆',
+          desc:
+            '压缩成一张关系图：\n线性代数 -> x ≈ Dh -> 最小二乘 min ||x - Dh||_2^2 -> 发现不稳定 / 共线性 / 过拟合 -> Ridge min ||x - Dh||_2^2 + lambda ||h||_2^2 -> 想要稀疏 / 特征选择 / 可解释 -> LASSO min ||x - Dh||_2^2 + lambda ||h||_1 -> 不光滑优化 -> 次梯度 / KKT / 对偶 / proximal algorithm -> sparse coding / dictionary learning / SAE。\n\n四句话记忆：\n1. 最小二乘：我要拟合好。\n2. Ridge：我要拟合好，而且系数不要太大。\n3. LASSO：我要拟合好，而且只用少数特征。\n4. 对偶/KKT：我要知道这些约束和惩罚为什么等价，以及最优解长什么样。',
+          problems: [
+            { id: 'ML-R.1', title: '拟合：Least Squares', url: '/blog/math-toolkit-collection' },
+            { id: 'ML-R.2', title: '稳定：Ridge', url: '/blog/ridge-regression-l2-regularization' },
+            { id: 'ML-R.3', title: '稀疏：LASSO', url: '/blog/lasso-textbook' },
+            { id: 'ML-R.4', title: '可解释与可计算：KKT / 对偶 / proximal algorithms', url: '/blog/math-toolkit-collection' }
           ]
         }
       ]
