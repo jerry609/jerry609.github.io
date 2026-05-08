@@ -5,7 +5,6 @@ publishDate: '2026-04-27'
 tags: ['学习方法', '知识管理', '认知框架', '模板']
 language: 'zh-CN'
 draft: false
-pinned: 10
 ---
 
 # 通用领域学习一页纸：核心方法
