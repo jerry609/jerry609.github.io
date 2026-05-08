@@ -1,26 +1,26 @@
 ---
-title: '从线性代数到 LASSO：公式展开、推导与计算过程完整教材'
-description: '一份面向新手与进阶读者的 LASSO 教材，沿线性代数、最小二乘、稀疏表示、子梯度、soft-thresholding、坐标下降与 ISTA 展开。'
+title: 'LASSO 教材'
+description: 'LASSO 教材'
 publishDate: '2026-05-07'
 tags: ['LASSO', '线性代数', '最小二乘', '稀疏表示', '凸优化', '机器学习', '教材']
 language: 'zh-CN'
 draft: false
 ---
 
-# 从线性代数到 LASSO：公式展开、推导与计算过程完整教材
+# LASSO 教材
 
 > 一份把 `x ≈ Dh`、最小二乘和 LASSO 从“公式黑盒”拆成可手算、可解释、可推导对象的教材。
 
 <iframe
   src="/pdf/lasso-textbook.pdf#view=FitH"
-  title="从线性代数到 LASSO：公式展开、推导与计算过程完整教材"
+  title="LASSO 教材"
   width="100%"
   height="820"
   loading="lazy"
   style="border: 1px solid #e0e0e0; border-radius: 8px; min-height: 72vh;"
 ></iframe>
 
-下载 PDF：[从线性代数到 LASSO](/pdf/lasso-textbook.pdf)
+下载 PDF：[LASSO 教材](/pdf/lasso-textbook.pdf)
 
 ---
 
