@@ -90,8 +90,8 @@ $$
 | 1 | 维度检查 | 检查工具 | 待写 |
 | 2 | L1 / L2 / L0 / Frobenius 范数 | 度量工具 | 待写 |
 | 3 | 残差计算 | 误差工具 | 待写 |
-| 4 | 平方误差 | 目标函数 | 待写 |
-| 5 | 普通最小二乘法 | 拟合 / 解析求解 | 待写 |
+| 4 | 平方误差 | 目标函数 | [已写](/blog/least-squares-mle-likelihood) |
+| 5 | 普通最小二乘法 | 拟合 / 解析求解 | [已写](/blog/least-squares-mle-likelihood) |
 | 6 | 正规方程求解 | 线性方程求解 | 待写 |
 | 7 | 伪逆最小二乘 | 最小范数解 | 待写 |
 | 8 | Ridge 回归 | 正则化 / 解析求解 | [已写](/blog/ridge-regression-l2-regularization) |
