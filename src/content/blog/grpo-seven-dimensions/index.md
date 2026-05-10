@@ -1139,3 +1139,9 @@ $$
 [ppo]: https://arxiv.org/abs/1707.06347
 [deepseek-r1]: https://www.nature.com/articles/s41586-025-09422-z
 [trl-grpo]: https://huggingface.co/docs/trl/grpo_trainer
+
+---
+
+## 下载
+
+[下载 GRPO 教材 PDF](/pdf/grpo-textbook.pdf)
