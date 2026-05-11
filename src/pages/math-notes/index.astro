@@ -1,0 +1,131 @@
+---
+import type { CollectionEntry } from 'astro:content'
+
+import { getBlogCollection } from 'astro-pure/server'
+import { Button } from 'astro-pure/user'
+import PageLayout from '@/layouts/CommonPage.astro'
+import PostPreview from '@/components/blog/PostPreview.astro'
+import { sortBlogPosts } from '@/utils/blog'
+
+type BlogPost = CollectionEntry<'blog'>
+
+const mathKeywords = [
+  '数学',
+  '概率',
+  '统计',
+  '线性代数',
+  '凸优化',
+  '最小二乘',
+  '极大似然',
+  '正态',
+  'ridge',
+  'lasso'
+]
+
+const tracks = [
+  {
+    title: '概率与统计',
+    description: '从随机变量、概率密度、正态分布，到极大似然和统计学习。',
+    keywords: ['概率', '统计', '正态', '极大似然', '概率密度']
+  },
+  {
+    title: '线性模型',
+    description: '围绕最小二乘、Ridge、LASSO 和正则化展开的建模笔记。',
+    keywords: ['最小二乘', 'ridge', 'lasso', '线性', '正则']
+  },
+  {
+    title: '优化工具',
+    description: '记录凸优化、KKT、对偶、近端算法等可复用的数学工具。',
+    keywords: ['凸优化', 'kkt', '对偶', '近端', '优化']
+  }
+]
+
+const allPosts = sortBlogPosts((await getBlogCollection('blog')) as BlogPost[])
+const mathPosts = allPosts.filter((post) =>
+  post.data.tags.some((tag) => mathKeywords.some((keyword) => tag.includes(keyword)))
+)
+
+const latestPosts = mathPosts.slice(0, 6)
+const trackSections = tracks.map((track) => ({
+  ...track,
+  posts: mathPosts
+    .filter((post) =>
+      post.data.tags.some((tag) => track.keywords.some((keyword) => tag.includes(keyword)))
+    )
+    .slice(0, 4)
+}))
+---
+
+<PageLayout title='数学笔记'>
+  <div class='mx-auto mt-4 max-w-6xl px-4 sm:px-6 lg:px-8'>
+    <header class='mb-10 border-b pb-8'>
+      <p class='mb-3 text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground'>
+        Math Notes
+      </p>
+      <h1 class='mb-4 text-3xl font-semibold tracking-tight sm:text-4xl'>数学笔记</h1>
+      <p class='max-w-3xl text-muted-foreground'>
+        这里集中放概率统计、线性代数、优化方法和机器学习理论里的数学推导。每篇笔记尽量从一个具体问题出发，把直觉、公式和可复用结论放在同一条线上。
+      </p>
+    </header>
+
+    <section class='mb-12 grid gap-4 md:grid-cols-3'>
+      {
+        tracks.map((track) => (
+          <article class='rounded-lg border bg-background p-5'>
+            <h2 class='mb-2 text-lg font-semibold'>{track.title}</h2>
+            <p class='text-sm leading-6 text-muted-foreground'>{track.description}</p>
+          </article>
+        ))
+      }
+    </section>
+
+    <section class='mb-14'>
+      <div class='mb-4 flex items-end justify-between gap-4'>
+        <div>
+          <h2 class='text-2xl font-semibold'>最新笔记</h2>
+          <p class='mt-1 text-sm text-muted-foreground'>按发布时间排列的数学相关内容。</p>
+        </div>
+        <Button title='全部博客' href='/blog' variant='ahead' />
+      </div>
+
+      {
+        latestPosts.length > 0 ? (
+          <ul class='flex flex-col gap-y-4 text-start'>
+            {latestPosts.map((post) => (
+              <PostPreview {post} detailed />
+            ))}
+          </ul>
+        ) : (
+          <p class='rounded-lg border p-6 text-muted-foreground'>还没有数学笔记。</p>
+        )
+      }
+    </section>
+
+    <section class='grid gap-6 lg:grid-cols-3'>
+      {
+        trackSections.map((track) => (
+          <article class='rounded-lg border bg-background p-5'>
+            <h2 class='mb-2 text-lg font-semibold'>{track.title}</h2>
+            <p class='mb-4 text-sm leading-6 text-muted-foreground'>{track.description}</p>
+            {track.posts.length > 0 ? (
+              <ul class='space-y-3'>
+                {track.posts.map((post) => (
+                  <li>
+                    <a
+                      href={`/blog/${post.id}`}
+                      class='block rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted hover:text-primary'
+                    >
+                      <span class='line-clamp-2'>{post.data.title}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class='text-sm text-muted-foreground'>等待补充。</p>
+            )}
+          </article>
+        ))
+      }
+    </section>
+  </div>
+</PageLayout>

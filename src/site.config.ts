@@ -54,7 +54,7 @@ export const theme: ThemeUserConfig = {
       { title: 'Concepts', link: '/concepts' },
       { title: 'Roadmap', link: '/roadmap' },
       { title: 'Murmurs', link: '/murmurs' },
-      { title: 'Plan', link: '/plan' },
+      { title: 'Math Notes', link: '/math-notes' },
       { title: 'Photos', link: '/photos' },
       { title: 'Projects', link: '/projects' },
       { title: 'Links', link: '/links' },
