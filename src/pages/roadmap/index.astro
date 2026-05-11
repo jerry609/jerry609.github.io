@@ -8291,14 +8291,30 @@ const topics: Record<string, Topic> = {
   'math-toolkit-roadmap': {
     title: '数学工具集合',
     prerequisites: [
+      { name: '现代数学总纲：定义、假设、证明、反例', course: '总纲' },
       { name: '线性代数：向量、矩阵、范数、残差', course: 'A-B' },
       { name: '优化基础：目标函数、凸性、KKT、对偶', course: 'C-E' }
     ],
     rootSection: {
       title: '数学工具集合',
       desc:
-        '来源页面：/blog/math-toolkit-collection。这里把那篇索引做成可勾选 roadmap。\n\n统计口径：一个工具 = 有明确输入、输出、用途，可以封装成独立函数或模块。不把“标量、向量、矩阵”这类数据类型算作工具。\n\n主线：线性代数 -> 最小二乘 -> Ridge -> LASSO -> 凸优化 / 对偶 / KKT -> 算法与现代模型解释。\n\n推荐走法：先看主线地图，再完成 22 个核心工具，最后按 A-E 五组扩展到 58 个原子工具。',
+        '来源页面：/blog/math-toolkit-collection。这里把那篇索引做成可勾选 roadmap。\n\n统计口径：一个工具 = 有明确输入、输出、用途，可以封装成独立函数或模块。不把“标量、向量、矩阵”这类数据类型算作工具。\n\n总纲：数学围绕可推出性运转，用定义制造对象，用假设限定世界，用证明管理结论，用反例划定边界。\n\n主线：线性代数 -> 最小二乘 -> Ridge -> LASSO -> 凸优化 / 对偶 / KKT -> 算法与现代模型解释。\n\n推荐走法：先看现代数学总纲和主线地图，再完成 22 个核心工具，最后按 A-E 五组扩展到 58 个原子工具。',
       children: [
+        {
+          title: '现代数学总纲',
+          desc:
+            '用“可推出性”看数学：对象集合 + 约束条件，经由证明推出必然结论或结构。定义负责制造对象，假设负责限定世界，证明负责管理必然性，反例负责划定边界。',
+          problems: [
+            { id: 'G01', title: '运转链条：语言与逻辑 -> 对象与定义 -> 公理与假设 -> 命题网络 -> 反例边界', url: '/blog/math-toolkit-collection' },
+            { id: 'G02', title: '概念七问：对象、动机、消除、保留、约束、推出、边界', url: '/blog/math-toolkit-collection' },
+            { id: 'G03', title: '公式五维：量纲、尺度、不变量、优化、信息 / 概率', url: '/blog/math-toolkit-collection' },
+            { id: 'G04', title: '数学价值观：假设代价与结论强度', url: '/blog/math-toolkit-collection' },
+            { id: 'G05', title: '代数学：对运算规则施加约束', url: '/blog/math-toolkit-collection' },
+            { id: 'G06', title: '分析学：对无限与极限施加约束', url: '/blog/math-toolkit-collection' },
+            { id: 'G07', title: '几何与拓扑：对空间形态施加约束', url: '/blog/math-toolkit-collection' },
+            { id: 'G08', title: '概率与统计：对不确定性施加约束', url: '/blog/math-toolkit-collection' }
+          ]
+        },
         {
           title: '主线地图',
           desc:
