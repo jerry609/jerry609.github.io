@@ -5,7 +5,7 @@ import PageLayout from '@/layouts/CommonPage.astro'
 import { Button } from 'astro-pure/user'
 
 export async function getStaticPaths() {
-  const murmurs = await getCollection('murmurs')
+  const murmurs = await getCollection('murmurs', ({ data }) => !data.draft)
   return murmurs.map((entry) => ({
     params: { id: entry.id },
     props: { entry },
