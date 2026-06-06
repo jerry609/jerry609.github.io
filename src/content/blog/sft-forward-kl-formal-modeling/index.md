@@ -9,6 +9,19 @@ draft: false
 
 # 形式化建模：SFT 是外部数据分布上的前向 KL 投影
 
+## 1. 阅读指南
+
+### 1.1 本节具体性质
+
+为了避免后文定理读起来像“只是在换符号”，先把本文想强调的四个性质直接写出来：
+
+1. **可识别性性质**：任何后训练目标都只能识别其加权到的 states；未被状态权重测度看到的 states，不可能由该目标单独约束。
+2. **三元组决定性**：一旦某方法能写成“状态分布 $\nu$ + 目标分布 $\xi_s$ + 散度 $D$”，那么它在 $\operatorname{supp}(\nu)$ 上的理想最优行为就由这三个对象完全决定，算法名字只影响数值求解路径。
+3. **遗忘的必要条件**：若旧能力主要依赖于 $\operatorname{supp}(\nu)$ 之外的状态，那么任何只在 $\nu$ 上训练的方法，都无法从目标函数本身推出 retention 保证。
+4. **泛化的必要条件**：要把训练误差转成部署误差，必须额外比较训练状态分布与部署状态分布；只看 token loss、reward 大小或“是否有 teacher”本身都不够。
+
+这四条并不是新的定理，而是全文后续结果的阅读指南：后面的所有证明，本质上都在把这四句从直觉改写成精确公式。
+
 ## 2. 形式化建模
 
 ### 2.1 把自回归语言模型写成有限时域决策过程
@@ -207,93 +220,6 @@ $$
 
 **注记 2.10.** 当每个 $(s)$ 只出现一个标注 token 时，$\mu_Q(\cdot\mid s)$ 就是 one-hot 分布；当有多参考答案、软标签、或 teacher logits 时，$\mu_Q(\cdot\mid s)$ 就是一般分布。因此“硬标签 SFT”和“软标签蒸馏”在数学上只差一个 target 分布是否为 one-hot。
 
-**性质 2.13（占用测度的总质量）.** 对任意策略分布 $P_\pi$，有
-
-$$
-\sum_{s\in\mathcal S}
-d_\pi(s)
-=
-H,
-\qquad
-\sum_{s\in\mathcal S}
-\bar d_\pi(s)
-=
-1,
-$$
-
-以及
-
-$$
-\sum_{s\in\mathcal S}
-\sum_{a\in\mathcal A}
-q_\pi(s,a)
-=
-H.
-$$
-
-同理，对数据分布 $Q$ 也有
-
-$$
-\sum_s d_Q(s)=H,
-\qquad
-\sum_s \bar d_Q(s)=1,
-\qquad
-\sum_{s,a}q_Q(s,a)=H.
-$$
-
-**证明.** 以 $d_\pi$ 为例：
-
-$$
-\begin{aligned}
-\sum_s d_\pi(s)
-&=
-\sum_s
-\sum_\tau
-P_\pi(\tau)
-\sum_{t=1}^{H}
-\mathbf 1\{s_t=s\}
-\\
-&=
-\sum_\tau
-P_\pi(\tau)
-\sum_{t=1}^{H}
-\sum_s
-\mathbf 1\{s_t=s\}
-\\
-&=
-\sum_\tau
-P_\pi(\tau)
-\sum_{t=1}^{H}
-1
-=
-H.
-\end{aligned}
-$$
-
-其他式子同理。
-
-**性质 2.14（状态边缘与经验策略的条件分解）.** 对所有 $d_Q(s)>0$ 的状态，有
-
-$$
-q_Q(s,a)
-=
-d_Q(s)\mu_Q(a\mid s).
-$$
-
-因此数据轨迹上的 token 级期望可以写成
-
-$$
-\sum_{s,a}
-q_Q(s,a)f(s,a)
-=
-\sum_s
-d_Q(s)
-\sum_a
-\mu_Q(a\mid s)f(s,a).
-$$
-
-**证明.** 第一式由 $\mu_Q(a\mid s)=q_Q(s,a)/d_Q(s)$ 直接得到；第二式代入第一式即可。
-
 ### 2.3 本文用到的散度与算子
 
 **定义 2.11（交叉熵、前向 KL、反向 KL、总变差）.** 对定义在 $\mathcal A$ 上的两个分布 $p,q$：
@@ -337,6 +263,184 @@ $$
 $$
 
 **注记 2.12.** 注意：工程里常说“forward KL / reverse KL”，本质上只是两个参数顺序不同；本文会明确写成 $D_{\mathrm{KL}}(p\Vert q)$ 或 $D_{\mathrm{KL}}(q\Vert p)$，避免口头混淆。
+
+### 2.4 本节具体性质
+
+**命题 2.13（占用测度的归一化与因子分解）.** 对任意策略 $\pi$，
+
+$$
+\sum_{s\in\mathcal S}
+d_\pi(s)
+=
+H,
+\qquad
+\sum_{s\in\mathcal S}
+\sum_{a\in\mathcal A}
+q_\pi(s,a)
+=
+H,
+\qquad
+q_\pi(s,a)
+=
+d_\pi(s)\pi(a\mid s).
+$$
+
+同理，对任意外部数据分布 $Q$，
+
+$$
+\sum_s
+d_Q(s)
+=
+H,
+\qquad
+\sum_{s,a}
+q_Q(s,a)
+=
+H,
+\qquad
+q_Q(s,a)
+=
+d_Q(s)\mu_Q(a\mid s).
+$$
+
+因此 $\bar d_\pi$ 与 $\bar d_Q$ 都是概率分布：
+
+$$
+\sum_s \bar d_\pi(s)=1,
+\qquad
+\sum_s \bar d_Q(s)=1.
+$$
+
+**证明.** 先证策略情形。由定义
+
+$$
+d_\pi(s)
+=
+\sum_\tau
+P_\pi(\tau)
+\sum_{t=1}^{H}
+\mathbf 1\{s_t=s\}.
+$$
+
+对 $s$ 求和：
+
+$$
+\begin{aligned}
+\sum_s d_\pi(s)
+&=
+\sum_s
+\sum_\tau
+P_\pi(\tau)
+\sum_{t=1}^{H}
+\mathbf 1\{s_t=s\}
+\\
+&=
+\sum_\tau
+P_\pi(\tau)
+\sum_{t=1}^{H}
+\sum_s
+\mathbf 1\{s_t=s\}
+\\
+&=
+\sum_\tau
+P_\pi(\tau)
+\sum_{t=1}^{H}
+1
+=
+H
+\sum_\tau
+P_\pi(\tau)
+=
+H.
+\end{aligned}
+$$
+
+同理，
+
+$$
+\sum_{s,a}
+q_\pi(s,a)
+=
+\sum_\tau
+P_\pi(\tau)
+\sum_{t=1}^{H}
+\sum_{s,a}
+\mathbf 1\{s_t=s,\ a_t=a\}
+=
+H.
+$$
+
+再证因子分解。因为在给定状态 $s_t=s$ 时，下一动作由 $\pi(\cdot\mid s)$ 采样，
+
+$$
+\Pr_\pi(s_t=s,\ a_t=a)
+=
+\Pr_\pi(s_t=s)\pi(a\mid s).
+$$
+
+对所有可能的时间步求和即可得
+
+$$
+q_\pi(s,a)
+=
+d_\pi(s)\pi(a\mid s).
+$$
+
+数据分布 $Q$ 的情形完全同理；只是把 $\pi(a\mid s)$ 替换成经验条件分布 $\mu_Q(a\mid s)$。
+
+**命题 2.14（前缀概率的显式形式与支持传播）.** 设某个状态写成
+
+$$
+s=(x,a_{<t})=(x,a_1,\ldots,a_{t-1}).
+$$
+
+则该状态在第 $t$ 步被访问到的概率满足
+
+$$
+\Pr_\pi(s_t=s)
+=
+\rho(x)
+\prod_{i=1}^{t-1}
+\pi(a_i\mid x,a_{<i}).
+$$
+
+因此，若 $\Pr_\pi(s_t=s)>0$ 且 $\pi(a_t\mid s)>0$，则后继状态
+
+$$
+s'=(x,a_{\le t})=(x,a_1,\ldots,a_t)
+$$
+
+也满足
+
+$$
+\Pr_\pi(s_{t+1}=s')>0.
+$$
+
+**证明.** 按轨迹分布的定义，状态 $s_t=(x,a_{<t})$ 在第 $t$ 步出现，当且仅当 prompt 等于 $x$ 且前 $t-1$ 个 token 恰为 $a_1,\ldots,a_{t-1}$。于是
+
+$$
+\Pr_\pi(s_t=s)
+=
+\rho(x)
+\prod_{i=1}^{t-1}
+\pi(a_i\mid x,a_{<i}).
+$$
+
+进一步，
+
+$$
+\Pr_\pi(s_{t+1}=s')
+=
+\rho(x)
+\prod_{i=1}^{t}
+\pi(a_i\mid x,a_{<i})
+=
+\Pr_\pi(s_t=s)\pi(a_t\mid s).
+$$
+
+若右侧两因子都为正，则结论成立。
+
+**注记 2.15.** 命题 2.13 与命题 2.14 给出了两个以后会反复用到的“基础性质”：一是所有目标都可以写成对占用测度的加权和；二是状态支持集会沿着正概率前缀向后传播。
 
 ## 3. SFT：外部数据分布上的前向 KL 投影
 
@@ -570,99 +674,6 @@ $$
 
 **注记 3.6.** 这条命题几乎就是“灾难性遗忘为何可能发生”的最直接数学表述：如果旧能力对应的 states 不在当前 SFT 数据支持集里，SFT 目标对这些旧 states 没有任何显式约束。
 
-**性质 3.A（one-hot 标签是 SFT 的特例）.** 若某个数据状态 $s$ 上只有一个标注 token $a^\star$，即
-
-$$
-\mu_Q(a^\star\mid s)=1,
-\qquad
-\mu_Q(a\mid s)=0\quad(a\neq a^\star),
-$$
-
-则局部交叉熵退化为普通 hard-label 负对数似然：
-
-$$
-H(\mu_Q,\pi)
-=
--
-\log\pi(a^\star\mid s).
-$$
-
-对应的 logit 梯度为
-
-$$
-\frac{\partial \ell_{\mathrm{SFT}}(s)}
-{\partial z(s,a)}
-=
-\pi(a\mid s)
--
-\mathbf 1\{a=a^\star\}.
-$$
-
-因此 hard-label SFT 不是另一个目标，而是 $\mu_Q$ 为 one-hot 时的特例。
-
-**性质 3.B（前向 KL 对数据动作的零概率敏感）.** 对任意满足 $d_Q(s)>0$ 的状态，如果存在动作 $a$ 使得
-
-$$
-\mu_Q(a\mid s)>0,
-\qquad
-\pi(a\mid s)=0,
-$$
-
-则
-
-$$
-D_{\mathrm{KL}}
-\left(
-\mu_Q(\cdot\mid s)
-\Vert
-\pi(\cdot\mid s)
-\right)
-=
-+\infty.
-$$
-
-这说明前向 KL 会强烈惩罚“数据里出现过的动作被模型分配零概率”。在有限 logits 的 softmax 参数化下，$\pi(a\mid s)$ 不会真的等于 $0$，但当它趋近于 $0$ 时，该项会迅速变大。
-
-**性质 3.C（SFT 不直接约束 rollout 状态分布失配）.** 设 $h:\mathcal S\to\mathbb R$ 是任意有界状态函数，且 $|h(s)|\le M$。则
-
-$$
-\left|
-\sum_s
-\bar d_\pi(s)h(s)
--
-\sum_s
-\bar d_Q(s)h(s)
-\right|
-\le
-2M\,
-\mathrm{TV}(\bar d_\pi,\bar d_Q).
-$$
-
-SFT 目标直接优化的是外部状态权重 $d_Q(s)$ 下的条件分布匹配，而不是 $\bar d_\pi$ 与 $\bar d_Q$ 的接近程度。因此，当训练数据状态分布和模型 rollout 状态分布相差很大时，即使数据支持集上的 token loss 很低，模型在自己生成出来的新前缀上仍然可能缺少约束。
-
-**证明.** 由总变差定义，
-
-$$
-\begin{aligned}
-\left|
-\sum_s
-(\bar d_\pi(s)-\bar d_Q(s))h(s)
-\right|
-&\le
-\sum_s
-|\bar d_\pi(s)-\bar d_Q(s)|\,|h(s)|
-\\
-&\le
-M
-\sum_s
-|\bar d_\pi(s)-\bar d_Q(s)|
-\\
-&=
-2M\,
-\mathrm{TV}(\bar d_\pi,\bar d_Q).
-\end{aligned}
-$$
-
 ### 3.3 SFT 梯度的完整展开
 
 固定某个状态 $s$，记
@@ -813,6 +824,101 @@ $$
 
 图 3：SFT logits 梯度的直观图。每个状态内部比较 $\pi(\cdot\mid s)$ 与 $\mu_Q(\cdot\mid s)$；差值决定 token 概率往上还是往下调，而左侧状态圆点大小表示 $d_Q(s)$ 对梯度强度的加权。
 
+### 3.4 本节具体性质
+
+**性质 3.A（one-hot 标签是 SFT 的特例）.** 若某个数据状态 $s$ 上只有一个标注 token $a^\star$，即
+
+$$
+\mu_Q(a^\star\mid s)=1,
+\qquad
+\mu_Q(a\mid s)=0\quad(a\neq a^\star),
+$$
+
+则局部交叉熵退化为普通 hard-label 负对数似然：
+
+$$
+H(\mu_Q,\pi)
+=
+-
+\log\pi(a^\star\mid s).
+$$
+
+对应的 logit 梯度为
+
+$$
+\frac{\partial \ell_{\mathrm{SFT}}(s)}
+{\partial z(s,a)}
+=
+\pi(a\mid s)
+-
+\mathbf 1\{a=a^\star\}.
+$$
+
+因此 hard-label SFT 不是另一个目标，而是 $\mu_Q$ 为 one-hot 时的特例。
+
+**性质 3.B（前向 KL 对数据动作的零概率敏感）.** 对任意满足 $d_Q(s)>0$ 的状态，如果存在动作 $a$ 使得
+
+$$
+\mu_Q(a\mid s)>0,
+\qquad
+\pi(a\mid s)=0,
+$$
+
+则
+
+$$
+D_{\mathrm{KL}}
+\left(
+\mu_Q(\cdot\mid s)
+\Vert
+\pi(\cdot\mid s)
+\right)
+=
++\infty.
+$$
+
+这说明前向 KL 会强烈惩罚“数据里出现过的动作被模型分配零概率”。在有限 logits 的 softmax 参数化下，$\pi(a\mid s)$ 不会真的等于 $0$，但当它趋近于 $0$ 时，该项会迅速变大。
+
+**性质 3.C（SFT 不直接约束 rollout 状态分布失配）.** 设 $h:\mathcal S\to\mathbb R$ 是任意有界状态函数，且 $|h(s)|\le M$。则
+
+$$
+\left|
+\sum_s
+\bar d_\pi(s)h(s)
+-
+\sum_s
+\bar d_Q(s)h(s)
+\right|
+\le
+2M\,
+\mathrm{TV}(\bar d_\pi,\bar d_Q).
+$$
+
+SFT 目标直接优化的是外部状态权重 $d_Q(s)$ 下的条件分布匹配，而不是 $\bar d_\pi$ 与 $\bar d_Q$ 的接近程度。因此，当训练数据状态分布和模型 rollout 状态分布相差很大时，即使数据支持集上的 token loss 很低，模型在自己生成出来的新前缀上仍然可能缺少约束。
+
+**证明.** 由总变差定义，
+
+$$
+\begin{aligned}
+\left|
+\sum_s
+(\bar d_\pi(s)-\bar d_Q(s))h(s)
+\right|
+&\le
+\sum_s
+|\bar d_\pi(s)-\bar d_Q(s)|\,|h(s)|
+\\
+&\le
+M
+\sum_s
+|\bar d_\pi(s)-\bar d_Q(s)|
+\\
+&=
+2M\,
+\mathrm{TV}(\bar d_\pi,\bar d_Q).
+\end{aligned}
+$$
+
 **性质 3.D（logits 梯度在每个状态内质量守恒）.** 对固定状态 $s$，局部梯度满足
 
 $$
@@ -860,6 +966,166 @@ $$
 $$
 
 在分母非零时成立。因此，SFT 的“更重视哪些状态”完全来自数据占用频次或采样权重。
+
+**命题 3.10（SFT 的局部 Hessian 是 Fisher 矩阵）.** 对固定状态 $s$，局部 SFT 损失
+
+$$
+\ell_{\mathrm{SFT}}(s)
+=
+-
+\sum_i q_i\log p_i
+$$
+
+关于 logits $z=(z_i)_i$ 的 Hessian 为
+
+$$
+\frac{\partial^2 \ell_{\mathrm{SFT}}(s)}
+{\partial z_k\partial z_\ell}
+=
+p_k(\delta_{k\ell}-p_\ell).
+$$
+
+矩阵形式写成
+
+$$
+\nabla_z^2\ell_{\mathrm{SFT}}(s)
+=
+\operatorname{Diag}(p)-pp^\top
+\succeq
+0.
+$$
+
+其零空间正是常数平移方向 $\operatorname{span}\{\mathbf 1\}$。
+
+**证明.** 由定理 3.8，
+
+$$
+\frac{\partial \ell_{\mathrm{SFT}}(s)}
+{\partial z_k}
+=
+p_k-q_k.
+$$
+
+再对 $z_\ell$ 求导即可：
+
+$$
+\frac{\partial^2 \ell_{\mathrm{SFT}}(s)}
+{\partial z_k\partial z_\ell}
+=
+\frac{\partial p_k}
+{\partial z_\ell}
+=
+p_k(\delta_{k\ell}-p_\ell),
+$$
+
+其中最后一步用了引理 3.7。把所有分量拼成矩阵就是
+
+$$
+\operatorname{Diag}(p)-pp^\top.
+$$
+
+对任意向量 $v$，
+
+$$
+\begin{aligned}
+v^\top(\operatorname{Diag}(p)-pp^\top)v
+&=
+\sum_i
+p_i v_i^2
+-
+\left(
+\sum_i
+p_i v_i
+\right)^2
+\\
+&=
+\operatorname{Var}_{a\sim p}[v_a]
+\ge
+0,
+\end{aligned}
+$$
+
+故该矩阵半正定。等号成立当且仅当 $v_a$ 在 $p$ 的支持集上为常数；在有限 logits 的 softmax 参数化下，$p$ 对所有动作都有正质量，因此零空间是常数平移方向。
+
+**推论 3.11（SFT 的局部凸性与概率空间唯一最优解）.** 固定一个状态 $s$。SFT 局部损失对 logits 是凸的；若改在概率单纯形上看，则其唯一最优解为
+
+$$
+p^\star
+=
+q
+=
+\mu_Q(\cdot\mid s).
+$$
+
+**证明.** 凸性由命题 3.10 的 Hessian 半正定得到。又因为
+
+$$
+\ell_{\mathrm{SFT}}(s)
+=
+H(q)
++
+D_{\mathrm{KL}}(q\Vert p),
+$$
+
+最小值在且仅在 $D_{\mathrm{KL}}(q\Vert p)=0$ 时取得，即 $p=q$。
+
+**命题 3.12（软标签与标签平滑的线性性）.** 设两个目标分布为 $q^{(1)},q^{(2)}$，以及混合目标
+
+$$
+q^{(\lambda)}
+:=
+(1-\lambda)q^{(1)}
++
+\lambda q^{(2)},
+\qquad
+\lambda\in[0,1].
+$$
+
+则对任意预测分布 $p$，
+
+$$
+H(q^{(\lambda)},p)
+=
+(1-\lambda)H(q^{(1)},p)
++
+\lambda H(q^{(2)},p).
+$$
+
+因此，软标签蒸馏、多个参考答案平均、标签平滑等，都只是 forward-KL 目标在线性空间里的不同取值。
+
+**证明.** 直接展开即可：
+
+$$
+\begin{aligned}
+H(q^{(\lambda)},p)
+&=
+-
+\sum_a
+\left(
+(1-\lambda)q^{(1)}(a)
++
+\lambda q^{(2)}(a)
+\right)
+\log p(a)
+\\
+&=
+(1-\lambda)
+\left(
+-
+\sum_a
+q^{(1)}(a)\log p(a)
+\right)
++
+\lambda
+\left(
+-
+\sum_a
+q^{(2)}(a)\log p(a)
+\right).
+\end{aligned}
+$$
+
+**注记 3.13.** 本节最值得记住的三个具体性质是：SFT 对 logits 的二阶结构是 Fisher 矩阵；SFT 在概率空间上唯一追向数据分布本身；而只要目标分布做凸组合，SFT 损失就按同样系数线性组合。
 
 ## 附录 A：几个最小代码验证
 
