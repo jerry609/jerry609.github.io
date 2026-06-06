@@ -58,6 +58,10 @@ P_\pi(\tau)
 s_t=(x,a_{<t}).
 $$
 
+![有限时域自回归生成可以看成从 prompt 出发、沿 token 前缀树逐步选择动作，直到最大步数或 EOS。](fig/finite-horizon-prefix-tree.png)
+
+图 1：有限时域决策过程的直观图。左侧是 prompt，右侧是由 token 动作展开的前缀树；橙色路径表示一条具体轨迹，灰色分支表示同一状态下其他可能动作。
+
 **定义 2.5（状态-动作边缘、占用测度）.** 定义策略 $\pi$ 的状态-动作边缘为
 
 $$
@@ -509,6 +513,10 @@ $$
 
 这正是前向 KL distillation，只不过 teacher 不是一个显式模型，而是数据经验分布 $\mu_Q$。
 
+![SFT 在数据支持状态上，把模型条件分布投影到经验 target 分布。](fig/sft-forward-kl-projection.png)
+
+图 2：SFT 的 off-policy distillation 视角。左侧是外部数据覆盖到的状态支持，中间是经验 target 分布 $\mu_Q(\cdot\mid s)$，右侧是被前向 KL 拉向 target 的模型分布 $\pi(\cdot\mid s)$。
+
 ### 3.2 SFT 最优解与其“只约束数据支持集”的性质
 
 **定理 3.4（SFT 的非参数最优解）.** 若把优化域看成所有随机策略的集合，则
@@ -800,6 +808,10 @@ $$
 因为 $\sum_i q_i=1$。再乘上全局权重 $d_Q(s)$ 即得。
 
 **注记 3.9.** 这条公式说明 SFT 的更新方向完全由数据状态权重 $d_Q(s)$ 决定。出现次数高的状态梯度大，没出现的状态梯度严格为零。
+
+![SFT logits 梯度由模型分布和数据 target 分布的差决定，并被数据状态频次加权。](fig/sft-logit-gradient-occupancy.png)
+
+图 3：SFT logits 梯度的直观图。每个状态内部比较 $\pi(\cdot\mid s)$ 与 $\mu_Q(\cdot\mid s)$；差值决定 token 概率往上还是往下调，而左侧状态圆点大小表示 $d_Q(s)$ 对梯度强度的加权。
 
 **性质 3.D（logits 梯度在每个状态内质量守恒）.** 对固定状态 $s$，局部梯度满足
 
