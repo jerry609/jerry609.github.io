@@ -37,14 +37,14 @@ export const theme: ThemeUserConfig = {
   head: [],
   customCss: [],
 
-  /** Primary navigation. Murmurs, photos, links and archives live in the footer. */
+  /** Primary navigation. Links, archives and tags live in the footer. */
   header: {
     menu: [
       { title: '文章', link: '/blog' },
-      { title: '项目', link: '/projects' },
       { title: '数学', link: '/math-notes' },
       { title: '路线', link: '/roadmap' },
-      { title: '关于', link: '/about' }
+      { title: '碎碎念', link: '/murmurs' },
+      { title: '照片', link: '/photos' }
     ]
   },
 

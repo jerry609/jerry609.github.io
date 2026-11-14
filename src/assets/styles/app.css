@@ -1,8 +1,9 @@
 /*
  * Design tokens for jerry609.github.io
  * Layout idea: one 72rem column; every page is a stack of plain sections.
- * Color: cool green-grey paper, blue-black ink, one signal blue for links and selection.
- * Type: Source Serif 4 for titles (Songti on macOS for Chinese, sans elsewhere), Geist for text,
+ * Identity: a pixel mouse with headphones and a plaid scarf (src/components/brand). The scarf's
+ *           orange is the only accent; everything else is ink on cool paper.
+ * Type: Pixelify Sans for the wordmark and section titles, Source Serif 4 for article titles (Songti on macOS for Chinese, sans elsewhere), Geist for text,
  *       Geist Mono for dates, labels and data. Chinese body text uses the system CJK sans.
  */
 
@@ -14,7 +15,7 @@
   --card-foreground: 213 20% 8.8%;
   --popover: 0 0% 100%;
   --popover-foreground: 213 20% 8.8%;
-  --primary: 225 66.3% 48.8%;
+  --primary: 20 77.8% 38.8%;
   --primary-foreground: 0 0% 100%;
   --secondary: 150 9.5% 91.8%;
   --secondary-foreground: 213 20% 8.8%;
@@ -26,7 +27,7 @@
   --destructive-foreground: 0 0% 98%;
   --border: 150 8.6% 86.3%;
   --input: 150 8.6% 86.3%;
-  --ring: 225 66.3% 48.8%;
+  --ring: 20 77.8% 38.8%;
   --radius: 0.25rem;
 
   /* site-only tokens */
@@ -34,6 +35,8 @@
   --mark: 213 16% 20%;
   --faint: 211 7% 57%;
 
+  --font-pixel: 'Pixelify Sans Variable', 'Pixelify Sans', 'PingFang SC', 'Microsoft YaHei',
+    ui-monospace, monospace;
   --font-display: 'Source Serif 4 Variable', 'Source Serif 4', 'Songti SC', 'Noto Serif CJK SC',
     'Source Han Serif SC', 'PingFang SC', 'Microsoft YaHei', Georgia, serif;
   --font-body: 'Geist Variable', 'Geist', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
@@ -48,7 +51,7 @@
   --card-foreground: 210 13.6% 91.4%;
   --popover: 210 19.2% 10.2%;
   --popover-foreground: 210 13.6% 91.4%;
-  --primary: 226 100% 74.5%;
+  --primary: 23 84.6% 61.8%;
   --primary-foreground: 210 17.6% 6.7%;
   --secondary: 210 18.8% 12.5%;
   --secondary-foreground: 210 13.6% 91.4%;
@@ -60,7 +63,7 @@
   --destructive-foreground: 0 0% 98%;
   --border: 210 15.6% 17.6%;
   --input: 210 15.6% 17.6%;
-  --ring: 226 100% 74.5%;
+  --ring: 23 84.6% 61.8%;
 
   --band: 207 20% 8.8%;
   --mark: 210 12% 82%;
@@ -89,7 +92,10 @@ a {
   }
 }
 ::selection {
-  background: hsl(var(--primary) / 0.22);
+  background: hsl(var(--primary) / 0.25);
+}
+.font-pixel {
+  font-family: var(--font-pixel);
 }
 :focus-visible {
   outline: 2px solid hsl(var(--primary));
@@ -125,10 +131,10 @@ a {
   margin-bottom: 1.125rem;
 }
 .sec-title {
-  font-family: var(--font-display);
-  font-size: clamp(1.5rem, 2.6vw, 1.875rem);
+  font-family: var(--font-pixel);
+  font-size: clamp(1.5rem, 2.6vw, 1.9rem);
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   line-height: 1.15;
   margin: 0;
   color: hsl(var(--foreground));
@@ -170,10 +176,10 @@ a {
   color: hsl(var(--faint));
 }
 .page-intro h1 {
-  font-family: var(--font-display);
-  font-size: clamp(2.25rem, 5vw, 3.25rem);
+  font-family: var(--font-pixel);
+  font-size: clamp(2.4rem, 5.5vw, 3.6rem);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1.08;
   margin: 1rem 0 1.125rem;
   color: hsl(var(--foreground));

@@ -137,22 +137,3 @@ export const PROJECTS: Project[] = [
     stars: 3
   }
 ]
-
-/** Smaller public repositories listed on /projects. */
-export const OTHER_REPOS = [
-  {
-    name: 'SourceCodeReadingNote',
-    href: 'https://github.com/jerry609/SourceCodeReadingNote',
-    summary: '源码阅读笔记，含一份 Claude Code skill 的源码分析。'
-  },
-  {
-    name: 'InterviewOps-SDK',
-    href: 'https://github.com/jerry609/InterviewOps-SDK',
-    summary: 'TypeScript SDK。'
-  },
-  {
-    name: 'AI4S',
-    href: 'https://github.com/jerry609/AI4S',
-    summary: 'AI for Science 资料合集。'
-  }
-]

@@ -2,23 +2,23 @@
 import config from 'virtual:config'
 
 import { Icon } from 'astro-pure/user'
+import PixelMouse from '@/components/brand/PixelMouse.astro'
 
 const path = Astro.url.pathname.replace(/\/$/, '') || '/'
 const isActive = (link: string) => path === link || path.startsWith(link + '/')
 
 const elsewhere = [
-  { title: '碎碎念', link: '/murmurs' },
-  { title: '照片', link: '/photos' },
   { title: '友链', link: '/links' },
-  { title: '归档', link: '/archives' }
+  { title: '归档', link: '/archives' },
+  { title: '标签', link: '/tags' }
 ]
 ---
 
 <site-header class='site-header'>
   <div class='site-wrap site-header-inner'>
     <a class='brand' href='/' aria-label='Jerry Zhang 首页'>
-      <span class='glyph' aria-hidden='true'><i></i><i></i><i></i></span>
-      <span>jerry609</span>
+      <PixelMouse crop='head' px={2} label='' class='brand-mark' />
+      <span class='wordmark'>jerry609</span>
     </a>
 
     <nav class='nav' aria-label='主导航'>
@@ -140,36 +140,22 @@ const elsewhere = [
   .brand {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
-    font-family: var(--font-mono);
-    font-weight: 500;
-    font-size: 0.95rem;
+    gap: 0.6rem;
     text-decoration: none;
     color: hsl(var(--foreground));
   }
   .brand:hover {
     color: hsl(var(--foreground));
   }
-  .glyph {
-    display: grid;
-    gap: 2px;
-    width: 16px;
+  .brand:hover .wordmark {
+    color: hsl(var(--primary));
   }
-  .glyph i {
-    display: block;
-    height: 3px;
-    border-radius: 1px;
-    background: hsl(var(--foreground));
-  }
-  .glyph i:nth-child(1) {
-    width: 100%;
-    background: hsl(var(--primary));
-  }
-  .glyph i:nth-child(2) {
-    width: 72%;
-  }
-  .glyph i:nth-child(3) {
-    width: 88%;
+  .wordmark {
+    font-family: var(--font-pixel);
+    font-weight: 600;
+    font-size: 1.2rem;
+    letter-spacing: 0.01em;
+    transition: color 0.15s ease;
   }
   .nav {
     display: flex;

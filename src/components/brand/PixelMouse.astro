@@ -1,0 +1,165 @@
+---
+import { HEAD_ROWS, PALETTE, SPRITES, type SpriteName } from './sprites'
+
+interface Props {
+  /** Which pose to draw */
+  variant?: SpriteName
+  /** Size of one sprite pixel in CSS px (keep it an integer for crisp edges) */
+  px?: number
+  /** `head` crops to the ears/headphones/face, used for the logo mark */
+  crop?: 'full' | 'head'
+  /** Bob the head and float music notes */
+  animated?: boolean
+  class?: string
+  label?: string
+}
+
+const {
+  variant = 'listening',
+  px = 4,
+  crop = 'full',
+  animated = false,
+  class: className,
+  label = '戴耳机的小白鼠'
+} = Astro.props
+
+const rows = SPRITES[variant].slice(0, crop === 'head' ? HEAD_ROWS : undefined)
+const width = rows[0].length
+const height = rows.length
+
+// Merge horizontal runs of the same color into single rects
+type Run = { x: number; y: number; w: number; fill: string }
+function runs(from: number, to: number): Run[] {
+  const out: Run[] = []
+  for (let y = from; y < to; y++) {
+    const row = rows[y]
+    let x = 0
+    while (x < row.length) {
+      const c = row[x]
+      let end = x + 1
+      while (end < row.length && row[end] === c) end++
+      if (PALETTE[c]) out.push({ x, y, w: end - x, fill: PALETTE[c] })
+      x = end
+    }
+  }
+  return out
+}
+const head = runs(0, Math.min(HEAD_ROWS, height))
+const body = runs(Math.min(HEAD_ROWS, height), height)
+---
+
+<span
+  class:list={['pixel-mouse', animated && 'is-animated', className]}
+  style={`--px:${px}px;width:${width * px}px;height:${height * px}px`}
+>
+  <svg
+    viewBox={`0 0 ${width} ${height}`}
+    width={width * px}
+    height={height * px}
+    shape-rendering='crispEdges'
+    role='img'
+    aria-label={label}
+  >
+    <g class='body'>
+      {body.map((r) => <rect x={r.x} y={r.y} width={r.w} height='1' fill={r.fill} />)}
+    </g>
+    <g class='head'>
+      {head.map((r) => <rect x={r.x} y={r.y} width={r.w} height='1' fill={r.fill} />)}
+    </g>
+  </svg>
+  {
+    animated && (
+      <span class='notes' aria-hidden='true'>
+        {[0, 1, 2].map((i) => (
+          <svg class={`note n${i}`} viewBox='0 0 5 7' shape-rendering='crispEdges'>
+            <rect x='2' y='0' width='3' height='1' />
+            <rect x='4' y='1' width='1' height='1' />
+            <rect x='2' y='1' width='1' height='4' />
+            <rect x='0' y='4' width='3' height='2' />
+            <rect x='1' y='6' width='1' height='1' />
+          </svg>
+        ))}
+      </span>
+    )
+  }
+</span>
+
+<style>
+  .pixel-mouse {
+    position: relative;
+    display: inline-block;
+    flex: none;
+    line-height: 0;
+    image-rendering: pixelated;
+  }
+  .pixel-mouse svg {
+    display: block;
+    overflow: visible;
+  }
+  /* Nod to the beat: the whole mouse hops one sprite pixel */
+  .is-animated > svg {
+    animation: bob 1.2s steps(1, end) infinite;
+  }
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(calc(var(--px) * -1));
+    }
+  }
+  .notes {
+    position: absolute;
+    left: calc(var(--px) * 22);
+    top: calc(var(--px) * 1);
+    width: calc(var(--px) * 6);
+    height: calc(var(--px) * 9);
+    pointer-events: none;
+  }
+  /* Notes keep a fixed 3px pixel so they stay crisp at any mascot size */
+  .note {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 15px;
+    height: 21px;
+    fill: hsl(var(--primary));
+    opacity: 0;
+    animation: rise 3.6s steps(9, end) infinite;
+  }
+  .note.n1 {
+    left: calc(var(--px) * 2.5);
+    animation-delay: 1.2s;
+    fill: hsl(var(--foreground) / 0.55);
+  }
+  .note.n2 {
+    left: calc(var(--px) * 1.2);
+    animation-delay: 2.4s;
+  }
+  @keyframes rise {
+    0% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    80% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(calc(var(--px) * 1.5), calc(var(--px) * -7));
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .is-animated > svg,
+    .note {
+      animation: none;
+    }
+    .note.n0 {
+      opacity: 1;
+    }
+  }
+</style>

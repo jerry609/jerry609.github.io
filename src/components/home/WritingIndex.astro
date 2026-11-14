@@ -1,6 +1,7 @@
 ---
 import type { CollectionEntry } from 'astro:content'
 
+import PixelMouse from '@/components/brand/PixelMouse.astro'
 import { ALL_LAYERS, layerLabel } from '@/data/stack'
 
 interface Props {
@@ -61,7 +62,10 @@ const counts = Object.fromEntries(
         </li>
       ))
     }
-    <li class='empty' hidden>没有匹配的文章。换个关键词，或者点“全部”清除筛选。</li>
+    <li class='empty' hidden>
+      <PixelMouse variant='puzzled' px={2} label='' />
+      <span>没有匹配的文章。换个关键词，或者点“全部”清除筛选。</span>
+    </li>
   </ul>
 
   <div class='list-foot'>
@@ -164,7 +168,10 @@ const counts = Object.fromEntries(
     min-width: 0;
   }
   .empty {
-    padding: 1.5rem 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 0.25rem;
     color: hsl(var(--muted-foreground));
     border-bottom: 1px solid hsl(var(--border));
   }

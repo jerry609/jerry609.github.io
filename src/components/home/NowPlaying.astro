@@ -1,0 +1,346 @@
+---
+import type { CollectionEntry } from 'astro:content'
+
+import { layerLabel, SERIES } from '@/data/stack'
+
+interface Props {
+  posts: CollectionEntry<'blog'>[]
+}
+
+const { posts } = Astro.props
+
+// Rough reading time: ~400 CJK characters or ~220 latin words per minute
+function minutes(body = '') {
+  const cjk = (body.match(/[㐀-鿿]/g) || []).length
+  const words = (body.replace(/[㐀-鿿]/g, ' ').match(/[A-Za-z0-9_]+/g) || []).length
+  return Math.max(1, Math.round(cjk / 400 + words / 220))
+}
+const seriesOf = (id: string) => SERIES.find((s) => (s.slugs as readonly string[]).includes(id))?.title
+
+const tracks = posts.map((p) => ({
+  s: p.id,
+  t: p.data.title,
+  x: p.data.description,
+  d: p.data.publishDate.toISOString().slice(0, 10),
+  l: layerLabel(p.data.layer),
+  m: minutes(p.body),
+  a: seriesOf(p.id) ?? ''
+}))
+const first = tracks[0]
+const pad = (n: number) => String(n).padStart(2, '0')
+---
+
+<section class='player' id='now-playing' aria-label='正在播放：最近的文章' tabindex='-1'>
+  <div class='eq' aria-hidden='true'>
+    <i></i><i></i><i></i><i></i><i></i>
+  </div>
+
+  <div class='track'>
+    <p class='kicker mono'>
+      <span class='live'>Now reading</span>
+      <span data-np='idx'>{pad(1)} / {pad(tracks.length)}</span>
+      <span data-np='layer'>{first.l}</span>
+      <span data-np='album' hidden={!first.a}>{first.a}</span>
+    </p>
+    <a class='title' data-np='title' href={`/blog/${first.s}`}>{first.t}</a>
+    <p class='desc' data-np='desc'>{first.x}</p>
+  </div>
+
+  <div class='controls'>
+    <button type='button' class='ctl' data-np='prev' aria-label='上一篇'>
+      <svg viewBox='0 0 9 7' shape-rendering='crispEdges' aria-hidden='true'
+        ><rect x='0' y='0' width='1' height='7'></rect><rect x='5' y='0' width='1' height='7'></rect><rect
+          x='4'
+          y='1'
+          width='1'
+          height='5'></rect><rect x='3' y='2' width='1' height='3'></rect><rect
+          x='2'
+          y='3'
+          width='1'
+          height='1'></rect><rect x='8' y='0' width='1' height='7'></rect><rect
+          x='7'
+          y='1'
+          width='1'
+          height='5'></rect><rect x='6' y='2' width='1' height='3'></rect></svg
+      >
+    </button>
+    <a class='ctl play' data-np='play' href={`/blog/${first.s}`} aria-label='阅读这篇'>
+      <svg viewBox='0 0 7 7' shape-rendering='crispEdges' aria-hidden='true'
+        ><rect x='1' y='0' width='1' height='7'></rect><rect x='2' y='1' width='1' height='5'></rect><rect
+          x='3'
+          y='1'
+          width='1'
+          height='5'></rect><rect x='4' y='2' width='1' height='3'></rect><rect
+          x='5'
+          y='3'
+          width='1'
+          height='1'></rect></svg
+      >
+    </a>
+    <button type='button' class='ctl' data-np='next' aria-label='下一篇'>
+      <svg viewBox='0 0 9 7' shape-rendering='crispEdges' aria-hidden='true'
+        ><rect x='0' y='0' width='1' height='7'></rect><rect x='1' y='1' width='1' height='5'></rect><rect
+          x='2'
+          y='2'
+          width='1'
+          height='3'></rect><rect x='3' y='0' width='1' height='7'></rect><rect
+          x='4'
+          y='1'
+          width='1'
+          height='5'></rect><rect x='5' y='2' width='1' height='3'></rect><rect
+          x='6'
+          y='3'
+          width='1'
+          height='1'></rect><rect x='8' y='0' width='1' height='7'></rect></svg
+      >
+    </button>
+  </div>
+
+  <div class='progress mono'>
+    <span data-np='date'>{first.d}</span>
+    <span class='bar' aria-hidden='true'><i data-np='bar' style={`width:${(100 / tracks.length).toFixed(2)}%`}></i></span>
+    <span data-np='len'>{first.m} min</span>
+  </div>
+
+  <script type='application/json' data-np='data' set:html={JSON.stringify(tracks)} />
+</section>
+
+<script>
+  type T = { s: string; t: string; x: string; d: string; l: string; m: number; a: string }
+  const root = document.getElementById('now-playing')
+  const data = root?.querySelector<HTMLScriptElement>('[data-np="data"]')
+  if (root && data) {
+    const tracks: T[] = JSON.parse(data.textContent || '[]')
+    const $ = (k: string) => root.querySelector<HTMLElement>(`[data-np="${k}"]`)!
+    const pad = (n: number) => String(n).padStart(2, '0')
+    let i = 0
+    const show = (next: number) => {
+      i = (next + tracks.length) % tracks.length
+      const t = tracks[i]
+      $('idx').textContent = `${pad(i + 1)} / ${pad(tracks.length)}`
+      $('layer').textContent = t.l
+      $('album').textContent = t.a
+      $('album').hidden = !t.a
+      $('title').textContent = t.t
+      ;($('title') as HTMLAnchorElement).href = `/blog/${t.s}`
+      ;($('play') as HTMLAnchorElement).href = `/blog/${t.s}`
+      $('desc').textContent = t.x
+      $('date').textContent = t.d
+      $('len').textContent = `${t.m} min`
+      $('bar').style.width = `${(((i + 1) / tracks.length) * 100).toFixed(2)}%`
+      root.classList.remove('flip')
+      void root.offsetWidth
+      root.classList.add('flip')
+    }
+    $('prev').addEventListener('click', () => show(i - 1))
+    $('next').addEventListener('click', () => show(i + 1))
+    root.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') show(i - 1)
+      if (e.key === 'ArrowRight') show(i + 1)
+    })
+  }
+</script>
+
+<style>
+  .player {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'eq track controls'
+      'eq progress progress';
+    gap: 0.5rem 1.25rem;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--card));
+    outline: none;
+  }
+  .player:focus-visible {
+    border-color: hsl(var(--primary));
+  }
+  .eq {
+    grid-area: eq;
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 2.25rem;
+    align-self: start;
+    margin-top: 0.25rem;
+  }
+  .eq i {
+    display: block;
+    width: 6px;
+    height: 100%;
+    background: hsl(var(--primary));
+    transform-origin: bottom;
+    animation: eq 1.2s steps(4, end) infinite;
+  }
+  .eq i:nth-child(2) {
+    animation-delay: -0.3s;
+    background: hsl(var(--foreground));
+  }
+  .eq i:nth-child(3) {
+    animation-delay: -0.7s;
+  }
+  .eq i:nth-child(4) {
+    animation-delay: -0.15s;
+    background: hsl(var(--foreground));
+  }
+  .eq i:nth-child(5) {
+    animation-delay: -0.9s;
+  }
+  @keyframes eq {
+    0%,
+    100% {
+      transform: scaleY(0.25);
+    }
+    25% {
+      transform: scaleY(1);
+    }
+    50% {
+      transform: scaleY(0.5);
+    }
+    75% {
+      transform: scaleY(0.75);
+    }
+  }
+  .track {
+    grid-area: track;
+    min-width: 0;
+  }
+  .kicker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.125rem 0.75rem;
+    margin: 0;
+    color: hsl(var(--faint));
+  }
+  .live {
+    color: hsl(var(--primary));
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .title {
+    display: block;
+    margin-top: 0.2rem;
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: hsl(var(--foreground));
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .title:hover {
+    color: hsl(var(--primary));
+  }
+  .desc {
+    margin: 0.125rem 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .flip .track {
+    animation: flip 0.25s steps(3, end);
+  }
+  @keyframes flip {
+    from {
+      opacity: 0.2;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .controls {
+    grid-area: controls;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+  .ctl {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    cursor: pointer;
+  }
+  .ctl svg {
+    width: 18px;
+    height: 14px;
+    fill: currentColor;
+  }
+  .ctl:hover {
+    border-color: hsl(var(--foreground));
+  }
+  .ctl.play {
+    width: 2.75rem;
+    height: 2.75rem;
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border-color: hsl(var(--foreground));
+  }
+  .ctl.play svg {
+    width: 14px;
+    height: 14px;
+  }
+  .ctl.play:hover {
+    background: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+  }
+  .progress {
+    grid-area: progress;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.75rem;
+    align-items: center;
+    color: hsl(var(--faint));
+    font-variant-numeric: tabular-nums;
+  }
+  .bar {
+    height: 4px;
+    background: hsl(var(--muted));
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar i {
+    display: block;
+    height: 100%;
+    background: hsl(var(--primary));
+    transition: width 0.25s steps(4, end);
+  }
+  @media (max-width: 640px) {
+    .player {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        'track track'
+        'progress controls';
+      padding: 0.875rem 1rem;
+    }
+    .eq {
+      display: none;
+    }
+    .title {
+      white-space: normal;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .eq i {
+      animation: none;
+      transform: scaleY(0.6);
+    }
+    .flip .track {
+      animation: none;
+    }
+  }
+</style>

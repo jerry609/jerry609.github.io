@@ -1,19 +1,11 @@
 {
-  "name": "Jerry's Blog",
-  "short_name": "Jerry",
+  "name": "Jerry Zhang · jerry609",
+  "short_name": "jerry609",
   "icons": [
-    {
-      "src": "/android-chrome-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/android-chrome-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+    { "src": "/favicon/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/favicon/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png" }
   ],
-  "theme_color": "#ffffff",
-  "background_color": "#ffffff",
+  "theme_color": "#f3f5f4",
+  "background_color": "#f3f5f4",
   "display": "standalone"
 }

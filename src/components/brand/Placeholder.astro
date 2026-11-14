@@ -1,0 +1,128 @@
+---
+import PixelMouse from './PixelMouse.astro'
+import type { SpriteName } from './sprites'
+
+interface Props {
+  code: string
+  title: string
+  zh?: string
+  message: string
+  variant?: SpriteName
+}
+
+const { code, title, zh, message, variant = 'sleeping' } = Astro.props
+---
+
+<main class='ph'>
+  <div class='ph-mouse'>
+    <PixelMouse {variant} px={8} />
+    {variant === 'sleeping' && <span class='zzz' aria-hidden='true'>z<span>z</span><span>Z</span></span>}
+    {variant === 'puzzled' && <span class='q' aria-hidden='true'>?</span>}
+  </div>
+  <div class='ph-text'>
+    <p class='mono code'>{code}</p>
+    <h1>{title}{zh && <small>{zh}</small>}</h1>
+    <p class='msg'>{message}</p>
+    <p class='actions'>
+      <a class='btn btn-primary' href='/'>回到首页</a>
+      <a class='btn' href='/blog'>看看文章</a>
+      <slot />
+    </p>
+  </div>
+</main>
+
+<style>
+  .ph {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 3rem;
+    align-items: center;
+    padding-block: 4.5rem 3rem;
+    max-width: 52rem;
+  }
+  .ph-mouse {
+    position: relative;
+    width: fit-content;
+    padding: 1.5rem 2.5rem 1rem 1rem;
+  }
+  .zzz,
+  .q {
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-family: var(--font-pixel);
+    font-weight: 600;
+    color: hsl(var(--primary));
+    line-height: 1;
+  }
+  .zzz {
+    font-size: 1.1rem;
+    animation: doze 2.4s steps(3, end) infinite;
+  }
+  .zzz span:nth-child(1) {
+    font-size: 1.4rem;
+    margin-left: 0.1rem;
+  }
+  .zzz span:nth-child(2) {
+    font-size: 1.8rem;
+    margin-left: 0.1rem;
+  }
+  .q {
+    font-size: 3rem;
+    animation: doze 1.6s steps(2, end) infinite;
+  }
+  @keyframes doze {
+    0%,
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    50% {
+      transform: translateY(-6px);
+      opacity: 0.6;
+    }
+  }
+  .code {
+    color: hsl(var(--faint));
+    margin: 0;
+  }
+  h1 {
+    font-family: var(--font-pixel);
+    font-size: clamp(2.5rem, 6vw, 3.75rem);
+    font-weight: 600;
+    line-height: 1.05;
+    margin: 0.75rem 0;
+  }
+  h1 small {
+    font-family: var(--font-body);
+    font-size: 0.38em;
+    font-weight: 500;
+    color: hsl(var(--muted-foreground));
+    margin-left: 0.6rem;
+    vertical-align: 0.4em;
+  }
+  .msg {
+    color: hsl(var(--muted-foreground));
+    font-size: 1.05rem;
+    margin: 0 0 1.5rem;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+  }
+  @media (max-width: 640px) {
+    .ph {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.25rem;
+      padding-block: 2.5rem 2rem;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .zzz,
+    .q {
+      animation: none;
+    }
+  }
+</style>

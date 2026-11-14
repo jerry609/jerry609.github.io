@@ -1,48 +1,15 @@
 ---
 import PageLayout from '@/layouts/BaseLayout.astro'
-
-const meta = {
-  description: '页面不存在',
-  title: '404'
-}
+import Placeholder from '@/components/brand/Placeholder.astro'
 ---
 
-<PageLayout {meta}>
-  <main class='nf'>
-    <p class='mono code'>HTTP 404 · ENOENT</p>
-    <h1>这一页不存在</h1>
-    <p class='msg'>链接可能已经改过。可以回首页，或者用搜索找找看。</p>
-    <p class='actions'>
-      <a class='btn btn-primary' href='/'>回到首页</a>
-      <a class='btn' href='/blog'>全部文章</a>
-      <a class='btn' href='/search'>搜索</a>
-    </p>
-  </main>
+<PageLayout meta={{ title: '404', description: '页面不存在' }}>
+  <Placeholder
+    variant='puzzled'
+    code='HTTP 404 · ENOENT'
+    title='这一页不存在'
+    message='链接可能改过了。回首页，或者用搜索找找。'
+  >
+    <a class='btn' href='/search'>搜索</a>
+  </Placeholder>
 </PageLayout>
-
-<style>
-  .nf {
-    padding-block: 5rem 3rem;
-    max-width: 40rem;
-  }
-  .code {
-    color: hsl(var(--faint));
-    margin: 0;
-  }
-  h1 {
-    font-family: var(--font-display);
-    font-size: clamp(2.25rem, 5vw, 3.25rem);
-    font-weight: 600;
-    margin: 0.75rem 0;
-  }
-  .msg {
-    color: hsl(var(--muted-foreground));
-    margin: 0 0 1.5rem;
-  }
-  .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin: 0;
-  }
-</style>

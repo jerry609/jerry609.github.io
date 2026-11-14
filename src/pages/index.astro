@@ -1,10 +1,10 @@
 ---
-import { Image } from 'astro:assets'
 import type { CollectionEntry } from 'astro:content'
 
 import { getBlogCollection } from 'astro-pure/server'
-import avatar from '@/assets/jerry.jpg'
 import PageLayout from '@/layouts/BaseLayout.astro'
+import PixelMouse from '@/components/brand/PixelMouse.astro'
+import NowPlaying from '@/components/home/NowPlaying.astro'
 import StackTrace from '@/components/home/StackTrace.astro'
 import WritingIndex from '@/components/home/WritingIndex.astro'
 import { layerLabel, PROJECTS, SERIES } from '@/data/stack'
@@ -24,7 +24,7 @@ const research = [
 ]
 
 const news = [
-  { date: '2026-11', text: '网站改版：文章按 Agent × Infra 的六层栈重新组织。' },
+  { date: '2026-11', text: '网站改版：文章按 Agent × Infra 的六层栈重新组织，戴耳机的小白鼠住进来了。' },
   {
     date: '2026-06',
     text: '「形式化建模」两篇：SFT 是前向 KL 投影，RL 是 reward-tilting 与 KL 正则投影。',
@@ -70,39 +70,37 @@ const series = SERIES.map((s) => {
   <main class='home'>
     {/* Intro */}
     <section class='intro'>
-      <Image
-        src={avatar}
-        alt='Jerry Zhang 的头像'
-        width={176}
-        height={176}
-        class='avatar'
-        loading='eager'
-        fetchpriority='high'
-      />
+      <figure class='stage' aria-label='头像：戴耳机听歌的小白鼠'>
+        <div class='stage-bar mono'>
+          <span class='dots' aria-hidden='true'><i></i><i></i><i></i></span>
+          <span>~/jerry609</span>
+          <span class='stage-state'>♪ playing</span>
+        </div>
+        <div class='stage-body'>
+          <PixelMouse animated px={9} class='mascot' />
+          <span class='shadow' aria-hidden='true'></span>
+        </div>
+      </figure>
       <div class='intro-text'>
         <p class='mono who'>
-          <span>M.S. Student</span><span>UCAS · Institute of Information Engineering</span><span
-            >Beijing</span
-          >
+          <span>jerry609</span><span>UCAS · IIE</span><span>Beijing</span>
         </p>
         <h1>Jerry Zhang <small>张瑞杰</small></h1>
-        <p class='bio'>
-          中国科学院信息工程研究所硕士在读。我研究 <strong>Agent</strong> 以及支撑它运行的整条基础设施：从
-          harness 与工具调用，到沙箱运行时、模型机制与后训练，再到文件系统和构建系统。
-        </p>
-        <p class='bio muted'>
-          我习惯从源码和故障出发理解系统：读 Claude Code、E2B、ast-grep 的实现，复盘 FUSE
-          文件系统上的阻塞与竞态，也把 RL 和 Attention 的公式从头推一遍。这个站点是这些记录的索引。
-        </p>
+        <blockquote class='pg'>
+          <p>所以，你要做的，就是增加自己被运气青睐的概率。而增加的方式，正是保持好奇心。尝试更多事、见更多人、读更多书、问更多问题。</p>
+          <p>终极大奖就是寻找到缝隙中那根有可能生长出来的枝杈。你发现了知识表层的裂缝，将它破开，而后洞见了一个崭新的世界。</p>
+          <footer>—— 保罗·格雷厄姆 (Paul Graham)</footer>
+        </blockquote>
         <p class='links mono'>
           <a href='https://github.com/jerry609' target='_blank' rel='noopener'>GitHub ↗</a>
           <a href='https://github.com/jerry609/PaperBot' target='_blank' rel='noopener'>PaperBot ↗</a>
           <a href='/blog'>Writing</a>
-          <a href='/about'>About</a>
           <a href='/rss.xml'>RSS</a>
         </p>
       </div>
     </section>
+
+    <NowPlaying posts={byDate.slice(0, 10)} />
 
     {/* Research + News */}
     <section class='two-col'>
@@ -149,7 +147,6 @@ const series = SERIES.map((s) => {
     <section>
       <div class='sec-head'>
         <h2 class='sec-title'>Selected Projects<span class='zh'>项目</span></h2>
-        <a class='sec-note mono' href='/projects'>全部项目 →</a>
       </div>
       <ul class='projects'>
         {
@@ -250,18 +247,60 @@ const series = SERIES.map((s) => {
   }
   .intro {
     display: grid;
-    grid-template-columns: 8.5rem minmax(0, 1fr);
-    gap: 2.25rem;
-    align-items: start;
-    padding-bottom: 2.5rem;
-    border-bottom: 1px solid hsl(var(--border));
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 3rem;
+    align-items: center;
+    padding-bottom: 0.5rem;
   }
-  .avatar {
-    width: 8.5rem;
-    height: 8.5rem;
-    object-fit: cover;
-    border-radius: 6px;
+  .stage {
+    margin: 0;
     border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--card));
+    overflow: hidden;
+  }
+  .stage-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid hsl(var(--border));
+    color: hsl(var(--faint));
+    font-size: 0.72rem;
+  }
+  .dots {
+    display: flex;
+    gap: 4px;
+  }
+  .dots i {
+    display: block;
+    width: 7px;
+    height: 7px;
+    background: hsl(var(--border));
+  }
+  .dots i:first-child {
+    background: hsl(var(--primary));
+  }
+  .stage-state {
+    margin-left: auto;
+    color: hsl(var(--primary));
+  }
+  .stage-body {
+    position: relative;
+    display: grid;
+    place-items: center;
+    padding: 2.25rem 3.25rem 1.75rem 2.25rem;
+    background-image: radial-gradient(hsl(var(--border)) 1px, transparent 1px);
+    background-size: 9px 9px;
+  }
+  .shadow {
+    position: absolute;
+    bottom: 1.25rem;
+    left: 50%;
+    width: 9rem;
+    height: 9px;
+    margin-left: -5rem;
+    background: hsl(var(--foreground) / 0.08);
   }
   .who {
     display: flex;
@@ -276,49 +315,52 @@ const series = SERIES.map((s) => {
     color: hsl(var(--faint));
   }
   h1 {
-    font-family: var(--font-display);
-    font-size: clamp(2.5rem, 6vw, 3.75rem);
+    font-family: var(--font-pixel);
+    font-size: clamp(2.75rem, 7vw, 4.5rem);
     font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: 1.04;
-    margin: 0.75rem 0 1.25rem;
-    font-variation-settings: 'opsz' 60;
+    letter-spacing: 0;
+    line-height: 1;
+    margin: 0.75rem 0 1.5rem;
   }
   h1 small {
     font-family: var(--font-body);
-    font-size: 0.36em;
+    font-size: 0.32em;
     font-weight: 500;
-    letter-spacing: 0;
     color: hsl(var(--muted-foreground));
     margin-left: 0.5rem;
-    vertical-align: 0.5em;
+    vertical-align: 0.55em;
   }
-  .bio {
-    font-size: 1.125rem;
-    line-height: 1.75;
-    max-width: 40em;
-    margin: 0 0 0.75rem;
-    color: hsl(var(--foreground));
+  .pg {
+    margin: 0;
+    padding-left: 1rem;
+    border-left: 3px solid hsl(var(--primary));
+    max-width: 38em;
   }
-  .bio strong {
-    font-weight: 600;
+  .pg p {
+    margin: 0 0 0.6rem;
+    font-family: var(--font-display);
+    font-size: 1.08rem;
+    line-height: 1.85;
+    color: hsl(var(--foreground) / 0.88);
   }
-  .bio.muted {
-    color: hsl(var(--muted-foreground));
-    font-size: 1rem;
+  .pg footer {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: hsl(var(--faint));
   }
   .links {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 1.25rem;
-    margin: 1.25rem 0 0;
+    margin: 1.5rem 0 0;
   }
   .links a {
-    color: hsl(var(--primary));
+    color: hsl(var(--foreground));
     text-decoration: none;
-    border-bottom: 1px solid hsl(var(--primary) / 0.3);
+    border-bottom: 1px solid hsl(var(--foreground) / 0.25);
   }
   .links a:hover {
+    color: hsl(var(--primary));
     border-bottom-color: hsl(var(--primary));
   }
 
@@ -497,6 +539,9 @@ const series = SERIES.map((s) => {
     .projects {
       grid-template-columns: minmax(0, 1fr);
     }
+    .intro {
+      gap: 2rem;
+    }
   }
   @media (max-width: 600px) {
     .home {
@@ -505,11 +550,24 @@ const series = SERIES.map((s) => {
     }
     .intro {
       grid-template-columns: minmax(0, 1fr);
-      gap: 1.25rem;
+      gap: 1.5rem;
     }
-    .avatar {
-      width: 5rem;
-      height: 5rem;
+    .stage-body {
+      padding: 1.5rem 2.5rem 1.25rem 1.5rem;
+    }
+    .stage :global(.mascot) {
+      --px: 6px !important;
+      width: 144px !important;
+      height: 144px !important;
+    }
+    .stage :global(.mascot > svg) {
+      width: 144px;
+      height: 144px;
+    }
+    .shadow {
+      width: 6rem;
+      margin-left: -3.4rem;
+      bottom: 0.9rem;
     }
     .series {
       grid-template-columns: minmax(0, 1fr);
