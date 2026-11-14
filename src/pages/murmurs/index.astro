@@ -1,87 +1,533 @@
 ---
-import { getCollection, render } from 'astro:content'
 import { Image } from 'astro:assets'
-import PageLayout from '@/layouts/CommonPage.astro'
+import { getCollection, render } from 'astro:content'
 
+import PageLayout from '@/layouts/BaseLayout.astro'
+import PixelMouse from '@/components/brand/PixelMouse.astro'
 
-const murmursEntries = await getCollection('murmurs', ({ data }) => !data.draft)
-const sortedMurmurs = murmursEntries.sort((a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf())
+const entries = (await getCollection('murmurs', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
+)
 
-const renderedMurmurs = await Promise.all(sortedMurmurs.map(async (entry) => {
-  const { Content } = await render(entry)
-  // Extract a brief summary from the body if description is missing
-  const summary = entry.body?.slice(0, 100).replace(/[#*`]/g, '') + '...'
-  return { entry, Content, summary }
-}))
+// Plain text for the speech bubble: strip markdown, keep the first ~90 characters
+const plain = (md = '') =>
+  md
+    .replace(/^>\s?/gm, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[#*_`>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+const WEEK = ['日', '一', '二', '三', '四', '五', '六']
+const items = await Promise.all(
+  entries.map(async (e) => {
+    const { Content } = await render(e)
+    const text = plain(e.body)
+    return {
+      e,
+      Content,
+      text,
+      quote: text.length > 90 ? `${text.slice(0, 88)}…` : text,
+      long: (e.body ?? '').length > 520,
+      href: e.data.link || `/murmurs/${e.id}`,
+      day: `${String(e.data.publishDate.getUTCMonth() + 1).padStart(2, '0')}-${String(e.data.publishDate.getUTCDate()).padStart(2, '0')}`,
+      week: `周${WEEK[e.data.publishDate.getUTCDay()]}`
+    }
+  })
+)
+// Group by month, newest first
+const months: { key: string; list: typeof items }[] = []
+for (const it of items) {
+  const d = it.e.data.publishDate
+  const key = `${d.getUTCFullYear()} · ${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+  const last = months[months.length - 1]
+  if (last && last.key === key) last.list.push(it)
+  else months.push({ key, list: [it] })
+}
+const bubbles = items.map((it) => ({ id: it.e.id, text: it.quote, date: it.e.data.publishDate.toISOString().slice(0, 10) }))
+const first = bubbles[0]
 ---
 
-<PageLayout title='Murmurs'>
-  <div class='max-w-[1200px] mx-auto px-4 py-8'>
-    <!-- Header -->
-    <div class='text-center mb-12'>
-      <h1 class='text-4xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60'>
-        过往与夕
-      </h1>
-      <p class='text-muted-foreground'>记录生活中的片刻感悟</p>
+<PageLayout meta={{ title: '碎碎念', description: '小白鼠的碎碎念：生活里的片刻想法' }}>
+  <header class='hero'>
+    <div class='mouse-stage'>
+      <PixelMouse animated px={6} label='说话的小白鼠' />
     </div>
-
-    <!-- Grid Layout -->
-    <div class='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'>
-      {renderedMurmurs.map(({ entry, summary }, index) => (
-        <a 
-          href={entry.data.link || `/murmurs/${entry.id}`}
-          class='group flex flex-col bg-card border border-border rounded-xl overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1'
-          style={`animation: fade-up 0.5s ease-out backwards ${index * 100}ms`}
-        >
-          <!-- Cover Image -->
-          {entry.data.cover && (
-            <div class='relative aspect-[16/10] overflow-hidden bg-muted'>
-              <Image 
-                src={entry.data.cover} 
-                alt={entry.data.title || 'Cover'} 
-                class='w-full h-full object-cover transition-transform duration-500 group-hover:scale-105'
-                width={600}
-                height={400}
-              />
-            </div>
-          )}
-
-          <!-- Content -->
-          <div class='flex flex-col flex-1 p-5'>
-            <div class='flex items-center justify-between text-xs mb-3'>
-              <time datetime={entry.data.publishDate.toISOString()} class='text-muted-foreground/60 font-mono'>
-                {entry.data.publishDate.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })}
-              </time>
-              {entry.data.tags.length > 0 && (
-                <span class='text-primary/80 bg-primary/5 px-2 py-0.5 rounded text-[11px] font-medium'>
-                  #{entry.data.tags[0]}
-                </span>
-              )}
-            </div>
-
-            <h2 class='text-lg font-bold mb-3 leading-snug group-hover:text-primary transition-colors line-clamp-2'>
-              {entry.data.title || '无题'}
-            </h2>
-
-            <p class='text-sm text-muted-foreground line-clamp-3 leading-relaxed'>
-              {summary}
-            </p>
-          </div>
-        </a>
-      ))}
+    <div class='bubble-wrap'>
+      <p class='eyebrow mono'><span>Murmurs</span><span>{items.length} notes</span></p>
+      <h1>Murmurs <small>碎碎念</small></h1>
+      <figure class='bubble' aria-live='polite'>
+        <blockquote id='bubble-text'>{first?.text}</blockquote>
+        <figcaption class='mono'>
+          <span id='bubble-date'>{first?.date}</span>
+          <span class='actions'>
+            <a href={`#m-${first?.id}`} id='bubble-go'>去看看 ↓</a>
+            <button type='button' id='bubble-next'>换一条 ↻</button>
+          </span>
+        </figcaption>
+      </figure>
     </div>
+  </header>
+
+  <p class='keys mono'><kbd>j</kbd> / <kbd>k</kbd> 上下切换 · 长的会折叠</p>
+
+  <div class='feed'>
+    {
+      months.map((m) => (
+        <section class='month'>
+          <h2 class='mlabel mono'>
+            <span>{m.key}</span>
+            <span class='mcount'>{m.list.length} 条</span>
+          </h2>
+          <ol class='notes'>
+            {m.list.map((it) => (
+              <li>
+                <article class:list={['note', it.long && 'long']} id={`m-${it.e.id}`} tabindex='-1'>
+                  <div class='meta mono'>
+                    <time datetime={it.e.data.publishDate.toISOString()}>{it.day}</time>
+                    <span>{it.week}</span>
+                    {it.e.data.tags.map((t) => (
+                      <span class='tag'>#{t}</span>
+                    ))}
+                  </div>
+                  <div class='body'>
+                    {it.e.data.title && it.e.data.title !== '无题' && <h3>{it.e.data.title}</h3>}
+                    <div class='text prose prose-t1 max-w-none'>
+                      <it.Content />
+                    </div>
+                    {it.long && (
+                      <button type='button' class='expand mono' aria-expanded='false'>
+                        展开全文
+                      </button>
+                    )}
+                    {it.e.data.cover && (
+                      <a class='print' href={it.href}>
+                        <Image src={it.e.data.cover} alt={it.e.data.title || '配图'} width={560} quality={78} />
+                      </a>
+                    )}
+                    <a class='perma mono' href={it.href}>
+                      打开 →
+                    </a>
+                  </div>
+                </article>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))
+    }
   </div>
+
+  <script type='application/json' id='murmur-data' set:html={JSON.stringify(bubbles)} />
 </PageLayout>
 
-<style>
-  @keyframes fade-up {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
+<script>
+  type B = { id: string; text: string; date: string }
+  const data: B[] = JSON.parse(document.getElementById('murmur-data')!.textContent || '[]')
+  const textEl = document.getElementById('bubble-text')!
+  const dateEl = document.getElementById('bubble-date')!
+  const goEl = document.getElementById('bubble-go') as HTMLAnchorElement
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  let idx = 0
+  let timer = 0
+
+  // Typewriter: the mouse "says" a murmur
+  const say = (i: number) => {
+    const b = data[i]
+    if (!b) return
+    window.clearInterval(timer)
+    dateEl.textContent = b.date
+    goEl.href = `#m-${b.id}`
+    if (reduce) {
+      textEl.textContent = b.text
+      return
     }
-    to {
-      opacity: 1;
-      transform: translateY(0);
+    const chars = [...b.text]
+    let k = 0
+    textEl.textContent = ''
+    textEl.classList.add('typing')
+    timer = window.setInterval(() => {
+      k += 1
+      textEl.textContent = chars.slice(0, k).join('')
+      if (k >= chars.length) {
+        window.clearInterval(timer)
+        textEl.classList.remove('typing')
+      }
+    }, 34)
+  }
+  document.getElementById('bubble-next')!.addEventListener('click', () => {
+    if (data.length < 2) return
+    let next = idx
+    while (next === idx) next = Math.floor(Math.random() * data.length)
+    idx = next
+    say(idx)
+  })
+  if (data.length) say(0)
+
+  // Highlight a note when jumping to it
+  const flash = (el: HTMLElement) => {
+    el.classList.remove('flash')
+    void el.offsetWidth
+    el.classList.add('flash')
+  }
+  goEl.addEventListener('click', (e) => {
+    const el = document.querySelector<HTMLElement>(goEl.getAttribute('href') || '')
+    if (!el) return
+    e.preventDefault()
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' })
+    el.focus({ preventScroll: true })
+    flash(el)
+  })
+
+  // Expand / collapse long notes
+  document.querySelectorAll<HTMLButtonElement>('.expand').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const note = btn.closest('.note')!
+      const open = note.classList.toggle('open')
+      btn.setAttribute('aria-expanded', String(open))
+      btn.textContent = open ? '收起' : '展开全文'
+    })
+  })
+
+  // j / k: move between notes
+  const notes = Array.from(document.querySelectorAll<HTMLElement>('article.note[id^="m-"]'))
+  let at = -1
+  document.addEventListener('keydown', (e) => {
+    const target = e.target as HTMLElement
+    if (target.closest('input, textarea, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return
+    if (e.key !== 'j' && e.key !== 'k') return
+    const focused = notes.indexOf(document.activeElement as HTMLElement)
+    if (focused >= 0) at = focused
+    at = Math.min(notes.length - 1, Math.max(0, at + (e.key === 'j' ? 1 : -1)))
+    const el = notes[at]
+    el.focus({ preventScroll: true })
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' })
+    flash(el)
+  })
+</script>
+
+<style>
+  .hero {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 2.5rem;
+    align-items: center;
+    padding: 2.5rem 0 1.5rem;
+  }
+  .mouse-stage {
+    padding: 1.5rem 2.5rem 1rem 1.5rem;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
+    background:
+      radial-gradient(hsl(var(--border)) 1px, transparent 1px) 0 0 / 9px 9px,
+      hsl(var(--card));
+  }
+  .eyebrow {
+    display: flex;
+    gap: 0.75rem;
+    margin: 0;
+    color: hsl(var(--muted-foreground));
+  }
+  .eyebrow span + span::before {
+    content: '/';
+    margin-right: 0.75rem;
+    color: hsl(var(--faint));
+  }
+  h1 {
+    margin: 0.6rem 0 1.25rem;
+    font-size: clamp(2.25rem, 5vw, 3.25rem);
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+  }
+  h1 small {
+    font-size: 0.38em;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: hsl(var(--muted-foreground));
+    margin-left: 0.6rem;
+    vertical-align: 0.4em;
+  }
+  .bubble {
+    position: relative;
+    margin: 0;
+    max-width: 38rem;
+    padding: 1rem 1.2rem 0.8rem;
+    border: var(--hair) solid hsl(var(--foreground) / 0.7);
+    border-radius: 3px;
+    background: hsl(var(--card));
+  }
+  /* Speech-bubble tail pointing at the mouse */
+  .bubble::before,
+  .bubble::after {
+    content: '';
+    position: absolute;
+    left: -9px;
+    top: 1.4rem;
+    border: 9px solid transparent;
+    border-left: 0;
+  }
+  .bubble::before {
+    border-right-color: hsl(var(--foreground) / 0.7);
+    left: -10px;
+  }
+  .bubble::after {
+    border-right-color: hsl(var(--card));
+  }
+  .bubble blockquote {
+    margin: 0;
+    min-height: 3.4em;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: hsl(var(--foreground));
+  }
+  .bubble blockquote.typing::after {
+    content: '▍';
+    margin-left: 1px;
+    color: hsl(var(--scarf));
+    animation: blink 0.8s steps(1) infinite;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  .bubble figcaption {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin-top: 0.75rem;
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .actions a,
+  .actions button {
+    font: inherit;
+    letter-spacing: 0.04em;
+    color: hsl(var(--foreground));
+    background: transparent;
+    border: var(--hair) solid hsl(var(--foreground) / 0.5);
+    border-radius: var(--radius);
+    padding: 0.15rem 0.5rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .actions a:hover,
+  .actions button:hover {
+    border-color: hsl(var(--scarf));
+    color: hsl(var(--primary));
+  }
+  .keys {
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+    margin: 0 0 1.5rem;
+  }
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    border: var(--hair) solid hsl(var(--border));
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 0 0.3rem;
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+  }
+  .month {
+    position: relative;
+  }
+  .mlabel {
+    position: sticky;
+    top: 3.5rem;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.6rem 0;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: hsl(var(--foreground));
+    background: hsl(var(--background) / 0.92);
+    backdrop-filter: blur(6px);
+  }
+  .mlabel::after {
+    content: '';
+    flex: 1;
+    height: var(--hair);
+    background: hsl(var(--border));
+  }
+  .mcount {
+    color: hsl(var(--faint));
+  }
+  .notes {
+    list-style: none;
+    margin: 0 0 2rem;
+    padding: 0 0 0 1.5rem;
+    border-left: var(--hair) solid hsl(var(--border));
+  }
+  .note {
+    position: relative;
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 46rem);
+    gap: 1.5rem;
+    padding: 1.1rem 0 1.4rem;
+    border-bottom: var(--hair) dashed hsl(var(--border));
+    outline: none;
+    scroll-margin-top: 7rem;
+  }
+  /* Timeline dot */
+  .note::before {
+    content: '';
+    position: absolute;
+    left: calc(-1.5rem - 4px);
+    top: 1.45rem;
+    width: 7px;
+    height: 7px;
+    background: hsl(var(--foreground));
+    border-radius: 1px;
+  }
+  .note:focus-visible::before,
+  .note.flash::before {
+    background: hsl(var(--scarf));
+  }
+  .note.flash {
+    animation: flash 1.2s ease;
+  }
+  @keyframes flash {
+    0% {
+      background: hsl(var(--scarf) / 0.14);
+    }
+    100% {
+      background: transparent;
+    }
+  }
+  .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.72rem;
+    color: hsl(var(--faint));
+    padding-top: 0.15rem;
+  }
+  .meta time {
+    color: hsl(var(--foreground));
+    font-size: 0.85rem;
+  }
+  .tag {
+    color: hsl(var(--primary));
+  }
+  .body {
+    min-width: 0;
+  }
+  .body h3 {
+    margin: 0 0 0.4rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .text :global(p) {
+    margin: 0 0 0.6em;
+  }
+  .text :global(p:last-child) {
+    margin-bottom: 0;
+  }
+  .long .text {
+    max-height: 11rem;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(#000 60%, transparent);
+    mask-image: linear-gradient(#000 60%, transparent);
+  }
+  .long.open .text {
+    max-height: none;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .expand,
+  .perma {
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+  }
+  .expand {
+    margin-top: 0.5rem;
+    color: hsl(var(--foreground));
+    background: transparent;
+    border: var(--hair) solid hsl(var(--foreground) / 0.5);
+    border-radius: var(--radius);
+    padding: 0.15rem 0.5rem;
+    cursor: pointer;
+  }
+  .expand:hover {
+    border-color: hsl(var(--scarf));
+  }
+  .print {
+    display: block;
+    width: min(18rem, 100%);
+    margin-top: 1rem;
+    padding: 6px 6px 18px;
+    background: #f7f7f4;
+    border-radius: 2px;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.18),
+      0 8px 20px rgb(0 0 0 / 0.12);
+    transform: rotate(-1.6deg);
+    transition: transform 0.25s ease;
+  }
+  .print:hover {
+    transform: rotate(0deg) scale(1.02);
+  }
+  .print :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .perma {
+    display: inline-block;
+    margin-top: 0.75rem;
+    color: hsl(var(--faint));
+    text-decoration: none;
+  }
+  .perma:hover {
+    color: hsl(var(--primary));
+  }
+  @media (max-width: 720px) {
+    .hero {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.25rem;
+    }
+    .mouse-stage {
+      justify-self: start;
+    }
+    .bubble::before,
+    .bubble::after {
+      display: none;
+    }
+    .notes {
+      padding-left: 1rem;
+    }
+    .note::before {
+      left: calc(-1rem - 4px);
+    }
+    .note {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.4rem;
+    }
+    .meta {
+      flex-direction: row;
+      gap: 0.6rem;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .note.flash {
+      animation: none;
+    }
+    .print {
+      transition: none;
     }
   }
 </style>

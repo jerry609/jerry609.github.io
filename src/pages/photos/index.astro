@@ -1,356 +1,694 @@
 ---
+import path from 'node:path'
+import { getImage } from 'astro:assets'
 import { getCollection } from 'astro:content'
-import PageLayout from '@/layouts/CommonPage.astro'
 
-const title = 'Photos'
+import sharp from 'sharp'
+import PageLayout from '@/layouts/BaseLayout.astro'
 
-// Fetch photos from Content Collections
-const photos = (await getCollection('photos')).sort((a, b) => {
-  return parseInt(a.data.id) - parseInt(b.data.id)
+const files = import.meta.glob<{ default: ImageMetadata }>('/src/assets/photos/*.{jpg,jpeg,png,webp}', {
+  eager: true
 })
+const entries = (await getCollection('photos', ({ data }) => !data.draft)).sort(
+  (a, b) => Number(a.data.id) - Number(b.data.id)
+)
 
-const photoIds = photos.map(p => p.data.id)
+// Deterministic small rotation per frame for the table view
+const tiltOf = (s: string) => {
+  let h = 0
+  for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  return ((h % 1100) / 100 - 5.5).toFixed(2)
+}
+
+const photos = await Promise.all(
+  entries.map(async (e, i) => {
+    const meta = files[`/src/assets/photos/${e.data.src}`]?.default
+    if (!meta) throw new Error(`Photo file not found: src/assets/photos/${e.data.src}`)
+    const thumb = await getImage({ src: meta, width: 720, format: 'webp', quality: 74 })
+    const large = await getImage({ src: meta, width: 1800, format: 'webp', quality: 82 })
+    const { dominant } = await sharp(path.join(process.cwd(), 'src/assets/photos', e.data.src)).stats()
+    return {
+      n: i + 1,
+      id: e.data.id,
+      title: e.data.title,
+      alt: e.data.alt || e.data.title,
+      story: e.data.story,
+      mood: e.data.mood,
+      date: e.data.publishDate?.toISOString().slice(0, 10),
+      w: meta.width,
+      h: meta.height,
+      thumb: thumb.src,
+      large: large.src,
+      color: `rgb(${dominant.r} ${dominant.g} ${dominant.b})`,
+      tilt: tiltOf(String(e.data.id))
+    }
+  })
+)
+const pad = (n: number) => String(n).padStart(2, '0')
+const years = [...new Set(photos.map((p) => p.date?.slice(0, 4)).filter(Boolean))]
 ---
 
-<PageLayout {title}>
-  <div class='mx-auto max-w-screen-xl px-4 py-8'>
-    <!-- Stats Header -->
-    <div class='grid grid-cols-1 sm:grid-cols-3 gap-4 mb-12'>
-      <div class='flex items-center gap-4 p-5 bg-card/80 backdrop-blur-sm border border-border rounded-2xl shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-300 hover:-translate-y-0.5 group'>
-        <span class='text-3xl group-hover:scale-110 transition-transform'>📸</span>
-        <div class='flex flex-col'>
-          <span class='text-2xl font-bold leading-none text-foreground'>{photos.length}</span>
-          <span class='text-xs font-medium uppercase tracking-wider text-muted-foreground mt-1'>Photos</span>
-        </div>
-      </div>
-      <div class='flex items-center gap-4 p-5 bg-card/80 backdrop-blur-sm border border-border rounded-2xl shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-300 hover:-translate-y-0.5 group'>
-        <span class='text-3xl group-hover:scale-110 transition-transform'>💬</span>
-        <div class='flex flex-col'>
-          <span class='text-2xl font-bold leading-none text-foreground' id='total-comments'>-</span>
-          <span class='text-xs font-medium uppercase tracking-wider text-muted-foreground mt-1'>Comments</span>
-        </div>
-      </div>
-      {/* Placeholder for future stat or just decoration */}
-      <div class='hidden sm:flex items-center gap-4 p-5 bg-card/50 border border-border/50 rounded-2xl border-dashed'>
-        <span class='text-3xl opacity-50'>✨</span>
-        <div class='flex flex-col'>
-          <span class='text-sm text-muted-foreground'>More moments captured soon...</span>
-        </div>
-      </div>
-    </div>
+<PageLayout meta={{ title: '照片', description: '一卷照片：看大图，或者在桌面模式里把照片拖来拖去' }}>
+  <header class='page-intro'>
+    <p class='eyebrow mono'>
+      <span>Photos</span><span>{photos.length} frames</span>{years.length > 0 && <span>{years.join(' – ')}</span>}
+    </p>
+    <h1>Photos <small>照片</small></h1>
+    <p class='lede'>一卷生活里的照片。点开看大图；或者切到桌面模式，把照片拖来拖去。</p>
+  </header>
 
-    <!-- Photo Grid (Masonry) -->
-    <div class='columns-1 gap-6 sm:columns-2 lg:columns-3 space-y-6'>
+  <figure class='palette' aria-label='每张照片的主色'>
+    <div class='swatches'>
       {
-        photos.map((photo, index) => (
-          <article
-            class='photo-card relative mb-6 break-inside-avoid rounded-2xl border border-border bg-card overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group'
-            style={`animation: fade-up 0.6s ease-out backwards ${index * 100}ms`}
-            data-story={photo.data.story}
-            data-mood={photo.data.mood}
-            data-photo-id={photo.data.id}
-          >
-            <!-- Image Container -->
-            <div class='relative overflow-hidden bg-muted aspect-[4/3]'>
-              <img
-                src={photo.data.src}
-                alt={photo.data.alt || photo.data.title}
-                title={photo.data.title}
-                loading='lazy'
-                class='photo-image block w-full h-full object-cover cursor-zoom-in transition-transform duration-700 group-hover:scale-110'
-                data-zoomable
-              />
-              
-              <!-- Hover Overlay -->
-              <div class='hover-overlay absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6'>
-                <h2 class='text-white font-bold text-lg drop-shadow-md transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300'>{photo.data.title}</h2>
-                {photo.data.mood && (
-                  <span class='text-white/80 text-sm mt-1 drop-shadow-sm transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 delay-75'>{photo.data.mood}</span>
-                )}
-              </div>
-
-              <!-- Story Overlay (Long Press) -->
-              {photo.data.story && (
-                <div class='story-overlay absolute inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300 z-10'>
-                  <div class='p-8 text-center transform translate-y-4 transition-transform duration-300'>
-                    <div class='text-4xl mb-4'>📖</div>
-                    <p class='text-white/90 text-sm leading-relaxed max-w-[280px]'>{photo.data.story}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <!-- Interaction Bar -->
-            <div class='interaction-bar flex items-center justify-between p-3 border-t border-border/50 bg-card/95 backdrop-blur-sm'>
-              <button
-                class='action-btn comment-btn flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/50 hover:bg-muted text-xs font-medium transition-colors'
-                data-photo-id={photo.data.id}
-                aria-label='评论'
-              >
-                <span>💬</span>
-                <span class='comment-count min-w-[1rem] text-center'>-</span>
-              </button>
-
-              <button
-                class='action-btn share-btn p-2 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors'
-                data-photo-id={photo.data.id}
-                aria-label='分享'
-              >
-                <span class='text-sm'>📤</span>
-              </button>
-            </div>
-
-            <!-- Comments Section -->
-            <div class='comments-section max-h-0 overflow-hidden transition-[max-height] duration-300 ease-in-out bg-muted/30' data-photo-id={photo.data.id}>
-              <div class='comments-list p-4 max-h-[280px] overflow-y-auto space-y-3' />
-              
-              <form class='comment-form p-4 border-t border-border/50 flex flex-col gap-3'>
-                <input
-                  type='text'
-                  class='comment-username w-full px-3 py-2 rounded-lg bg-background border border-border text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all'
-                  placeholder='Name'
-                  maxlength='30'
-                  required
-                />
-                <textarea
-                  class='comment-input w-full px-3 py-2 rounded-lg bg-background border border-border text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none'
-                  placeholder='Add a comment...'
-                  maxlength='500'
-                  rows='2'
-                  required
-                />
-                <button type='submit' class='comment-submit self-end px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-bold hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all'>
-                  <span class='submit-text'>Send</span>
-                  <span class='submit-loading hidden'>Sending...</span>
-                </button>
-              </form>
-            </div>
-          </article>
+        photos.map((p) => (
+          <button
+            type='button'
+            class='sw'
+            style={`--c:${p.color}`}
+            data-open={p.n}
+            data-n={p.n}
+            aria-label={`打开第 ${p.n} 张：${p.title}`}
+          />
         ))
       }
     </div>
+    <figcaption class='mono'>
+      <span>Palette of the roll</span><span>每格是一张照片的主色，点击打开</span>
+    </figcaption>
+  </figure>
 
-    <!-- Empty State -->
-    {
-      photos.length === 0 && (
-        <div class='text-center py-20'>
-          <span class='text-6xl block mb-4 opacity-20 grayscale'>📷</span>
-          <p class='text-muted-foreground text-lg'>No photos yet...</p>
-        </div>
-      )
-    }
+  <div class='toolbar'>
+    <div class='views' role='group' aria-label='视图'>
+      <button type='button' class='vbtn' data-view='roll' aria-pressed='true'>Roll</button>
+      <button type='button' class='vbtn' data-view='table' aria-pressed='false'>Table</button>
+    </div>
+    <button type='button' class='vbtn shuffle' id='shuffle' hidden>Shuffle</button>
+    <span class='mono hint' id='hint'>点照片看大图 · ← → 切换</span>
   </div>
 
-  <!-- Particle Effects Container -->
-  <div id='particle-container' aria-hidden='true' class="fixed inset-0 pointer-events-none z-[9999]" />
+  <section class='roll' id='roll' aria-label='照片'>
+    {
+      photos.map((p) => (
+        <button type='button' class='frame' data-open={p.n} data-n={p.n} style={`--c:${p.color}`}>
+          <img
+            src={p.thumb}
+            alt={p.alt}
+            width={p.w}
+            height={p.h}
+            loading={p.n <= 6 ? 'eager' : 'lazy'}
+            decoding='async'
+          />
+          <span class='cap mono'>
+            <span class='fr'>FR {pad(p.n)}</span>
+            <span class='ct'>{p.title}</span>
+            {p.story && <span class='st'>story</span>}
+          </span>
+        </button>
+      ))
+    }
+  </section>
 
-  <!-- Pass photoIds to client -->
-  <script define:vars={{ photoIds }}>
-    window.__photoIds = photoIds
-  </script>
+  <section class='table' id='table' aria-label='桌面：拖动照片' hidden>
+    {
+      photos.map((p) => (
+        <button
+          type='button'
+          class='print'
+          data-open={p.n}
+          data-n={p.n}
+          style={`--r:${p.tilt}deg;--c:${p.color};aspect-ratio:${p.w}/${p.h}`}
+          aria-label={`${p.title}（可拖动，回车打开）`}
+        >
+          <img src={p.thumb} alt='' width={p.w} height={p.h} loading='lazy' decoding='async' draggable='false' />
+          <span class='pcap mono'>{pad(p.n)}</span>
+        </button>
+      ))
+    }
+  </section>
+
+  <dialog class='viewer' id='viewer' aria-label='照片查看器'>
+    <div class='vtop mono'>
+      <span id='v-count'>01 / {pad(photos.length)}</span>
+      <span id='v-title'></span>
+      <button type='button' class='vclose' id='v-close' aria-label='关闭'>Esc ✕</button>
+    </div>
+    <div class='stage' id='v-stage'>
+      <button type='button' class='nav prev' id='v-prev' aria-label='上一张'>←</button>
+      <img id='v-img' alt='' />
+      <button type='button' class='nav next' id='v-next' aria-label='下一张'>→</button>
+    </div>
+    <p class='vstory' id='v-story' hidden></p>
+    <div class='strip' id='v-strip'>
+      {
+        photos.map((p) => (
+          <button type='button' class='sthumb' data-go={p.n} style={`--c:${p.color}`} aria-label={`第 ${p.n} 张`}>
+            <img src={p.thumb} alt='' loading='lazy' decoding='async' />
+          </button>
+        ))
+      }
+    </div>
+  </dialog>
+
+  <script type='application/json' id='photo-data' set:html={JSON.stringify(photos)} />
 </PageLayout>
 
-<style>
-  /* Essential Custom Animations & States that Tailwind utilities might not cover easily or cleanly */
-  
-  @keyframes fade-up {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .story-overlay.active {
-    opacity: 1;
-    pointer-events: auto;
-  }
-  
-  .story-overlay.active div {
-    transform: translateY(0);
-  }
-
-  .comments-section.open {
-    max-height: 600px;
-  }
-
-  /* Particle Animation */
-  :global(.particle) {
-    position: absolute;
-    pointer-events: none;
-    font-size: 1.5rem;
-    animation: float-away 2s ease-out forwards;
-  }
-
-  @keyframes float-away {
-    0% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
-    100% { opacity: 0; transform: translateY(-80px) rotate(180deg) scale(0.5); }
-  }
-  
-  /* Loading state for button */
-  .comment-submit.loading .submit-text { display: none; }
-  .comment-submit.loading .submit-loading { display: inline; }
-</style>
-
 <script>
-  import mediumZoom from 'medium-zoom'
-  import {
-    getAllPhotosStats,
-    addComment,
-    getComments,
-    getCommentCount,
-  } from '@/utils/supabase'
+  type P = { n: number; title: string; alt: string; story?: string; mood?: string; date?: string; large: string; thumb: string; color: string }
+  const photos: P[] = JSON.parse(document.getElementById('photo-data')!.textContent || '[]')
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-  document.addEventListener('DOMContentLoaded', async () => {
-    const photoIds = (window as any).__photoIds as string[]
-
-    // ===== Initialize Medium Zoom =====
-    const zoom = mediumZoom('[data-zoomable]', {
-      margin: 24,
-      background: 'hsl(0 0% 0% / 0.9)',
-      scrollOffset: 0,
+  // ---------- Viewer ----------
+  const dlg = document.getElementById('viewer') as HTMLDialogElement
+  const img = document.getElementById('v-img') as HTMLImageElement
+  const count = document.getElementById('v-count')!
+  const title = document.getElementById('v-title')!
+  const story = document.getElementById('v-story')!
+  const strip = document.getElementById('v-strip')!
+  const stageEl = document.getElementById('v-stage')!
+  let cur = 1
+  const preload = (n: number) => {
+    const p = photos[(n - 1 + photos.length) % photos.length]
+    if (p) new Image().src = p.large
+  }
+  const show = (n: number) => {
+    cur = ((n - 1 + photos.length) % photos.length) + 1
+    const p = photos[cur - 1]
+    img.classList.remove('in')
+    stageEl.style.setProperty('--c', p.color)
+    img.src = p.large
+    img.alt = p.alt
+    img.decode?.().catch(() => {}).finally(() => img.classList.add('in'))
+    count.textContent = `${pad(cur)} / ${pad(photos.length)}`
+    title.textContent = [p.title, p.date, p.mood].filter(Boolean).join(' · ')
+    story.hidden = !p.story
+    story.textContent = p.story ?? ''
+    strip.querySelectorAll<HTMLElement>('.sthumb').forEach((b) => {
+      const on = Number(b.dataset.go) === cur
+      b.classList.toggle('on', on)
+      if (on) b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: reduce ? 'auto' : 'smooth' })
     })
+    history.replaceState(null, '', `#photo-${pad(cur)}`)
+    preload(cur + 1)
+    preload(cur - 1)
+  }
+  const open = (n: number) => {
+    if (!dlg.open) dlg.showModal()
+    show(n)
+  }
+  dlg.addEventListener('close', () => history.replaceState(null, '', location.pathname))
+  document.getElementById('v-close')!.addEventListener('click', () => dlg.close())
+  document.getElementById('v-prev')!.addEventListener('click', () => show(cur - 1))
+  document.getElementById('v-next')!.addEventListener('click', () => show(cur + 1))
+  strip.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-go]')
+    if (b) show(Number(b.dataset.go))
+  })
+  dlg.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') show(cur + 1)
+    if (e.key === 'ArrowLeft') show(cur - 1)
+  })
+  // Click on the dark backdrop closes; swipe left/right navigates
+  const stage = document.getElementById('v-stage')!
+  let sx = 0
+  let sy = 0
+  stage.addEventListener('pointerdown', (e) => {
+    sx = e.clientX
+    sy = e.clientY
+  })
+  stage.addEventListener('pointerup', (e) => {
+    const dx = e.clientX - sx
+    const dy = e.clientY - sy
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) show(cur + (dx < 0 ? 1 : -1))
+    else if (e.target === stage && Math.abs(dx) < 6 && Math.abs(dy) < 6) dlg.close()
+  })
 
-    // ===== Long Press for Story =====
-    let pressTimer: number | null = null
-
-    document.querySelectorAll('.photo-card').forEach((card) => {
-      const element = card as HTMLElement
-      const story = element.dataset.story
-      if (!story) return
-
-      const overlay = element.querySelector('.story-overlay') as HTMLElement
-
-      const startPress = (e: Event) => {
-        if ((e.target as HTMLElement).hasAttribute('data-zoomable')) return
-        
-        // Prevent default only if checking for long press on non-interactive elements
-        // But we want to allow scrolling. 
-        // e.preventDefault() -> removed to allow scroll on mobile start
-        
-        pressTimer = window.setTimeout(() => {
-          overlay?.classList.add('active')
-          element.style.transform = 'scale(0.98)'
-          // Vibrate if available
-          if (navigator.vibrate) navigator.vibrate(50);
-        }, 500)
-      }
-
-      const endPress = () => {
-        if (pressTimer) {
-          clearTimeout(pressTimer)
-          pressTimer = null
-        }
-        overlay?.classList.remove('active')
-        element.style.transform = ''
-      }
-
-      element.addEventListener('mousedown', startPress)
-      element.addEventListener('touchstart', startPress, { passive: true })
-      element.addEventListener('mouseup', endPress)
-      element.addEventListener('mouseleave', endPress)
-      element.addEventListener('touchend', endPress)
-      element.addEventListener('touchcancel', endPress)
-    })
-
-    // ===== Particle Effects =====
-    const createParticles = (x: number, y: number) => {
-      const container = document.getElementById('particle-container')
-      if (!container) return
-
-      const emojis = ['🍃', '🌸', '🍂', '✨', '🌺', '💫']
-      const count = Math.floor(Math.random() * 3) + 2
-
-      for (let i = 0; i < count; i++) {
-        const particle = document.createElement('div')
-        particle.className = 'particle'
-        particle.textContent = emojis[Math.floor(Math.random() * emojis.length)]
-        particle.style.left = `${x + (Math.random() - 0.5) * 30}px`
-        particle.style.top = `${y}px`
-        container.appendChild(particle)
-        setTimeout(() => particle.remove(), 2000)
-      }
+  // ---------- Opening from the page ----------
+  let suppressClick = false
+  document.addEventListener('click', (e) => {
+    const t = (e.target as Element).closest<HTMLElement>('[data-open]')
+    if (!t || dlg.contains(t)) return
+    if (suppressClick) {
+      suppressClick = false
+      return
     }
+    open(Number(t.dataset.open))
+  })
+  // Deep links (#photo-07) on load and on back/forward
+  const fromHash = () => {
+    const m = location.hash.match(/^#photo-(\d+)/)
+    if (m) open(Number(m[1]))
+    else if (dlg.open) dlg.close()
+  }
+  fromHash()
+  window.addEventListener('hashchange', fromHash)
 
-    document.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement
-      if (target.hasAttribute('data-zoomable') || target.closest('.action-btn, .comment-form, .medium-zoom-overlay')) return
-      createParticles(e.clientX, e.clientY)
+  // Palette hover highlights the matching frame
+  const roll = document.getElementById('roll')!
+  document.querySelectorAll<HTMLElement>('.sw').forEach((sw) => {
+    sw.addEventListener('mouseenter', () => roll.querySelector(`.frame[data-n="${sw.dataset.n}"]`)?.classList.add('lit'))
+    sw.addEventListener('mouseleave', () => roll.querySelector(`.frame[data-n="${sw.dataset.n}"]`)?.classList.remove('lit'))
+  })
+
+  // ---------- Views ----------
+  const table = document.getElementById('table')!
+  const shuffleBtn = document.getElementById('shuffle') as HTMLButtonElement
+  const hint = document.getElementById('hint')!
+  const prints = Array.from(table.querySelectorAll<HTMLElement>('.print'))
+  let z = prints.length + 1
+  const scatter = (animate: boolean) => {
+    const W = table.clientWidth
+    const H = table.clientHeight
+    prints.forEach((pr) => {
+      const w = pr.offsetWidth
+      const h = pr.offsetHeight
+      const x = Math.random() * Math.max(1, W - w)
+      const y = Math.random() * Math.max(1, H - h)
+      const r = (Math.random() * 14 - 7).toFixed(2)
+      pr.style.transition = animate && !reduce ? 'left .6s cubic-bezier(.2,.7,.2,1), top .6s cubic-bezier(.2,.7,.2,1), transform .6s' : 'none'
+      pr.style.left = `${x}px`
+      pr.style.top = `${y}px`
+      pr.style.setProperty('--r', `${r}deg`)
     })
-
-    // ===== Load Stats (Batch Query) =====
-    // Note: If Supabase utils are missing in this environment, this might fail silently or error.
-    // Assuming utils/supabase exists as per previous code.
-    try {
-        const statsMap = await getAllPhotosStats(photoIds)
-        
-        let totalComments = 0
-
-        statsMap.forEach((stats, photoId) => {
-          totalComments += stats.commentCount
-
-          const card = document.querySelector(`[data-photo-id="${photoId}"]`) as HTMLElement
-          if (!card) return
-
-          const commentCount = card.querySelector('.comment-count')
-          if (commentCount) commentCount.textContent = String(stats.commentCount)
-        })
-
-        const totalCommentsEl = document.getElementById('total-comments')
-        if (totalCommentsEl) totalCommentsEl.textContent = String(totalComments)
-    } catch (e) {
-        console.warn('Failed to load stats', e)
+  }
+  const setView = (v: string) => {
+    const isTable = v === 'table'
+    roll.hidden = isTable
+    table.hidden = !isTable
+    shuffleBtn.hidden = !isTable
+    hint.textContent = isTable ? '拖动照片 · 点一下看大图 · Shuffle 重新摊开' : '点照片看大图 · ← → 切换'
+    document.querySelectorAll<HTMLButtonElement>('.vbtn[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === v)))
+    if (isTable && !table.dataset.ready) {
+      table.dataset.ready = '1'
+      requestAnimationFrame(() => scatter(false))
     }
+  }
+  document.querySelector('.views')!.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLButtonElement>('[data-view]')
+    if (b) setView(b.dataset.view!)
+  })
+  shuffleBtn.addEventListener('click', () => scatter(true))
 
-    // ===== Username localStorage =====
-    const STORAGE_KEY = 'photo_comment_username'
-    const savedUsername = localStorage.getItem(STORAGE_KEY) || ''
-
-    document.querySelectorAll('.comment-username').forEach((input) => {
-      const el = input as HTMLInputElement
-      el.value = savedUsername
+  // Drag prints on the table (pointer events: mouse, pen and touch)
+  prints.forEach((pr) => {
+    let dx = 0
+    let dy = 0
+    let moved = 0
+    let active = false
+    pr.addEventListener('pointerdown', (e) => {
+      active = true
+      moved = 0
+      pr.setPointerCapture(e.pointerId)
+      pr.style.transition = 'none'
+      pr.style.zIndex = String(++z)
+      pr.classList.add('lift')
+      dx = e.clientX - pr.offsetLeft
+      dy = e.clientY - pr.offsetTop
     })
-
-    // ===== Comment Toggle =====
-    document.querySelectorAll('.comment-btn').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation()
-        const photoId = (e.currentTarget as HTMLButtonElement).dataset.photoId
-        if (!photoId) return
-
-        const section = document.querySelector(
-          `.comments-section[data-photo-id="${photoId}"]`
-        ) as HTMLElement
-
-        if (section.classList.contains('open')) {
-          section.classList.remove('open')
-        } else {
-          section.classList.add('open')
-          // Add basic logic to load comments here if implementation exists
-        }
-      })
+    pr.addEventListener('pointermove', (e) => {
+      if (!active) return
+      const x = Math.min(Math.max(e.clientX - dx, -pr.offsetWidth * 0.3), table.clientWidth - pr.offsetWidth * 0.7)
+      const y = Math.min(Math.max(e.clientY - dy, -pr.offsetHeight * 0.3), table.clientHeight - pr.offsetHeight * 0.7)
+      moved += Math.abs(e.movementX) + Math.abs(e.movementY)
+      pr.style.left = `${x}px`
+      pr.style.top = `${y}px`
     })
-
-    // ===== Share Button =====
-    document.querySelectorAll('.share-btn').forEach((btn) => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation()
-        const photoId = (e.currentTarget as HTMLElement).dataset.photoId
-        const url = `${window.location.origin}/photos#photo-${photoId}`
-
-        if (navigator.share) {
-          try {
-            await navigator.share({ title: 'Photo Share', url })
-          } catch (err) {
-             // share cancelled
-          }
-        } else {
-            // Fallback: Copy to clipboard
-            try {
-                await navigator.clipboard.writeText(url);
-                alert('Link copied to clipboard!');
-            } catch(err) {
-                console.error('Failed to copy', err);
-            }
-        }
-      })
-    })
+    const end = () => {
+      if (!active) return
+      active = false
+      pr.classList.remove('lift')
+      if (moved > 4) suppressClick = true
+    }
+    pr.addEventListener('pointerup', end)
+    pr.addEventListener('pointercancel', end)
+  })
+  window.addEventListener('resize', () => {
+    if (!table.hidden) scatter(false)
   })
 </script>
+
+<style>
+  [hidden] {
+    display: none !important;
+  }
+  .palette {
+    margin: 0 0 1.5rem;
+  }
+  .swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(1.5rem, 1fr));
+    height: 2.25rem;
+    border-radius: var(--radius-box);
+    overflow: hidden;
+    border: var(--hair) solid hsl(var(--border));
+  }
+  .sw {
+    border: 0;
+    padding: 0;
+    background: var(--c);
+    cursor: pointer;
+    transition: transform 0.2s ease, filter 0.2s ease;
+  }
+  .sw:hover,
+  .sw:focus-visible {
+    transform: scaleY(1.25);
+    filter: saturate(1.2);
+    position: relative;
+    z-index: 1;
+  }
+  .palette figcaption {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  .palette figcaption span:first-child {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: hsl(var(--foreground));
+  }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .views {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .vbtn {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground));
+    background: transparent;
+    border: var(--hair) solid hsl(var(--foreground) / 0.55);
+    border-radius: var(--radius);
+    padding: 0.2rem 0.6rem;
+    cursor: pointer;
+  }
+  .vbtn[aria-pressed='true'] {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border-color: hsl(var(--foreground));
+  }
+  .shuffle:hover {
+    border-color: hsl(var(--scarf));
+    color: hsl(var(--primary));
+  }
+  .hint {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  /* Roll: masonry, full frames, no cropping */
+  .roll {
+    columns: 3 18rem;
+    column-gap: 1rem;
+  }
+  .frame {
+    display: block;
+    width: 100%;
+    margin: 0 0 1rem;
+    padding: 0;
+    break-inside: avoid;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: 3px;
+    background: hsl(var(--card));
+    overflow: hidden;
+    cursor: zoom-in;
+    text-align: left;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: var(--c);
+  }
+  .frame:hover,
+  .frame.lit,
+  .frame:focus-visible {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-float);
+    border-color: hsl(var(--scarf) / 0.6);
+  }
+  .cap {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.68rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .fr {
+    color: hsl(var(--foreground));
+  }
+  .ct {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .st {
+    color: hsl(var(--primary));
+    border: var(--hair) solid hsl(var(--scarf) / 0.6);
+    border-radius: var(--radius);
+    padding: 0 0.3rem;
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  /* Table: prints on a dark lightbox */
+  .table {
+    position: relative;
+    height: min(78svh, 760px);
+    min-height: 520px;
+    border-radius: var(--radius-box);
+    overflow: hidden;
+    background:
+      radial-gradient(120% 90% at 50% 40%, rgb(255 255 255 / 0.06), transparent 70%),
+      linear-gradient(rgb(255 255 255 / 0.04) 1px, transparent 1px) 0 0 / 48px 48px,
+      linear-gradient(90deg, rgb(255 255 255 / 0.04) 1px, transparent 1px) 0 0 / 48px 48px,
+      #101317;
+    touch-action: pan-y;
+  }
+  .print {
+    position: absolute;
+    left: 40%;
+    top: 30%;
+    width: clamp(120px, 17vw, 210px);
+    padding: 7px 7px 22px;
+    border: 0;
+    border-radius: 2px;
+    background: #f7f7f4;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.4),
+      0 10px 24px rgb(0 0 0 / 0.35);
+    transform: rotate(var(--r));
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .print img {
+    display: block;
+    width: 100%;
+    height: calc(100% - 0px);
+    object-fit: cover;
+    background: var(--c);
+    pointer-events: none;
+  }
+  .print.lift {
+    cursor: grabbing;
+    box-shadow:
+      0 2px 4px rgb(0 0 0 / 0.4),
+      0 24px 48px rgb(0 0 0 / 0.5);
+    transform: rotate(var(--r)) scale(1.04);
+  }
+  .print:focus-visible {
+    outline: 2px solid #f08a4b;
+    outline-offset: 3px;
+  }
+  .pcap {
+    position: absolute;
+    left: 8px;
+    bottom: 4px;
+    font-size: 10px;
+    color: #66707c;
+  }
+  /* Viewer */
+  .viewer {
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: rgb(8 9 11 / 0.96);
+    color: #e6e9ec;
+    display: none;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+  }
+  .viewer[open] {
+    display: grid;
+  }
+  .viewer::backdrop {
+    background: rgb(0 0 0 / 0.6);
+  }
+  .vtop {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: max(0.75rem, env(safe-area-inset-top)) 1rem 0.5rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: rgb(230 233 236 / 0.75);
+  }
+  #v-count {
+    color: #fff;
+  }
+  #v-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .vclose {
+    font: inherit;
+    color: #e6e9ec;
+    background: rgb(255 255 255 / 0.06);
+    border: 1px solid rgb(255 255 255 / 0.2);
+    border-radius: 2px;
+    padding: 0.25rem 0.6rem;
+    cursor: pointer;
+  }
+  .stage {
+    position: relative;
+    min-height: 0;
+    touch-action: pan-y;
+    overflow: hidden;
+  }
+  /* Ambient glow in the photo's dominant colour */
+  .stage::before {
+    content: '';
+    position: absolute;
+    inset: 10% 15%;
+    background: radial-gradient(closest-side, var(--c, transparent), transparent);
+    opacity: 0.35;
+    filter: blur(60px);
+    transition: background 0.4s ease;
+    pointer-events: none;
+  }
+  #v-img {
+    position: absolute;
+    inset: 0.5rem 3.75rem;
+    width: calc(100% - 7.5rem);
+    height: calc(100% - 1rem);
+    object-fit: contain;
+    border-radius: 2px;
+    opacity: 0;
+    transform: scale(0.985);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    user-select: none;
+  }
+  #v-img.in {
+    opacity: 1;
+    transform: none;
+  }
+  .nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 2px;
+    border: 1px solid rgb(255 255 255 / 0.2);
+    background: rgb(255 255 255 / 0.06);
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .nav:hover {
+    border-color: #f08a4b;
+  }
+  .prev {
+    left: 0.75rem;
+  }
+  .next {
+    right: 0.75rem;
+  }
+  .vstory {
+    margin: 0 auto;
+    max-width: 36rem;
+    padding: 0.25rem 1rem 0;
+    text-align: center;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: rgb(230 233 236 / 0.85);
+  }
+  .strip {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .sthumb {
+    flex: none;
+    width: 3.25rem;
+    height: 2.4rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    background: var(--c);
+    opacity: 0.5;
+    cursor: pointer;
+    overflow: hidden;
+    transition: opacity 0.2s ease, border-color 0.2s ease;
+  }
+  .sthumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .sthumb:hover {
+    opacity: 0.85;
+  }
+  .sthumb.on {
+    opacity: 1;
+    border-color: #f08a4b;
+  }
+  @media (max-width: 640px) {
+    #v-img {
+      inset: 0.5rem;
+      width: calc(100% - 1rem);
+    }
+    .nav {
+      display: none;
+    }
+    .hint {
+      margin-left: 0;
+      width: 100%;
+    }
+    .table {
+      min-height: 460px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .frame,
+    #v-img,
+    .sw {
+      transition: none;
+    }
+  }
+</style>

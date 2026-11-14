@@ -1,81 +1,152 @@
 ---
-import { getCollection, render } from 'astro:content'
 import { Image } from 'astro:assets'
-import PageLayout from '@/layouts/CommonPage.astro'
-import { Button } from 'astro-pure/user'
+import { getCollection, render } from 'astro:content'
+
+import PageLayout from '@/layouts/BaseLayout.astro'
 
 export async function getStaticPaths() {
-  const murmurs = await getCollection('murmurs', ({ data }) => !data.draft)
-  return murmurs.map((entry) => ({
+  const murmurs = (await getCollection('murmurs', ({ data }) => !data.draft)).sort(
+    (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
+  )
+  return murmurs.map((entry, i) => ({
     params: { id: entry.id },
-    props: { entry },
+    props: { entry, newer: murmurs[i - 1], older: murmurs[i + 1] }
   }))
 }
 
-const { entry } = Astro.props
+const { entry, newer, older } = Astro.props
 const { Content } = await render(entry)
+const d = entry.data.publishDate
+const WEEK = ['日', '一', '二', '三', '四', '五', '六']
+const stamp = `${d.toISOString().slice(0, 10)} · 周${WEEK[d.getUTCDay()]}`
+const label = (e?: typeof entry) => e?.data.title || e?.body?.replace(/[#>*_`]/g, '').trim().slice(0, 28) || '无题'
 ---
 
-<PageLayout title={entry.data.title || 'Murmur'} comment>
-  <div class='max-w-[800px] mx-auto px-4 py-8'>
-    <!-- Back Button -->
-    <div class='mb-8'>
-      <Button title='Back' href='/murmurs' variant='back' />
-    </div>
-
-    <!-- Article Header -->
-    <header class='mb-10 text-center'>
-      <div class='flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4'>
-        <time datetime={entry.data.publishDate.toISOString()}>
-          {entry.data.publishDate.toLocaleDateString('zh-CN', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            weekday: 'long'
-          })}
-        </time>
-        {entry.data.tags.length > 0 && (
-          <>
-            <span>·</span>
-            <div class='flex gap-2'>
-              {entry.data.tags.map(tag => (
-                <span class='text-primary'>#{tag}</span>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      <h1 class='text-3xl md:text-4xl font-bold mb-6 leading-tight'>
-        {entry.data.title || '无题'}
-      </h1>
-
-      {entry.data.cover && (
-        <div class='relative aspect-video w-full overflow-hidden rounded-xl shadow-lg mb-8'>
-          <Image
-            src={entry.data.cover}
-            alt={entry.data.title || 'Cover'}
-            class='w-full h-full object-cover'
-            width={1200}
-            height={675}
-          />
-        </div>
-      )}
-    </header>
-
-    <!-- Content -->
-    <article class='prose dark:prose-invert max-w-none prose-lg prose-headings:font-bold prose-p:leading-relaxed prose-img:rounded-xl'>
+<PageLayout meta={{ title: entry.data.title || '碎碎念', description: entry.body?.slice(0, 120) }}>
+  <article class='murmur'>
+    <a class='crumb mono' href={`/murmurs#m-${entry.id}`}>← Murmurs</a>
+    <p class='meta mono'>
+      <time datetime={d.toISOString()}>{stamp}</time>
+      {entry.data.tags.map((t) => <span class='tag'>#{t}</span>)}
+    </p>
+    {entry.data.title && entry.data.title !== '无题' && <h1>{entry.data.title}</h1>}
+    <div class='text prose prose-t1 max-w-none'>
       <Content />
-    </article>
-
-    <!-- Footer -->
-    <div class='mt-12 pt-8 border-t border-border flex justify-between items-center text-muted-foreground'>
-      <div class='text-sm'>
-        Published by Jerry
-      </div>
-      <div class='text-sm'>
-        {entry.data.publishDate.toLocaleDateString('zh-CN')}
-      </div>
     </div>
-  </div>
+    {
+      entry.data.cover && (
+        <figure class='print'>
+          <Image src={entry.data.cover} alt={entry.data.title || '配图'} width={900} quality={80} />
+        </figure>
+      )
+    }
+    <nav class='pn' aria-label='其他碎碎念'>
+      {
+        newer ? (
+          <a href={`/murmurs/${newer.id}`}>
+            <span class='mono'>← 更新的一条</span>
+            {label(newer)}
+          </a>
+        ) : (
+          <span />
+        )
+      }
+      {
+        older && (
+          <a class='older' href={`/murmurs/${older.id}`}>
+            <span class='mono'>更早的一条 →</span>
+            {label(older)}
+          </a>
+        )
+      }
+    </nav>
+  </article>
 </PageLayout>
+
+<style>
+  .murmur {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 2rem 0 1rem;
+  }
+  .crumb {
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+  }
+  .crumb:hover {
+    color: hsl(var(--primary));
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.9rem;
+    margin: 2rem 0 0.75rem;
+    font-size: 0.75rem;
+    color: hsl(var(--faint));
+  }
+  .tag {
+    color: hsl(var(--primary));
+  }
+  h1 {
+    margin: 0 0 1.25rem;
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+  }
+  .text {
+    font-size: 1.15rem;
+  }
+  .print {
+    width: min(30rem, 100%);
+    margin: 2rem 0 0;
+    padding: 8px 8px 26px;
+    background: #f7f7f4;
+    border-radius: 2px;
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.18),
+      0 10px 24px rgb(0 0 0 / 0.14);
+    transform: rotate(-1.2deg);
+  }
+  .print :global(img) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .pn {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin-top: 3rem;
+  }
+  .pn a {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.8rem 1rem;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    text-decoration: none;
+    overflow: hidden;
+  }
+  .pn a:hover {
+    border-color: hsl(var(--scarf) / 0.6);
+  }
+  .pn .mono {
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  .pn .older {
+    grid-column: 2;
+    text-align: right;
+  }
+  @media (max-width: 560px) {
+    .pn {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .pn .older {
+      grid-column: 1;
+    }
+  }
+</style>
