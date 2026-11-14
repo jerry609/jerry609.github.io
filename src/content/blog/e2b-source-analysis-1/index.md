@@ -3,6 +3,8 @@ title: 'E2B 源码分析（一）：架构总览与核心概念'
 description: '深入剖析 E2B 开源沙箱平台的整体架构、核心组件与技术选型，理解 AI Agent 安全执行环境的设计思路。'
 publishDate: '2025-12-04'
 layer: runtime
+source:
+  kind: 'code'
 tags: ['源码分析', '沙箱', 'ai', 'agent', 'firecracker', 'e2b']
 language: 'zh-CN'
 ---

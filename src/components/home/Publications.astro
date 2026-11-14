@@ -1,0 +1,117 @@
+---
+import { ME, PUBLICATIONS } from '@/data/publications'
+
+const pubs = [...PUBLICATIONS].sort((a, b) => b.year - a.year)
+const short = (venue: string, year: number) => `${venue} ’${String(year).slice(-2)}`
+const ARTIFACT: Record<string, string> = {
+  available: 'Artifacts Available',
+  functional: 'Artifacts Functional',
+  reproduced: 'Results Reproduced'
+}
+---
+
+{
+  pubs.length > 0 && (
+    <section id='publications'>
+      <div class='sec-head'>
+        <h2 class='sec-title'>
+          Publications<span class='zh'>论文</span>
+        </h2>
+      </div>
+      <ul class='pubs'>
+        {pubs.map((p) => (
+          <li>
+            <span class='venue mono'>{short(p.venue, p.year)}</span>
+            <div class='body'>
+              <p class='title'>{p.title}</p>
+              <p class='authors'>
+                {p.authors.map((a, i) => (
+                  <>
+                    {i > 0 && ', '}
+                    {a === ME ? <strong>{a}</strong> : a}
+                  </>
+                ))}
+                {p.status === 'preprint' && <span class='mono status'>preprint</span>}
+              </p>
+              <p class='links mono'>
+                {Object.entries(p.links ?? {}).map(([k, href]) => (
+                  <a href={href} target='_blank' rel='noopener'>
+                    {k}
+                  </a>
+                ))}
+                {(p.artifacts ?? []).map((a) => (
+                  <span class='artifact'>{ARTIFACT[a]}</span>
+                ))}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+<style>
+  .pubs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: var(--hair) solid hsl(var(--border));
+  }
+  .pubs li {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0.875rem 0;
+    border-bottom: var(--hair) solid hsl(var(--border));
+  }
+  .venue {
+    align-self: start;
+    justify-self: start;
+    padding: 0.05rem 0.4rem;
+    border: var(--hair) solid hsl(var(--foreground));
+    border-radius: var(--radius);
+    color: hsl(var(--foreground));
+  }
+  .body p {
+    margin: 0;
+  }
+  .title {
+    font-weight: 600;
+  }
+  .authors {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9rem;
+  }
+  .authors strong {
+    color: hsl(var(--foreground));
+  }
+  .status {
+    margin-left: 0.5rem;
+    color: hsl(var(--faint));
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.875rem;
+    margin-top: 0.25rem !important;
+  }
+  .links a {
+    color: hsl(var(--foreground));
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--scarf) / 0.6);
+    text-underline-offset: 3px;
+  }
+  .artifact {
+    padding: 0 0.35rem;
+    border: var(--hair) solid hsl(var(--positive));
+    border-radius: var(--radius);
+    color: hsl(var(--positive));
+  }
+  @media (max-width: 600px) {
+    .pubs li {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.375rem;
+    }
+  }
+</style>

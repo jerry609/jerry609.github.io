@@ -86,7 +86,7 @@ export const integ: IntegrationUserConfig = {
     target: `() => ''`
   },
   typography: {
-    class: 'prose text-base',
+    class: 'prose prose-t1',
     blockquoteStyle: 'normal',
     inlineCodeBlockStyle: 'modern'
   },

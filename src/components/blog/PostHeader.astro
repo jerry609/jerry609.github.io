@@ -1,7 +1,7 @@
 ---
 import type { CollectionEntry } from 'astro:content'
 
-import { layerLabel, SERIES } from '@/data/stack'
+import { layerLabel, SERIES, sourceLabel } from '@/data/stack'
 
 interface Props {
   post: CollectionEntry<'blog'>
@@ -9,7 +9,7 @@ interface Props {
 }
 
 const { post, minutesRead } = Astro.props
-const { title, description, publishDate, updatedDate, tags, layer, draft } = post.data
+const { title, description, publishDate, updatedDate, tags, layer, draft, source } = post.data
 const fmt = (d: Date) => d.toISOString().slice(0, 10)
 const series = SERIES.find((s) => (s.slugs as readonly string[]).includes(post.id))
 const pos = series ? (series.slugs as readonly string[]).indexOf(post.id) + 1 : 0
@@ -29,6 +29,21 @@ const pos = series ? (series.slugs as readonly string[]).indexOf(post.id) + 1 : 
   </p>
   <h1>{title}</h1>
   {description && <p class='lede'>{description}</p>}
+  {
+    source && (
+      <p class='source mono'>
+        <span class='src'>{sourceLabel(source)}</span>
+        {source.title &&
+          (source.url ? (
+            <a href={source.url} target='_blank' rel='noopener'>
+              {source.title} ↗
+            </a>
+          ) : (
+            <span>{source.title}</span>
+          ))}
+      </p>
+    )
+  }
   <p class='meta mono'>
     <time datetime={publishDate.toISOString()}>{fmt(publishDate)}</time>
     {updatedDate && <span>更新于 {fmt(updatedDate)}</span>}
@@ -50,7 +65,7 @@ const pos = series ? (series.slugs as readonly string[]).indexOf(post.id) + 1 : 
 <style>
   .post-head {
     padding-bottom: 1.75rem;
-    border-bottom: 1px solid hsl(var(--border));
+    border-bottom: var(--hair) solid hsl(var(--border));
     max-width: 46rem;
   }
   .kicker {
@@ -91,6 +106,29 @@ const pos = series ? (series.slugs as readonly string[]).indexOf(post.id) + 1 : 
     line-height: 1.75;
     color: hsl(var(--muted-foreground));
     margin: 0 0 1.25rem;
+  }
+  .source {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.6rem;
+    margin: 0 0 0.75rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .source .src {
+    padding: 0 0.4rem;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius);
+    color: hsl(var(--foreground));
+  }
+  .source a {
+    color: hsl(var(--muted-foreground));
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--scarf) / 0.6);
+    text-underline-offset: 3px;
+  }
+  .source a:hover {
+    color: hsl(var(--primary));
   }
   .meta {
     display: flex;

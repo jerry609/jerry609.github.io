@@ -3,6 +3,8 @@ title: '代码拆解：oh-my-codex 是如何实现 Ralph Loop 的'
 description: 'oh-my-codex 里的 Ralph loop 并不是简单的 while true。代码层面对应的是一个由提示词契约、持久化状态、Turn Hook 与后台 Watcher 共同构成的持久化执行框架。'
 publishDate: '2026-04-02'
 layer: agent
+source:
+  kind: 'code'
 tags: ['Agent', '源码分析', '系统设计', 'oh-my-codex', 'Harness']
 language: 'zh-CN'
 draft: false

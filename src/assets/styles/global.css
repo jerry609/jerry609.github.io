@@ -237,3 +237,64 @@ body::-webkit-scrollbar {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Callouts: > [!TAKEAWAY] / > [!THEOREM] 4.5 / > [!NOTE] (src/plugins/rehype-callouts.ts) */
+.prose aside.callout {
+  margin: 1.5rem 0;
+  padding: 0.75rem 1rem 0.25rem;
+  border: var(--hair) solid hsl(var(--border));
+  border-radius: var(--radius);
+  font-style: normal;
+  quotes: none;
+}
+.prose aside.callout > :last-child {
+  margin-bottom: 0.6rem;
+}
+.prose aside.callout p {
+  margin: 0.35rem 0;
+}
+.prose .callout-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  align-items: baseline;
+  margin: 0 0 0.25rem !important;
+}
+.prose .callout-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.prose .callout-title {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+/* Systems-paper takeaway: surface + scarf rule */
+.prose .callout-takeaway {
+  background: hsl(var(--card));
+  box-shadow: inset 3px 0 0 hsl(var(--scarf));
+}
+.prose .callout-takeaway .callout-label {
+  color: hsl(var(--primary));
+}
+/* ML-paper formal statement: sunken + serif */
+.prose .callout-formal {
+  background: hsl(var(--muted));
+  font-family: var(--font-display);
+}
+.prose .callout-formal .callout-title {
+  font-family: var(--font-display);
+}
+.prose .callout-note {
+  background: hsl(var(--card));
+  box-shadow: inset 3px 0 0 hsl(var(--info));
+}
+.prose .callout-warn {
+  background: hsl(var(--card));
+  box-shadow: inset 3px 0 0 hsl(var(--warning));
+}
+.prose .callout-warn .callout-label {
+  color: hsl(var(--warning));
+}

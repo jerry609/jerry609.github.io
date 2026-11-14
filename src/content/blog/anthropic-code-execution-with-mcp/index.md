@@ -3,6 +3,10 @@ title: '翻译：Anthropic——用 MCP 实现高效 Agent 的代码执行'
 description: '翻译自 Anthropic 工程博客，介绍如何通过代码执行和 MCP 协议提升 Agent 的效率、节省 Token、增强安全性和可扩展性。'
 publishDate: '2025-12-03'
 layer: agent
+source:
+  kind: 'translation'
+  title: 'Code execution with MCP: Building more efficient agents'
+  url: 'https://www.anthropic.com/engineering/code-execution-with-mcp'
 tags: ['ai', 'agent', 'MCP', '工程实践', '翻译']
 ---
 

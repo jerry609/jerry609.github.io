@@ -38,7 +38,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
   <div class='track'>
     <p class='kicker mono'>
       <span class='live'>Now reading</span>
-      <span data-np='idx'>{pad(1)} / {pad(tracks.length)}</span>
+      <span class='readout idx' data-np='idx'>{pad(1)}/{pad(tracks.length)}</span>
       <span data-np='layer'>{first.l}</span>
       <span data-np='album' hidden={!first.a}>{first.a}</span>
     </p>
@@ -99,7 +99,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
   <div class='progress mono'>
     <span data-np='date'>{first.d}</span>
     <span class='bar' aria-hidden='true'><i data-np='bar' style={`width:${(100 / tracks.length).toFixed(2)}%`}></i></span>
-    <span data-np='len'>{first.m} min</span>
+    <span class='readout len' data-np='len' title='预计阅读时长'>{pad(first.m)}:00</span>
   </div>
 
   <script type='application/json' data-np='data' set:html={JSON.stringify(tracks)} />
@@ -117,7 +117,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
     const show = (next: number) => {
       i = (next + tracks.length) % tracks.length
       const t = tracks[i]
-      $('idx').textContent = `${pad(i + 1)} / ${pad(tracks.length)}`
+      $('idx').textContent = `${pad(i + 1)}/${pad(tracks.length)}`
       $('layer').textContent = t.l
       $('album').textContent = t.a
       $('album').hidden = !t.a
@@ -126,7 +126,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
       ;($('play') as HTMLAnchorElement).href = `/blog/${t.s}`
       $('desc').textContent = t.x
       $('date').textContent = t.d
-      $('len').textContent = `${t.m} min`
+      $('len').textContent = `${pad(t.m)}:00`
       $('bar').style.width = `${(((i + 1) / tracks.length) * 100).toFixed(2)}%`
       root.classList.remove('flip')
       void root.offsetWidth
@@ -151,8 +151,8 @@ const pad = (n: number) => String(n).padStart(2, '0')
     gap: 0.5rem 1.25rem;
     align-items: center;
     padding: 1rem 1.25rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 6px;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
     background: hsl(var(--card));
     outline: none;
   }
@@ -172,7 +172,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
     display: block;
     width: 6px;
     height: 100%;
-    background: hsl(var(--primary));
+    background: hsl(var(--scarf));
     transform-origin: bottom;
     animation: eq 1.2s steps(4, end) infinite;
   }
@@ -215,6 +215,11 @@ const pad = (n: number) => String(n).padStart(2, '0')
     gap: 0.125rem 0.75rem;
     margin: 0;
     color: hsl(var(--faint));
+  }
+  .idx,
+  .len {
+    color: hsl(var(--foreground));
+    font-size: 0.85rem;
   }
   .live {
     color: hsl(var(--primary));
@@ -268,7 +273,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
     justify-content: center;
     width: 2.25rem;
     height: 2.25rem;
-    border: 1px solid hsl(var(--border));
+    border: var(--hair) solid hsl(var(--border));
     border-radius: 4px;
     background: hsl(var(--background));
     color: hsl(var(--foreground));
@@ -294,9 +299,9 @@ const pad = (n: number) => String(n).padStart(2, '0')
     height: 14px;
   }
   .ctl.play:hover {
-    background: hsl(var(--primary));
-    border-color: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
+    background: hsl(var(--scarf));
+    border-color: hsl(var(--scarf));
+    color: hsl(0 0% 100%);
   }
   .progress {
     grid-area: progress;
@@ -316,7 +321,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
   .bar i {
     display: block;
     height: 100%;
-    background: hsl(var(--primary));
+    background: hsl(var(--scarf));
     transition: width 0.25s steps(4, end);
   }
   @media (max-width: 640px) {

@@ -1,7 +1,7 @@
 import { defineCollection, z } from 'astro:content'
 import { glob } from 'astro/loaders'
 
-import { LAYER_IDS } from './data/stack'
+import { LAYER_IDS, SOURCE_KINDS } from './data/stack'
 
 function removeDupsAndLowerCase(array: string[]) {
   if (!array.length) return array
@@ -37,6 +37,16 @@ const blog = defineCollection({
       tags: z.array(z.string()).default([]).transform(removeDupsAndLowerCase),
       // Which layer of the agent × infra stack this post sits on (see src/data/stack.ts)
       layer: z.enum(LAYER_IDS).default('notes'),
+      // What the post is built on: a venue paper, a tech report, a postmortem, a code reading…
+      source: z
+        .object({
+          kind: z.enum(SOURCE_KINDS),
+          venue: z.string().optional(),
+          year: z.number().int().optional(),
+          title: z.string().optional(),
+          url: z.string().url().optional()
+        })
+        .optional(),
       language: z.string().optional(),
       draft: z.boolean().default(false),
       // `true` pins a post; larger numbers sort higher when multiple posts are pinned.

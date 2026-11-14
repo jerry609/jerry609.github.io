@@ -1,42 +1,67 @@
 /*
- * Design tokens for jerry609.github.io
- * Layout idea: one 72rem column; every page is a stack of plain sections.
- * Identity: a pixel mouse with headphones and a plaid scarf (src/components/brand). The scarf's
- *           orange is the only accent; everything else is ink on cool paper.
- * Type: Pixelify Sans for the wordmark and section titles, Source Serif 4 for article titles (Songti on macOS for Chinese, sans elsewhere), Geist for text,
- *       Geist Mono for dates, labels and data. Chinese body text uses the system CJK sans.
+ * jerry609 theme v2: Mouse · Asphalt · Scarf
+ * The palette comes from the avatar photo: a white mouse (surfaces) on grey asphalt (ground)
+ * wearing a plaid scarf (the only accent). Light = asphalt by day, dark = asphalt at night.
+ *
+ * Accent has two tiers:
+ *   --scarf    graphics only (underlines, bars, progress, focus, selected marks); it is the
+ *              mascot's scarf colour and passes 3:1 against the ground
+ *   --primary  accent text (link hover, labels); one step darker (light) / lighter (dark), ≥4.5:1
+ * Layers of the stack never get colours; only the selected one turns scarf.
+ *
+ * Type: Geist for UI, titles and body; Source Serif 4 for article titles and theorem boxes;
+ *       Pixelify Sans only for the wordmark and numeric read-outs; Geist Mono for metadata.
+ * Scale: T1 17/30 (article body) · T2 16/26 · B1 15/24 · B2 14/22 · C1 12/18 · C2 10/14
+ * Shape: radius 0 / 2px (controls, tags) / 6px (containers); hairline 0.5px on 2x screens.
  */
 
 /* Theme (HSL triplets, consumed by UnoCSS as hsl(var(--x) / alpha)) */
 :root {
-  --background: 150 9.1% 95.7%;
-  --foreground: 213 20% 8.8%;
-  --card: 0 0% 100%;
-  --card-foreground: 213 20% 8.8%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 213 20% 8.8%;
-  --primary: 20 77.8% 38.8%;
+  /* Background */
+  --background: 210 20% 96.1%; /* ground   #f3f5f7 */
+  --card: 0 0% 100%; /* surface  #ffffff */
+  --muted: 210 18.7% 93.7%; /* sunken   #eceff2 */
+  --band: 210 21.4% 94.5%;
+  /* Lines */
+  --s1: 213 16.4% 89.2%; /* #dfe3e8 headphones */
+  --s2: 214 13.2% 79.2%; /* #c3c9d1 headphone shadow */
+  /* Labels */
+  --foreground: 213 20% 8.8%; /* L1 #12161b ink */
+  --muted-foreground: 213 11.8% 36.5%; /* L2 #525c68 */
+  --faint: 213 9.7% 44.3%; /* L3 #66707c */
+  /* Accent */
+  --scarf: 21 66.9% 49.8%; /* #d4652a */
+  --primary: 20 77.8% 38.8%; /* #b04a16 */
   --primary-foreground: 0 0% 100%;
-  --secondary: 150 9.5% 91.8%;
-  --secondary-foreground: 213 20% 8.8%;
-  --muted: 150 9.5% 91.8%;
-  --muted-foreground: 211 10.9% 37.8%;
-  --accent: 160 9.7% 93.9%;
-  --accent-foreground: 213 20% 8.8%;
-  --destructive: 0 72.22% 50.59%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 150 8.6% 86.3%;
-  --input: 150 8.6% 86.3%;
-  --ring: 20 77.8% 38.8%;
-  --radius: 0.25rem;
+  /* Status */
+  --positive: 148 55.4% 30.8%;
+  --warning: 40 100% 28%;
+  --negative: 4 64.1% 45.9%;
+  --info: 224 55.3% 46.5%;
+  /* Data marks (trace figure) */
+  --mark: 214 15.7% 20%;
 
-  /* site-only tokens */
-  --band: 160 9.7% 93.9%;
-  --mark: 213 16% 20%;
-  --faint: 211 7% 57%;
+  /* Theme compatibility */
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--band);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--negative);
+  --destructive-foreground: 0 0% 100%;
+  --border: var(--s1);
+  --input: var(--s1);
+  --ring: var(--scarf);
 
-  --font-pixel: 'Pixelify Sans Variable', 'Pixelify Sans', 'PingFang SC', 'Microsoft YaHei',
-    ui-monospace, monospace;
+  --hair: 1px;
+  --radius: 0.125rem;
+  --radius-box: 6px;
+  --shadow-float: 0 64px 80px rgb(0 0 0 / 0.06), 0 17px 18px rgb(0 0 0 / 0.04),
+    0 5px 5px rgb(0 0 0 / 0.02);
+
+  --font-pixel: 'Pixelify Sans Variable', 'Pixelify Sans', ui-monospace, monospace;
   --font-display: 'Source Serif 4 Variable', 'Source Serif 4', 'Songti SC', 'Noto Serif CJK SC',
     'Source Han Serif SC', 'PingFang SC', 'Microsoft YaHei', Georgia, serif;
   --font-body: 'Geist Variable', 'Geist', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
@@ -45,29 +70,31 @@
     Consolas, monospace;
 }
 .dark {
-  --background: 210 17.6% 6.7%;
-  --foreground: 210 13.6% 91.4%;
-  --card: 210 19.2% 10.2%;
-  --card-foreground: 210 13.6% 91.4%;
-  --popover: 210 19.2% 10.2%;
-  --popover-foreground: 210 13.6% 91.4%;
-  --primary: 23 84.6% 61.8%;
-  --primary-foreground: 210 17.6% 6.7%;
-  --secondary: 210 18.8% 12.5%;
-  --secondary-foreground: 210 13.6% 91.4%;
-  --muted: 210 18.8% 12.5%;
-  --muted-foreground: 212 10.4% 64.1%;
-  --accent: 210 18.8% 12.5%;
-  --accent-foreground: 210 13.6% 91.4%;
-  --destructive: 0 62.8% 45%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 210 15.6% 17.6%;
-  --input: 210 15.6% 17.6%;
-  --ring: 23 84.6% 61.8%;
-
-  --band: 207 20% 8.8%;
-  --mark: 210 12% 82%;
-  --faint: 211 8% 45%;
+  --background: 210 16.7% 7.1%; /* #0f1215 */
+  --card: 213 17% 10.4%; /* #161a1f */
+  --muted: 210 18.2% 8.6%; /* #12161a */
+  --band: 210 17.4% 9%;
+  --s1: 210 15.6% 17.6%; /* #262d34 */
+  --s2: 213 14.5% 24.3%; /* #353d47 */
+  --foreground: 210 13.6% 91.4%; /* #e6e9ec */
+  --muted-foreground: 212 10.4% 64.1%; /* #9aa3ad */
+  --faint: 211 8.8% 53.1%; /* #7d8792 */
+  --scarf: 23 84.6% 61.8%; /* #f08a4b */
+  --primary: 23 86.3% 68.6%; /* #f4a06a */
+  --primary-foreground: 210 16.7% 7.1%;
+  --positive: 147 45.5% 56.1%;
+  --warning: 42 74.3% 57.3%;
+  --negative: 5 84% 68.2%;
+  --info: 226 100% 74.5%;
+  --mark: 212 15.8% 81.4%;
+  --shadow-float: 0 24px 48px rgb(0 0 0 / 0.5), 0 4px 8px rgb(0 0 0 / 0.4);
+}
+/* Hairlines on high-density screens: thinner but one step darker so they stay visible */
+@media (min-resolution: 2dppx) {
+  :root {
+    --hair: 0.5px;
+    --border: var(--s2);
+  }
 }
 :root {
   --un-default-border-color: hsl(var(--border) / 1);
@@ -92,13 +119,13 @@ a {
   }
 }
 ::selection {
-  background: hsl(var(--primary) / 0.25);
+  background: hsl(var(--scarf) / 0.25);
 }
 .font-pixel {
   font-family: var(--font-pixel);
 }
 :focus-visible {
-  outline: 2px solid hsl(var(--primary));
+  outline: 2px solid hsl(var(--scarf));
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -122,6 +149,43 @@ a {
   color: hsl(var(--faint));
 }
 
+/* Type scale (see header) */
+.t1 {
+  font-size: 1.0625rem;
+  line-height: 1.875rem;
+}
+.t2 {
+  font-size: 1rem;
+  line-height: 1.625rem;
+}
+.b1 {
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+.b2 {
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+}
+.c1 {
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+.c2 {
+  font-size: 0.625rem;
+  line-height: 0.875rem;
+}
+.prose-t1 {
+  font-size: 1.0625rem;
+  line-height: 1.875rem;
+}
+/* Numeric read-outs (player counters, stage numbers): the machine's voice */
+.readout {
+  font-family: var(--font-pixel);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
 /* Section heading: English display word + Chinese label */
 .sec-head {
   display: flex;
@@ -131,10 +195,10 @@ a {
   margin-bottom: 1.125rem;
 }
 .sec-title {
-  font-family: var(--font-pixel);
-  font-size: clamp(1.5rem, 2.6vw, 1.9rem);
+  font-family: var(--font-body);
+  font-size: clamp(1.4rem, 2.4vw, 1.75rem);
   font-weight: 600;
-  letter-spacing: 0;
+  letter-spacing: -0.025em;
   line-height: 1.15;
   margin: 0;
   color: hsl(var(--foreground));
@@ -161,7 +225,7 @@ a {
 /* Page intro used by section pages (Math, Roadmap, About, Projects) */
 .page-intro {
   padding-block: 2.5rem 2rem;
-  border-bottom: 1px solid hsl(var(--border));
+  border-bottom: var(--hair) solid hsl(var(--border));
   margin-bottom: 2.5rem;
 }
 .page-intro .eyebrow {
@@ -176,10 +240,10 @@ a {
   color: hsl(var(--faint));
 }
 .page-intro h1 {
-  font-family: var(--font-pixel);
-  font-size: clamp(2.4rem, 5.5vw, 3.6rem);
+  font-family: var(--font-body);
+  font-size: clamp(2.25rem, 5vw, 3.25rem);
   font-weight: 600;
-  letter-spacing: 0;
+  letter-spacing: -0.035em;
   line-height: 1.08;
   margin: 1rem 0 1.125rem;
   color: hsl(var(--foreground));
@@ -204,8 +268,8 @@ a {
 /* Surfaces */
 .panel {
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-radius: 6px;
+  border: var(--hair) solid hsl(var(--border));
+  border-radius: var(--radius-box);
 }
 a.panel {
   text-decoration: none;
@@ -219,7 +283,7 @@ a.panel:hover {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   color: hsl(var(--muted-foreground));
-  border: 1px solid hsl(var(--border));
+  border: var(--hair) solid hsl(var(--border));
   border-radius: 999px;
   padding: 0.05rem 0.5rem;
   white-space: nowrap;
@@ -233,7 +297,7 @@ a.panel:hover {
 .meter > i {
   display: block;
   height: 100%;
-  background: hsl(var(--primary));
+  background: hsl(var(--scarf));
   border-radius: 2px;
   transition: width 0.4s ease;
 }
@@ -243,7 +307,7 @@ a.panel:hover {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1px solid hsl(var(--border));
+  border-top: var(--hair) solid hsl(var(--border));
 }
 .row {
   display: grid;
@@ -251,7 +315,7 @@ a.panel:hover {
   gap: 1.125rem;
   align-items: baseline;
   padding: 0.8rem 0.25rem;
-  border-bottom: 1px solid hsl(var(--border));
+  border-bottom: var(--hair) solid hsl(var(--border));
   text-decoration: none;
   color: inherit;
 }
@@ -307,7 +371,7 @@ a.panel:hover {
   font-size: 0.85rem;
   color: hsl(var(--muted-foreground));
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
+  border: var(--hair) solid hsl(var(--border));
   border-radius: var(--radius);
   padding: 0.3rem 0.75rem;
   cursor: pointer;
@@ -337,7 +401,7 @@ a.panel:hover {
   font-size: 0.82rem;
   background: hsl(var(--card));
   color: hsl(var(--muted-foreground));
-  border: 1px solid hsl(var(--border));
+  border: var(--hair) solid hsl(var(--border));
   border-radius: 999px;
   padding: 0.18rem 0.7rem;
   cursor: pointer;

@@ -8624,14 +8624,14 @@ const readyTopics = ids.filter((id) => countProblems(topics[id]) > 0).length
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: 1px solid hsl(var(--border));
+    border-top: var(--hair) solid hsl(var(--border));
   }
   .stage {
     display: grid;
     grid-template-columns: 6rem minmax(0, 1fr);
     gap: 1.5rem;
     padding: 1.25rem 0;
-    border-bottom: 1px solid hsl(var(--border));
+    border-bottom: var(--hair) solid hsl(var(--border));
     position: relative;
   }
   .stage-no {
@@ -8641,9 +8641,9 @@ const readyTopics = ids.filter((id) => countProblems(topics[id]) > 0).length
     padding-top: 0.25rem;
   }
   .stage-no strong {
-    font-family: var(--font-display);
-    font-size: 1.75rem;
-    font-weight: 600;
+    font-family: var(--font-pixel);
+    font-size: 1.9rem;
+    font-weight: 500;
     color: hsl(var(--foreground));
     line-height: 1.1;
   }
@@ -8657,8 +8657,8 @@ const readyTopics = ids.filter((id) => countProblems(topics[id]) > 0).length
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.875rem 1rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 6px;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
     background: hsl(var(--card));
     min-width: 0;
   }
@@ -8708,16 +8708,16 @@ const readyTopics = ids.filter((id) => countProblems(topics[id]) > 0).length
     background: hsl(var(--muted));
   }
   :global(.lv1) {
-    background: hsl(var(--primary) / 0.25);
+    background: hsl(var(--scarf) / 0.25);
   }
   :global(.lv2) {
-    background: hsl(var(--primary) / 0.45);
+    background: hsl(var(--scarf) / 0.45);
   }
   :global(.lv3) {
-    background: hsl(var(--primary) / 0.7);
+    background: hsl(var(--scarf) / 0.7);
   }
   :global(.lv4) {
-    background: hsl(var(--primary));
+    background: hsl(var(--scarf));
   }
   @media (max-width: 860px) {
     .stage-topics {

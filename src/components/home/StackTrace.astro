@@ -40,12 +40,19 @@ const last = data[data.length - 1]?.d.slice(0, 7)
       <div class='plot' id='trace-plot'>
         <div class='tip' id='trace-tip' hidden></div>
       </div>
+      <div class='venues' aria-label='这几层通常投稿的会议，从 ML 到系统'>
+        <span class='end mono'>ML</span>
+        <span class='v mono'>ICLR<br />NeurIPS</span>
+        <span class='v mid mono'>MLSys</span>
+        <span class='v mono'>OSDI<br />SOSP</span>
+        <span class='end mono'>Systems</span>
+      </div>
     </div>
   </div>
   <figcaption>
     <span class='mono fig'>Fig. 1</span>
     <span>
-      {data.length} 篇文章按所在栈层（纵轴）与发布日期（横轴）排布，另有 {notes} 篇随笔未计入。同一天发布的文章叠成一列。点击左侧层名可筛选下方列表。
+      {data.length} 篇文章按所在栈层（纵轴）与发布日期（横轴）排布，另有 {notes} 篇随笔未计入；右侧是这几层通常投稿的会议，从 ML 一直到系统。点击左侧层名可筛选下方列表。
     </span>
     <span class='mono range'>{first} → {last}</span>
   </figcaption>
@@ -211,8 +218,8 @@ const last = data[data.length - 1]?.d.slice(0, 7)
 <style>
   .trace {
     margin: 0;
-    border: 1px solid hsl(var(--border));
-    border-radius: 6px;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
     background: hsl(var(--card));
   }
   .trace-scroll {
@@ -220,11 +227,11 @@ const last = data[data.length - 1]?.d.slice(0, 7)
   }
   .trace-grid {
     display: grid;
-    grid-template-columns: 13rem minmax(0, 1fr);
-    min-width: 720px;
+    grid-template-columns: 13rem minmax(0, 1fr) 5.5rem;
+    min-width: 800px;
   }
   .lanes {
-    border-right: 1px solid hsl(var(--border));
+    border-right: var(--hair) solid hsl(var(--border));
   }
   .lane-btn {
     display: flex;
@@ -237,7 +244,7 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     color: inherit;
     background: transparent;
     border: 0;
-    border-bottom: 1px solid hsl(var(--border));
+    border-bottom: var(--hair) solid hsl(var(--border));
     padding: 0 0.875rem 0 1.125rem;
     cursor: pointer;
   }
@@ -276,7 +283,7 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     color: hsl(var(--primary));
   }
   .lane-btn[aria-pressed='true'] {
-    box-shadow: inset 3px 0 0 hsl(var(--primary));
+    box-shadow: inset 3px 0 0 hsl(var(--scarf));
   }
   .lane-btn[aria-pressed='true'] .name {
     color: hsl(var(--primary));
@@ -284,6 +291,43 @@ const last = data[data.length - 1]?.d.slice(0, 7)
   .plot {
     position: relative;
     min-height: 360px;
+  }
+  .venues {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0 2.6rem;
+    border-left: var(--hair) solid hsl(var(--border));
+    text-align: center;
+  }
+  .venues::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 1.9rem;
+    bottom: 3.9rem;
+    width: 1px;
+    background: hsl(var(--s2));
+  }
+  .venues span {
+    position: relative;
+    font-size: 0.68rem;
+    line-height: 1.35;
+    background: hsl(var(--card));
+    padding: 0.2rem 0.3rem;
+  }
+  .venues .end {
+    color: hsl(var(--faint));
+  }
+  .venues .v {
+    color: hsl(var(--muted-foreground));
+  }
+  .venues .mid {
+    color: hsl(var(--primary));
+    border: var(--hair) solid hsl(var(--scarf));
+    border-radius: var(--radius);
   }
   .plot :global(svg) {
     display: block;
@@ -328,11 +372,11 @@ const last = data[data.length - 1]?.d.slice(0, 7)
   }
   .plot.filtering :global(rect.mark.sel) {
     opacity: 1;
-    fill: hsl(var(--primary));
+    fill: hsl(var(--scarf));
   }
   .plot :global(a:hover rect.mark),
   .plot :global(a:focus-visible rect.mark) {
-    fill: hsl(var(--primary));
+    fill: hsl(var(--scarf));
     opacity: 1;
   }
   .plot :global(a:focus-visible) {
@@ -365,7 +409,7 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     gap: 0.25rem 0.75rem;
     align-items: baseline;
     padding: 0.7rem 1.125rem;
-    border-top: 1px solid hsl(var(--border));
+    border-top: var(--hair) solid hsl(var(--border));
     color: hsl(var(--muted-foreground));
     font-size: 0.82rem;
     line-height: 1.6;

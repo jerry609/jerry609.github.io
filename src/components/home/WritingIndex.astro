@@ -2,7 +2,7 @@
 import type { CollectionEntry } from 'astro:content'
 
 import PixelMouse from '@/components/brand/PixelMouse.astro'
-import { ALL_LAYERS, layerLabel } from '@/data/stack'
+import { ALL_LAYERS, layerLabel, sourceLabel } from '@/data/stack'
 
 interface Props {
   posts: CollectionEntry<'blog'>[]
@@ -49,12 +49,13 @@ const counts = Object.fromEntries(
       posts.map((p) => (
         <li
           data-layer={p.data.layer}
-          data-q={`${p.data.title} ${p.data.description} ${p.data.tags.join(' ')}`.toLowerCase()}
+          data-q={`${p.data.title} ${p.data.description} ${p.data.tags.join(' ')} ${sourceLabel(p.data.source)}`.toLowerCase()}
         >
           <a class='row' href={`/blog/${p.id}`}>
             <span class='row-d mono'>{day(p.data.publishDate)}</span>
             <span>
               <span class='row-t'>{p.data.title}</span>
+              {p.data.source && <span class='src mono'>{sourceLabel(p.data.source)}</span>}
               <span class='row-x'>{p.data.description}</span>
             </span>
             <span class='row-l mono'>{layerLabel(p.data.layer)}</span>
@@ -147,7 +148,7 @@ const counts = Object.fromEntries(
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    border: 1px solid hsl(var(--border));
+    border: var(--hair) solid hsl(var(--border));
     background: hsl(var(--card));
     border-radius: var(--radius);
     padding: 0.25rem 0.625rem;
@@ -167,13 +168,25 @@ const counts = Object.fromEntries(
     width: 13rem;
     min-width: 0;
   }
+  .src {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0 0.35rem;
+    font-size: 0.68rem;
+    line-height: 1.35rem;
+    color: hsl(var(--muted-foreground));
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius);
+    vertical-align: 0.1em;
+    white-space: nowrap;
+  }
   .empty {
     display: flex;
     align-items: center;
     gap: 1rem;
     padding: 1.25rem 0.25rem;
     color: hsl(var(--muted-foreground));
-    border-bottom: 1px solid hsl(var(--border));
+    border-bottom: var(--hair) solid hsl(var(--border));
   }
   .list-foot {
     display: flex;

@@ -85,8 +85,8 @@ const { total = 0 } = Astro.props
 
 <style>
   .pstats {
-    border: 1px solid hsl(var(--border));
-    border-radius: 6px;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
     background: hsl(var(--card));
     padding: 1rem 1.125rem;
   }
@@ -117,7 +117,7 @@ const { total = 0 } = Astro.props
   }
   #progress-bar {
     height: 100%;
-    background: hsl(var(--primary));
+    background: hsl(var(--scarf));
     border-radius: 3px;
     transition: width 0.5s ease;
   }

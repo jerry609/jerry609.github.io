@@ -1,0 +1,258 @@
+---
+/**
+ * Upcoming submission deadlines for the venues this site's stack maps to.
+ * Data: ccfddl/ccf-deadlines (fetched at build time). The countdown is computed in the
+ * browser, so it stays correct between builds. If the fetch fails, nothing renders.
+ */
+import { parse } from 'yaml'
+
+const VENUES = [
+  { key: 'OSDI', path: 'conference/SE/osdi.yml' },
+  { key: 'MLSys', path: 'conference/MX/mlsys.yml' },
+  { key: 'NeurIPS', path: 'conference/AI/nips.yml' },
+  { key: 'ICLR', path: 'conference/AI/iclr.yml' }
+]
+const BASE = 'https://raw.githubusercontent.com/ccfddl/ccf-deadlines/main/'
+
+type Event = { kind: 'abstract' | 'paper' | 'rebuttal' | 'decision'; at: number }
+type Row = { venue: string; year: number; link?: string; events: Event[] }
+
+const NAMED: Record<string, number> = { AoE: -12, UTC: 0, GMT: 0, PST: -8, PDT: -7, EST: -5, EDT: -4, CET: 1, CEST: 2 }
+function offsetHours(tz = 'UTC'): number {
+  if (tz in NAMED) return NAMED[tz]
+  const m = tz.match(/^UTC([+-]\d{1,2})/)
+  return m ? Number(m[1]) : 0
+}
+function toUtc(s: unknown, tz: string): number | undefined {
+  if (typeof s !== 'string') return undefined
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/)
+  if (!m) return undefined
+  const [, y, mo, d, h, mi, se] = m.map(Number)
+  return Date.UTC(y, mo - 1, d, h, mi, se) - offsetHours(tz) * 3600_000
+}
+
+async function load(): Promise<Row[]> {
+  const rows: Row[] = []
+  for (const v of VENUES) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 8000)
+    try {
+      const res = await fetch(BASE + v.path, { signal: ctrl.signal })
+      if (!res.ok) continue
+      const doc = parse(await res.text())
+      const confs: any[] = (Array.isArray(doc) ? doc[0]?.confs : doc?.confs) ?? []
+      // Keep the two most recent editions; the browser picks whichever is still upcoming
+      for (const c of confs.slice(-2)) {
+        const events: Event[] = []
+        for (const t of c.timeline ?? []) {
+          const a = toUtc(t.abstract_deadline, c.timezone)
+          const p = toUtc(t.deadline, c.timezone)
+          const r = toUtc(t.rebuttal_deadline, c.timezone)
+          const d = toUtc(t.decision_deadline, c.timezone)
+          if (a) events.push({ kind: 'abstract', at: a })
+          if (p) events.push({ kind: 'paper', at: p })
+          if (r) events.push({ kind: 'rebuttal', at: r })
+          if (d) events.push({ kind: 'decision', at: d })
+        }
+        if (events.length) rows.push({ venue: v.key, year: Number(c.year), link: c.link, events })
+      }
+    } catch {
+      // Offline or rate-limited: skip this venue
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  return rows
+}
+
+const rows = await load()
+
+/**
+ * Next thing to watch for a venue: an upcoming submission deadline, else an upcoming
+ * rebuttal/decision date (shown dimmer), else the last closed submission deadline.
+ */
+function pick(rs: Row[], venue: string, now: number) {
+  const evs = rs
+    .filter((r) => r.venue === venue)
+    .flatMap((r) => r.events.map((e) => ({ ...e, year: r.year, link: r.link })))
+    .sort((a, b) => a.at - b.at)
+  const isSubmit = (k: string) => k === 'abstract' || k === 'paper'
+  const submit = evs.find((e) => isSubmit(e.kind) && e.at > now)
+  if (submit) return { ...submit, state: 'open' as const }
+  const review = evs.find((e) => !isSubmit(e.kind) && e.at > now)
+  if (review) return { ...review, state: 'review' as const }
+  const last = evs.filter((e) => isSubmit(e.kind)).pop()
+  return last ? { ...last, state: 'closed' as const } : undefined
+}
+const builtAt = new Date().toISOString().slice(0, 10)
+const now = Date.now()
+const venues = VENUES.map((v) => v.key)
+// Server-side first paint: the next event per venue as of the build
+const initial = venues.map((venue) => ({ venue, next: pick(rows, venue, now) }))
+const days = (t: number) => Math.ceil((t - now) / 86400000)
+const fmt = (t: number) => new Date(t).toISOString().slice(5, 10)
+---
+
+{
+  rows.length > 0 && (
+    <section class='deadlines' aria-label='会议截稿倒计时'>
+      <div class='dl-head'>
+        <span class='mono k'>Deadlines · 截稿</span>
+        <a class='mono src' href='https://ccfddl.com/' target='_blank' rel='noopener'>
+          data: ccfddl · built {builtAt}
+        </a>
+      </div>
+      <div class='cells'>
+        {initial.map(({ venue, next }) => (
+          <a
+            class={`cell ${next?.state ?? ''}`}
+            data-venue={venue}
+            href={next?.link ?? 'https://ccfddl.com/'}
+            target='_blank'
+            rel='noopener'
+          >
+            <span class='mono name'>
+              {venue}
+              <span class='yr'>{next ? ` ’${String(next.year).slice(-2)}` : ''}</span>
+            </span>
+            <span class='readout left'>{next && next.state !== 'closed' ? `${days(next.at)}d` : '—'}</span>
+            <span class='mono when'>
+              {next
+                ? next.state === 'closed'
+                  ? `closed · ${fmt(next.at)}`
+                  : `${next.kind} · ${fmt(next.at)}`
+                : '日期未公布'}
+            </span>
+          </a>
+        ))}
+      </div>
+      <script type='application/json' id='dl-data' set:html={JSON.stringify(rows)} />
+    </section>
+  )
+}
+
+<script>
+  type Row = { venue: string; year: number; link?: string; events: { kind: string; at: number }[] }
+  const data = document.getElementById('dl-data')
+  if (data) {
+    const rows: Row[] = JSON.parse(data.textContent || '[]')
+    const now = Date.now()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const isSubmit = (k: string) => k === 'abstract' || k === 'paper'
+    document.querySelectorAll<HTMLAnchorElement>('.deadlines .cell').forEach((cell) => {
+      const venue = cell.dataset.venue
+      const evs = rows
+        .filter((r) => r.venue === venue)
+        .flatMap((r) => r.events.map((e) => ({ ...e, year: r.year, link: r.link })))
+        .sort((a, b) => a.at - b.at)
+      const submit = evs.find((e) => isSubmit(e.kind) && e.at > now)
+      const review = evs.find((e) => !isSubmit(e.kind) && e.at > now)
+      const last = evs.filter((e) => isSubmit(e.kind)).pop()
+      const next = submit ?? review ?? last
+      const state = submit ? 'open' : review ? 'review' : last ? 'closed' : ''
+      const left = cell.querySelector('.left')!
+      const when = cell.querySelector('.when')!
+      const yr = cell.querySelector('.yr')!
+      cell.classList.remove('open', 'review', 'closed', 'soon')
+      if (!next) return
+      cell.classList.add(state)
+      const d = new Date(next.at)
+      const stamp = `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      yr.textContent = ` ’${String(next.year).slice(-2)}`
+      if (next.link) cell.href = next.link
+      if (state === 'closed') {
+        left.textContent = '—'
+        when.textContent = `closed · ${stamp}`
+        return
+      }
+      const ms = next.at - now
+      const days = Math.floor(ms / 86400000)
+      left.textContent = days >= 1 ? `${days}d` : `${pad(Math.floor(ms / 3600000))}h`
+      // Deadline shown in the visitor's local time
+      when.textContent = `${next.kind} · ${stamp} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+      cell.classList.toggle('soon', state === 'open' && days < 7)
+      cell.title = `${venue} ${next.year} ${next.kind}`
+    })
+  }
+</script>
+
+<style>
+  .deadlines {
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
+    background: hsl(var(--card));
+  }
+  .dl-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.55rem 1rem;
+    border-bottom: var(--hair) solid hsl(var(--border));
+  }
+  .k {
+    color: hsl(var(--muted-foreground));
+  }
+  .src {
+    color: hsl(var(--faint));
+    text-decoration: none;
+    font-size: 0.72rem;
+  }
+  .src:hover {
+    color: hsl(var(--primary));
+  }
+  .cells {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .cell {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.75rem 1rem 0.8rem;
+    text-decoration: none;
+    color: inherit;
+    border-left: var(--hair) solid hsl(var(--border));
+  }
+  .cell:first-child {
+    border-left: 0;
+  }
+  .cell:hover {
+    background: hsl(var(--band));
+    color: inherit;
+  }
+  .name {
+    color: hsl(var(--foreground));
+  }
+  .yr {
+    color: hsl(var(--faint));
+  }
+  .left {
+    font-size: 1.6rem;
+    line-height: 1.1;
+    color: hsl(var(--foreground));
+  }
+  .when {
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  .cell.review .left,
+  .cell.closed .left {
+    color: hsl(var(--faint));
+  }
+  .cell.soon .left {
+    color: hsl(var(--primary));
+  }
+  .cell.soon {
+    box-shadow: inset 0 -2px 0 hsl(var(--scarf));
+  }
+  @media (max-width: 640px) {
+    .cells {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .cell:nth-child(3) {
+      border-left: 0;
+    }
+    .cell:nth-child(n + 3) {
+      border-top: var(--hair) solid hsl(var(--border));
+    }
+  }
+</style>

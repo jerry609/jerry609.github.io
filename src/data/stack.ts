@@ -25,6 +25,26 @@ export function layerLabel(id: string) {
   return layer.code ? `${layer.code} ${layer.name}` : layer.name
 }
 
+/** Source types a post can declare in frontmatter (`source.kind`). */
+export const SOURCE_KINDS = ['paper', 'tech-report', 'postmortem', 'code', 'translation', 'lecture'] as const
+export type SourceKind = (typeof SOURCE_KINDS)[number]
+const SOURCE_LABELS: Record<SourceKind, string> = {
+  paper: 'paper',
+  'tech-report': 'tech report',
+  postmortem: 'postmortem',
+  code: 'code reading',
+  translation: 'translation',
+  lecture: 'lecture · PDF'
+}
+/** `ICML ’20` for venue papers, otherwise the kind ("postmortem", "tech report", …). */
+export function sourceLabel(src?: { kind: SourceKind; venue?: string; year?: number }) {
+  if (!src) return ''
+  if (src.kind === 'paper' && src.venue) {
+    return src.year ? `${src.venue} ’${String(src.year).slice(-2)}` : src.venue
+  }
+  return SOURCE_LABELS[src.kind]
+}
+
 /** Ordered reading lists. Slugs are post ids under src/content/blog. */
 export const SERIES = [
   {

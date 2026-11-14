@@ -86,14 +86,14 @@ const next = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : undefined
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: 1px solid hsl(var(--border));
+    border-top: var(--hair) solid hsl(var(--border));
   }
   li {
     display: grid;
     grid-template-columns: 2rem minmax(0, 1fr);
     gap: 0.5rem;
     padding: 0.5rem 0;
-    border-bottom: 1px solid hsl(var(--border));
+    border-bottom: var(--hair) solid hsl(var(--border));
     font-size: 0.92rem;
   }
   .n {
@@ -121,7 +121,7 @@ const next = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : undefined
     flex-direction: column;
     gap: 0.2rem;
     padding: 0.75rem 0.875rem;
-    border: 1px solid hsl(var(--border));
+    border: var(--hair) solid hsl(var(--border));
     border-radius: var(--radius);
     background: hsl(var(--card));
     text-decoration: none;
