@@ -2,6 +2,7 @@
 title: '高斯策略'
 description: '从高斯分布、归一化常数和最大熵原理出发，推导连续动作空间里的高斯策略公式。'
 publishDate: '2026-05-13'
+layer: training
 tags: ['强化学习', '概率论', '高斯分布', '最大熵', '连续控制']
 language: 'zh-CN'
 draft: false

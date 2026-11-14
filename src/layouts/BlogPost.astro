@@ -8,8 +8,10 @@ import 'katex/dist/katex.min.css'
 import config from 'virtual:config'
 
 import { MediumZoom } from 'astro-pure/advanced'
-import { ArticleBottom, Copyright, Hero, TOC } from 'astro-pure/components/pages'
+import { ArticleBottom, Copyright, TOC } from 'astro-pure/components/pages'
 import PageLayout from '@/layouts/ContentLayout.astro'
+import PostHeader from '@/components/blog/PostHeader.astro'
+import SeriesNav from '@/components/blog/SeriesNav.astro'
 import { Comment, PageInfo } from '@/components/waline'
 
 interface Props {
@@ -42,25 +44,25 @@ const socialImage = heroImage
     : heroImage.src.src
   : config.socialCard
 const articleDate = updatedDate?.toISOString() ?? publishDate.toISOString()
-const primaryColor = data.heroImage?.color ?? 'hsl(var(--primary) / var(--un-text-opacity))'
 ---
 
 <PageLayout
   meta={{ articleDate, description, ogImage: socialImage, title }}
-  highlightColor={primaryColor}
   back='/blog'
+  backLabel='全部文章'
+  searchable={!isDraft}
 >
   {!!headings.length && <TOC {headings} slot='sidebar' />}
 
-  <Hero {data} {remarkPluginFrontmatter} slot='header'>
-    <Fragment slot='description'>
-      {!isDraft && enableComment && <PageInfo comment class='mt-1' />}
-    </Fragment>
-  </Hero>
+  <Fragment slot='header'>
+    <PostHeader post={Astro.props.post} minutesRead={remarkPluginFrontmatter.minutesRead} />
+    {!isDraft && enableComment && <PageInfo comment class='mt-2' />}
+  </Fragment>
 
   <slot />
 
   <Fragment slot='bottom'>
+    <SeriesNav post={Astro.props.post} {posts} />
     {/* Copyright */}
     <Copyright {data} />
     {/* Article recommend */}

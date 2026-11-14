@@ -1,33 +1,25 @@
 ---
 import { PFSearch } from 'astro-pure/components/pages'
-import { Button } from 'astro-pure/user'
 import PageLayout from '@/layouts/BaseLayout.astro'
 import { integ } from '@/site-config'
-
-const meta = {
-  description: 'Search relative posts of the whole blog',
-  title: 'Search'
-}
 ---
 
-<PageLayout {meta}>
-  <Button title='Back' href='/blog' variant='back' />
-  <main class='mt-6 lg:mt-10'>
-    <div id='content-header' class='animate'>
-      <h1 class='mb-6 text-3xl font-medium'>Search</h1>
-    </div>
-
-    <div id='content' class='animate'>
-      {
-        integ.pagefind ? (
-          <>
-            <p>Enter a search term or phrase to search the blog.</p>
-            <PFSearch />
-          </>
-        ) : (
-          <p>Pagefind is disabled.</p>
-        )
-      }
-    </div>
-  </main>
+<PageLayout meta={{ title: '搜索', description: '全文搜索本站文章' }}>
+  <header class='page-intro'>
+    <p class='eyebrow mono'><span>Search</span><span>Pagefind · 全文索引</span></p>
+    <h1>Search <small>搜索</small></h1>
+    <p class='lede'>搜索全部文章的正文。只想按标题过滤，用 <a href='/blog'>文章</a> 页的过滤框更快。</p>
+  </header>
+  <div class='search-box'>
+    {integ.pagefind ? <PFSearch /> : <p>搜索未启用。</p>}
+  </div>
 </PageLayout>
+
+<style>
+  .page-intro a {
+    color: hsl(var(--primary));
+  }
+  .search-box {
+    max-width: 46rem;
+  }
+</style>

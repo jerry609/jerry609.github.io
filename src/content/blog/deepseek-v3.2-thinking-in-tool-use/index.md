@@ -2,6 +2,7 @@
 title: 'DeepSeek-V3.2：将思维过程整合到工具使用中'
 description: 'DeepSeek-V3.2 模型实现卓越 Agentic 能力的关键技术突破：思维上下文管理、冷启动机制及大规模 Agentic 任务合成。'
 publishDate: '2025-12-03'
+layer: agent
 tags: ['ai', 'deepseek', 'agent', 'tool-use', 'paper', 'rl']
 ---
 

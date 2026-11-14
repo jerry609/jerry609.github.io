@@ -2,6 +2,7 @@
 title: '2025 AI SDK 调研报告：从直连模型到 Agent 编排'
 description: '面对琳琅满目的 AI SDK，如何选择？本文通过“三层心智模型”拆解 Claude Agent SDK、OpenAI Agents SDK、Vercel AI SDK 等主流工具的定位与差异，助你做出正确的架构选型。'
 publishDate: '2025-12-05'
+layer: agent
 tags: ['AI', 'SDK', 'Agent', 'Claude', 'OpenAI', 'Vercel', '调研报告']
 language: 'zh-CN'
 ---

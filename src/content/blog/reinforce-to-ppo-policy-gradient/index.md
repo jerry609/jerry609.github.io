@@ -2,6 +2,7 @@
 title: '从 REINFORCE 到 PPO'
 description: '从 MDP 单步概率出发，推导策略梯度、reward-to-go、baseline、advantage、Actor-Critic、GAE，以及 PPO 的 ratio 与 clip。'
 publishDate: '2026-05-14'
+layer: training
 tags: ['强化学习', 'Policy Gradient', 'REINFORCE', 'Actor-Critic', 'GAE', 'PPO', 'RLHF', 'LLM']
 language: 'zh-CN'
 draft: false

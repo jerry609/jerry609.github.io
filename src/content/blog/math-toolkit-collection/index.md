@@ -2,6 +2,7 @@
 title: '数学工具集合'
 description: '用可推出性串起现代数学总纲，再把最小二乘、Ridge、LASSO、KKT、对偶间隙等工具整理成路线图。'
 publishDate: '2026-05-07'
+layer: math
 tags: ['数学', '线性代数', '凸优化', '机器学习', 'LASSO', 'Ridge', '数学工具集合']
 language: 'zh-CN'
 draft: false

@@ -13,7 +13,7 @@ const radius = 'var(--radius)'
 
 const typographyConfig: TypographyOptions = {
   colorScheme: {
-    body: fgMuted,
+    body: 'hsl(var(--foreground) / 0.86)',
     headings: fg,
     // "lead": [600, 400],
     links: fg,
@@ -35,7 +35,15 @@ const typographyConfig: TypographyOptions = {
   cssExtend: {
     // Title
     'h2,h3,h4,h5,h6': {
-      'scroll-margin-top': '4rem'
+      'scroll-margin-top': '4.5rem'
+    },
+    'h1,h2,h3': {
+      'font-family': 'var(--font-display)',
+      'font-weight': '600',
+      'letter-spacing': '-0.01em'
+    },
+    p: {
+      'line-height': '1.85'
     },
     'h1>a,h2>a,h3>a,h4>a,h5>a,h6>a': {
       'margin-inline-start': '0.75rem',

@@ -2,6 +2,7 @@
 title: '沙箱技术（一）：从 chroot 到 Serverless/AI 的统一时间线'
 description: '梳理从 Unix chroot 到容器、Wasm、Serverless，再到 AI 时代多层沙箱与 Agent 编排的演进脉络。'
 publishDate: '2025-12-03'
+layer: runtime
 tags: ['沙箱', '容器', 'wasm', 'serverless', 'ai', '安全']
 language: 'zh-CN'
 ---

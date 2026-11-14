@@ -2,6 +2,7 @@
 title: 'Orion × Buck2：mount_path 语义统一与验证闭环的深度复盘'
 description: '从 .buckconfig 缺失导致 Cell Resolver 失败，到 mount_path 语义一致化改造的全过程记录'
 publishDate: '2026-01-23'
+layer: systems
 tags: ['debugging', 'buck2', 'postmortem', 'fuse', 'rust']
 ---
 

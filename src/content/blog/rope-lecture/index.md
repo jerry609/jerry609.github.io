@@ -2,6 +2,7 @@
 title: 'RoPE（旋转位置编码）讲义：从问题到工程实践'
 description: '一份 41 页 RoPE 讲义，沿着问题、对象、约束、形式定义、引理、定理、例子和工程实践，系统理解旋转位置编码。'
 publishDate: '2026-04-28'
+layer: model
 tags: ['RoPE', 'Transformer', '位置编码', 'Attention', 'LLM', '讲义']
 language: 'zh-CN'
 draft: false

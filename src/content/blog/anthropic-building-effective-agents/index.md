@@ -2,6 +2,7 @@
 title: '翻译：Anthropic——打造高效 Agent 的实践指南'
 description: '翻译自 Anthropic 工程博客，系统总结了 Agent 的定义、常见架构模式、实用建议与最佳实践。'
 publishDate: '2025-12-03'
+layer: agent
 tags: ['ai', 'agent', 'anthropic', '工程实践', '翻译']
 ---
 

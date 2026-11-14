@@ -2,6 +2,7 @@
 title: 'Git Worktrees in AI ERA'
 description: 'Git Worktree 是 AI 时代并行开发的关键技术，让你从串行任务切换者转变为并行编排者。'
 publishDate: '2025-12-03'
+layer: agent
 tags: ['git', 'ai', 'workflow', '开发工具']
 ---
 

@@ -2,6 +2,7 @@
 title: "Go Trace + PProf 性能分析理论（一）"
 description: "深入解析 Go 运行时 GMP 调度模型，通过 trace、pprof 组合分析 P utilization、sched wait、syscall/cgo 等指标，快速定位 CPU 饱和、M 不足、锁竞争等性能瓶颈。"
 publishDate: "2025-01-07"
+layer: systems
 tags: ["Go", "Performance", "Trace", "PProf", "GMP"]
 language: "zh-CN"
 draft: false

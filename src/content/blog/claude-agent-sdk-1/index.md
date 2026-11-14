@@ -2,6 +2,7 @@
 title: 'Claude Agent SDK 源码与实战（一）：整体架构与快速上手'
 description: '从使用者视角出发，先跑通 Claude Agent SDK 的最小示例，再从项目结构和抽象设计上看清这套 Python SDK 在解决什么问题。'
 publishDate: '2025-12-05'
+layer: agent
 tags: ['源码分析', 'claude', 'sdk', 'python', 'agent']
 language: 'zh-CN'
 ---

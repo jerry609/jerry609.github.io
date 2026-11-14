@@ -1,0 +1,150 @@
+---
+import type { CollectionEntry } from 'astro:content'
+
+import { layerLabel, SERIES } from '@/data/stack'
+
+interface Props {
+  post: CollectionEntry<'blog'>
+  posts: CollectionEntry<'blog'>[]
+}
+
+const { post, posts } = Astro.props
+const series = SERIES.find((s) => (s.slugs as readonly string[]).includes(post.id))
+const bySlug = Object.fromEntries(posts.map((p) => [p.id, p]))
+const items = series ? series.slugs.map((s) => bySlug[s]).filter(Boolean) : []
+const idx = items.findIndex((p) => p.id === post.id)
+const prev = idx > 0 ? items[idx - 1] : undefined
+const next = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : undefined
+---
+
+{
+  series && (
+    <nav class='series-nav' id='series-nav' aria-label={`连载：${series.title}`}>
+      <p class='mono head'>
+        <span>{layerLabel(series.layer)} · 连载</span>
+        <span>
+          {items.length}
+          {'planned' in series && series.planned ? ` / ${series.planned} ${series.unit}` : ' 篇'}
+        </span>
+      </p>
+      <h2>{series.title}</h2>
+      <ol>
+        {items.map((p, i) => (
+          <li>
+            <span class='mono n'>{String(i + 1).padStart(2, '0')}</span>
+            {p.id === post.id ? (
+              <span class='cur' aria-current='page'>
+                {p.data.title}
+              </span>
+            ) : (
+              <a href={`/blog/${p.id}`}>{p.data.title}</a>
+            )}
+          </li>
+        ))}
+      </ol>
+      <div class='pn'>
+        {prev ? (
+          <a href={`/blog/${prev.id}`}>
+            <span class='mono'>← 上一篇</span>
+            {prev.data.title}
+          </a>
+        ) : (
+          <span />
+        )}
+        {next && (
+          <a class='next' href={`/blog/${next.id}`}>
+            <span class='mono'>下一篇 →</span>
+            {next.data.title}
+          </a>
+        )}
+      </div>
+    </nav>
+  )
+}
+
+<style>
+  .series-nav {
+    margin-top: 2.5rem;
+    border-top: 2px solid hsl(var(--foreground));
+    padding-top: 1rem;
+    max-width: 46rem;
+  }
+  .head {
+    display: flex;
+    justify-content: space-between;
+    color: hsl(var(--faint));
+    margin: 0;
+  }
+  h2 {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0.375rem 0 0.75rem;
+    color: hsl(var(--foreground));
+  }
+  ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid hsl(var(--border));
+  }
+  li {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid hsl(var(--border));
+    font-size: 0.92rem;
+  }
+  .n {
+    color: hsl(var(--faint));
+  }
+  li a {
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+  }
+  li a:hover {
+    color: hsl(var(--primary));
+  }
+  .cur {
+    color: hsl(var(--foreground));
+    font-weight: 600;
+  }
+  .pn {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .pn a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--card));
+    text-decoration: none;
+    color: hsl(var(--foreground));
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .pn a:hover {
+    border-color: hsl(var(--primary) / 0.5);
+  }
+  .pn .mono {
+    color: hsl(var(--faint));
+  }
+  .pn .next {
+    text-align: right;
+    grid-column: 2;
+  }
+  @media (max-width: 600px) {
+    .pn {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .pn .next {
+      grid-column: 1;
+    }
+  }
+</style>

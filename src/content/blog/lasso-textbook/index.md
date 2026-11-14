@@ -2,6 +2,7 @@
 title: 'LASSO 教材'
 description: 'LASSO 教材'
 publishDate: '2026-05-07'
+layer: math
 tags: ['LASSO', '线性代数', '最小二乘', '稀疏表示', '凸优化', '机器学习', '教材']
 language: 'zh-CN'
 draft: false

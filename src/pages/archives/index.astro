@@ -2,53 +2,83 @@
 import type { CollectionEntry } from 'astro:content'
 
 import { getBlogCollection, groupCollectionsByYear, sortMDByDate } from 'astro-pure/server'
-import { Button } from 'astro-pure/user'
 import PageLayout from '@/layouts/BaseLayout.astro'
-import PostPreview from '@/components/blog/PostPreview.astro'
+import { layerLabel } from '@/data/stack'
 
 export const prerender = true
 
 const allPosts = (await getBlogCollection('blog')) as CollectionEntry<'blog'>[]
-const allPostsByDate = sortMDByDate(allPosts)
-const allPostsByYear = groupCollectionsByYear<'blog'>(allPostsByDate)
-
-const meta = {
-  description: 'A list of all the years of creating my posts',
-  title: 'Archives'
-}
+const byYear = groupCollectionsByYear<'blog'>(sortMDByDate(allPosts))
+const day = (d: Date) => d.toISOString().slice(5, 10)
 ---
 
-<PageLayout {meta}>
-  <Button title='Back' href='/blog' variant='back' />
+<PageLayout meta={{ title: '归档', description: '按年份排列的全部文章' }}>
+  <header class='page-intro'>
+    <p class='eyebrow mono'><span>Archives</span><span>{allPosts.length} posts</span></p>
+    <h1>Archives <small>归档</small></h1>
+    <p class='lede'>按年份排列的全部文章。想按主题看，去 <a href='/blog'>文章</a> 页按栈层筛选。</p>
+  </header>
 
-  <main class='mt-6 lg:mt-10'>
-    <div id='content-header' class='animate'>
-      <h1 class='mb-6 text-3xl font-medium'>Archives</h1>
-    </div>
-
-    {allPosts.length === 0 && <p>No posts yet.</p>}
-
-    <section id='content' class='animate' aria-label='Blog post list'>
-      {
-        allPostsByYear.map(([year, posts]) => (
-          <div class='relative mt-20'>
-            <h2
-              class='absolute -start-6 -top-16 z-0 text-9xl font-bold text-transparent opacity-10'
-              style='-webkit-text-stroke-width:2px;-webkit-text-stroke-color:hsl(var(--foreground)/var(--un-text-opacity))'
-            >
-              <samp>{year}</samp>
-            </h2>
-            <p class='px-5 text-muted-foreground'>
-              {posts.length} post{posts.length > 1 && 's'}
-            </p>
-            <ul class='flex flex-col text-start'>
-              {posts.map((p) => (
-                <PostPreview post={p} class='border-0 bg-transparent py-2' />
-              ))}
-            </ul>
-          </div>
-        ))
-      }
-    </section>
-  </main>
+  {
+    byYear.map(([year, posts]) => (
+      <section class='year'>
+        <h2>
+          <span class='mono y'>{year}</span>
+          <span class='mono n'>{posts.length} 篇</span>
+        </h2>
+        <ul class='rows'>
+          {posts.map((p) => (
+            <li>
+              <a class='row' href={`/blog/${p.id}`}>
+                <span class='row-d mono'>{day(p.data.publishDate)}</span>
+                <span class='row-t'>{p.data.title}</span>
+                <span class='row-l mono'>{layerLabel(p.data.layer)}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
 </PageLayout>
+
+<style>
+  .page-intro a {
+    color: hsl(var(--primary));
+  }
+  .year {
+    display: grid;
+    grid-template-columns: 8rem minmax(0, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+  .year h2 {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    font-weight: 500;
+  }
+  .y {
+    font-size: 1.5rem !important;
+    color: hsl(var(--foreground));
+  }
+  .n {
+    color: hsl(var(--faint));
+  }
+  .year .row {
+    grid-template-columns: 4rem minmax(0, 1fr) auto;
+    padding-block: 0.6rem;
+  }
+  @media (max-width: 640px) {
+    .year {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.5rem;
+    }
+    .year h2 {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 0.75rem;
+    }
+  }
+</style>

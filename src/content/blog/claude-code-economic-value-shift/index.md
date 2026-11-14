@@ -2,6 +2,7 @@
 title: "谁在为 Claude Code 买单？解析 AI 时代的开发者价值再分配"
 description: '以经济学"价值流向稀缺性"为核心，深度解析 Claude Code 等 AI 工具如何重塑软件开发的价值象限、稀缺角色以及 10 倍开发者的底层逻辑。'
 publishDate: "2025-12-19"
+layer: agent
 tags: ["AI", "Claude Code", "软件工程", "经济学", "职业发展"]
 language: "zh-CN"
 draft: false

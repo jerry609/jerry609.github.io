@@ -2,6 +2,7 @@
 title: 'Transformer / LLM 机制型论文写作素材库'
 description: '整理机制解释型 Transformer / LLM 论文的常用叙事、标题、摘要、引言、理论分析、实验验证和结论模板。'
 publishDate: '2026-04-28'
+layer: model
 tags: ['Transformer', 'LLM', '论文写作', '素材库', 'Mechanistic Interpretability']
 language: 'zh-CN'
 draft: false

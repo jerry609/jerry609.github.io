@@ -2,6 +2,7 @@
 title: 'Post-LN Transformer 为什么需要 Warmup？'
 description: '从 LayerNorm 反向传播和平均场尺度分析出发，解释 Post-LN 初始化阶段的层间梯度失衡以及 warmup 的作用。'
 publishDate: '2026-05-21'
+layer: model
 tags: ['transformer', 'layernorm', 'warmup', 'optimization', 'paper-reading']
 language: 'zh-CN'
 draft: false

@@ -2,6 +2,7 @@
 title: '机器学习理论论文 LaTeX 通用素材库'
 description: '整理机器学习与 Transformer 理论论文常用写法，覆盖研究问题、定义、定理、引理、公式解释、正文过渡与写作检查清单。'
 publishDate: '2026-04-28'
+layer: math
 tags: ['LaTeX', '机器学习', '论文写作', '模板']
 language: 'zh-CN'
 draft: false

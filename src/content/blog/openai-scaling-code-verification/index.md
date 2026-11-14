@@ -2,6 +2,7 @@
 title: '翻译：OpenAI：A Practical Approach to Verifying Code at Scale'
 description: '翻译自 OpenAI Alignment Blog，探讨如何训练专用的 AI 代码审查器，以及在大规模部署中的实践经验。'
 publishDate: '2025-12-03'
+layer: agent
 tags: ['ai', 'openai', 'code-review', '翻译']
 ---
 

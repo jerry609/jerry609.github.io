@@ -1,0 +1,163 @@
+---
+const year = new Date().getFullYear()
+
+const groups = [
+  {
+    title: '写作',
+    links: [
+      { title: '全部文章', link: '/blog' },
+      { title: '归档', link: '/archives' },
+      { title: '标签', link: '/tags' },
+      { title: 'RSS', link: '/rss.xml' }
+    ]
+  },
+  {
+    title: '其他角落',
+    links: [
+      { title: '碎碎念', link: '/murmurs' },
+      { title: '照片', link: '/photos' },
+      { title: '友链', link: '/links' },
+      { title: '数学笔记', link: '/math-notes' }
+    ]
+  },
+  {
+    title: '找到我',
+    links: [
+      { title: 'GitHub', link: 'https://github.com/jerry609' },
+      { title: 'PaperBot', link: 'https://github.com/jerry609/PaperBot' },
+      { title: '关于', link: '/about' }
+    ]
+  }
+]
+---
+
+<footer class='site-footer'>
+  <div class='site-wrap footer-inner'>
+    <div class='footer-id'>
+      <a class='footer-brand' href='/'>
+        <span class='glyph' aria-hidden='true'><i></i><i></i><i></i></span>
+        Jerry Zhang
+      </a>
+      <p>Agent × Infra 全栈研究笔记。</p>
+      <p class='motto'>如其所是</p>
+    </div>
+    {
+      groups.map((g) => (
+        <div class='footer-group'>
+          <h2 class='mono'>{g.title}</h2>
+          <ul>
+            {g.links.map((l) => (
+              <li>
+                <a
+                  href={l.link}
+                  {...(l.link.startsWith('http') ? { target: '_blank', rel: 'noopener' } : {})}
+                >
+                  {l.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </div>
+  <div class='site-wrap footer-base mono'>
+    <span>© {year} Jerry Zhang</span>
+    <span>Built with Astro</span>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: 5rem;
+    border-top: 1px solid hsl(var(--border));
+  }
+  .footer-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+    gap: 2rem;
+    padding-block: 2.5rem 2rem;
+  }
+  .footer-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-family: var(--font-display);
+    font-weight: 650;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+    color: hsl(var(--foreground));
+  }
+  .footer-id p {
+    margin: 0.5rem 0 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9rem;
+  }
+  .footer-id .motto {
+    color: hsl(var(--faint));
+  }
+  .glyph {
+    display: grid;
+    gap: 2px;
+    width: 16px;
+  }
+  .glyph i {
+    display: block;
+    height: 3px;
+    border-radius: 1px;
+    background: hsl(var(--foreground));
+  }
+  .glyph i:nth-child(1) {
+    width: 100%;
+    background: hsl(var(--primary));
+  }
+  .glyph i:nth-child(2) {
+    width: 72%;
+  }
+  .glyph i:nth-child(3) {
+    width: 88%;
+  }
+  .footer-group h2 {
+    margin: 0 0 0.75rem;
+    font-weight: 500;
+    color: hsl(var(--faint));
+  }
+  .footer-group ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.4rem;
+  }
+  .footer-group a {
+    text-decoration: none;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9rem;
+  }
+  .footer-group a:hover {
+    color: hsl(var(--primary));
+  }
+  .footer-base {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    padding-block: 1rem 2rem;
+    border-top: 1px solid hsl(var(--border));
+    color: hsl(var(--faint));
+  }
+  @media (max-width: 760px) {
+    .footer-inner {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .footer-id {
+      grid-column: 1 / -1;
+    }
+  }
+  @media (max-width: 460px) {
+    .footer-inner {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>

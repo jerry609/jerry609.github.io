@@ -2,6 +2,7 @@
 title: '用 Google ADK 复现 Claude Code 工具系统'
 description: '使用 Google Agent Development Kit (ADK) 从零实现 Grep、Glob、Read、Write、Edit、Bash 等核心工具，对比两种 Agent 框架的工具实现范式。'
 publishDate: '2025-12-06'
+layer: agent
 tags: ['Google ADK', 'Claude', 'Agent', 'Tools', 'Python']
 language: 'zh-CN'
 draft: true

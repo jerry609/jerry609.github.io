@@ -2,6 +2,7 @@
 title: 'OpenAI：用 SAE 潜在归因调试模型对齐问题'
 description: '翻译自 OpenAI Alignment 博客，介绍如何利用 SAE 潜在归因（Latent Attribution）技术定位和调试大模型的对齐问题。'
 publishDate: '2025-12-03'
+layer: model
 tags: ['ai', 'alignment', 'SAE', 'interpretability', '翻译']
 ---
 

@@ -2,6 +2,7 @@
 title: '年度文章总结'
 description: 'pg'
 publishDate: '2025-12-27'
+layer: notes
 tags: ['reading', 'startup', 'paul-graham', 'notes']
 ---
 

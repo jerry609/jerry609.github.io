@@ -1,8 +1,6 @@
 ---
-import { Font } from 'astro:assets'
 import config from 'virtual:config'
 
-import { prod } from 'astro-pure/server'
 import type { SiteMeta } from 'astro-pure/types'
 
 type Props = SiteMeta
@@ -27,14 +25,6 @@ const socialImageURL = new URL(ogImage ? ogImage : config.socialCard, Astro.url)
 <link rel='apple-touch-icon' sizes='180x180' href='/favicon/apple-touch-icon.png' />
 <link rel='manifest' href='/favicon/site.webmanifest' />
 
-{/* Font preloads */}
-<Font cssVariable='--font-satoshi' preload={[{ subset: 'latin', style: 'normal' }]} />
-<style>
-  body {
-    font-family: var(--font-satoshi);
-  }
-</style>
-
 {/* Canonical URL */}
 <link rel='canonical' href={canonicalURL} />
 
@@ -44,7 +34,7 @@ const socialImageURL = new URL(ogImage ? ogImage : config.socialCard, Astro.url)
 <meta content={config.author} name='author' />
 
 {/* Theme Color */}
-<meta content='' name='theme-color' />
+<meta content='#f3f5f4' name='theme-color' />
 
 {/* Open Graph / Facebook */}
 <meta content={articleDate ? 'article' : 'website'} property='og:type' />
@@ -85,13 +75,3 @@ const socialImageURL = new URL(ogImage ? ogImage : config.socialCard, Astro.url)
 
 <meta content={Astro.generator} name='generator' />
 
-{
-  /* User script*/
-  prod && (
-    <script>
-      console.log( '%c Astro Theme Pure %c https://github.com/cworld1/astro-theme-pure/',
-      'color:#fff;background:linear-gradient(90deg,#448bff,#44e9ff);padding:5px 0;',
-      'color:#000;background:linear-gradient(90deg,#44e9ff,#ffffff);padding:5px 10px 5px 0px;' )
-    </script>
-  )
-}

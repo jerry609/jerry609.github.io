@@ -2,6 +2,7 @@
 title: '从普通 RL 到 GRPO'
 description: '把普通 RL、最大熵 RL、Policy Gradient、PPO 和 GRPO 放在同一条主线上，理解回报、熵、概率比、clip、critic 与组内相对优势。'
 publishDate: '2026-05-15'
+layer: training
 tags: ['强化学习', 'RL', 'PPO', 'GRPO', '最大熵', 'Policy Gradient', 'RLHF', 'LLM']
 language: 'zh-CN'
 draft: false

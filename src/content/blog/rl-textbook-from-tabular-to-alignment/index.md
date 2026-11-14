@@ -2,6 +2,7 @@
 title: '强化学习自学教程：从表格方法到大模型对齐'
 description: '一份教科书级的 RL 全景教程，覆盖 Q-Learning → DQN → PPO → SAC → 离线 RL → 世界模型 → RLHF/DPO/GRPO → Agentic RL。每个概念附直觉解释、公式推导、伪代码和实例。60+ 篇论文附 arXiv 链接。'
 publishDate: '2026-04-08'
+layer: training
 tags: ['强化学习', 'RL', 'PPO', 'DPO', 'GRPO', 'RLHF', 'Agentic RL', '教程', 'DQN', '离线RL']
 language: 'zh-CN'
 draft: false

@@ -3,89 +3,521 @@ import { Image } from 'astro:assets'
 import type { CollectionEntry } from 'astro:content'
 
 import { getBlogCollection } from 'astro-pure/server'
-import { Button, Icon, Label } from 'astro-pure/user'
+import avatar from '@/assets/jerry.jpg'
 import PageLayout from '@/layouts/BaseLayout.astro'
-import PostPreview from '@/components/blog/PostPreview.astro'
-import Section from '@/components/home/Section.astro'
-import config from '@/site-config'
-import { sortBlogPosts } from '@/utils/blog'
+import StackTrace from '@/components/home/StackTrace.astro'
+import WritingIndex from '@/components/home/WritingIndex.astro'
+import { layerLabel, PROJECTS, SERIES } from '@/data/stack'
 
-const MAX_POSTS = 10
 const allPosts = (await getBlogCollection('blog')) as CollectionEntry<'blog'>[]
-const allPostsByDate = sortBlogPosts(allPosts).slice(0, MAX_POSTS)
-
-const imagePath = config.logo.src
-const images = import.meta.glob<{ default: ImageMetadata }>(
-  '/src/assets/*.{jpeg,jpg,png,gif,avif,webp}'
+const byDate = [...allPosts].sort(
+  (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
 )
-if (!images[imagePath])
-  throw new Error(
-    `"${imagePath}" does not exist in glob: "src/assets/*.{jpeg,jpg,png,gif,avif,webp}"`
-  )
+const bySlug = Object.fromEntries(allPosts.map((p) => [p.id, p]))
+
+const research = [
+  { layer: 'agent', text: 'Agent harness：上下文管理、工具调用的分发与归一化、长时运行的 agent loop。' },
+  { layer: 'runtime', text: '运行时：沙箱隔离（容器、microVM）、工具网关，以及并发下的正确性。' },
+  { layer: 'model', text: '模型机制：Attention、KV Cache 的压缩与检索、稀疏自编码器与可解释性。' },
+  { layer: 'training', text: '后训练：策略梯度、PPO 与 GRPO，用 KL 投影统一看 SFT 和 RL。' },
+  { layer: 'systems', text: '系统：FUSE 虚拟文件系统、Monorepo 与 Buck2 构建、性能剖析。' }
+]
+
+const news = [
+  { date: '2026-11', text: '网站改版：文章按 Agent × Infra 的六层栈重新组织。' },
+  {
+    date: '2026-06',
+    text: '「形式化建模」两篇：SFT 是前向 KL 投影，RL 是 reward-tilting 与 KL 正则投影。',
+    href: '/blog/sft-forward-kl-formal-modeling'
+  },
+  {
+    date: '2026-05',
+    text: '写完从 REINFORCE、PPO 到 GRPO 的策略梯度系列。',
+    href: '/blog/reinforce-to-ppo-policy-gradient'
+  },
+  {
+    date: '2026-04',
+    text: 'RoPE 讲义上线，41 页，附 PDF。',
+    href: '/blog/rope-lecture'
+  },
+  {
+    date: '2026-03',
+    text: '开始连载「Attention 机制完全指南」，计划 16 讲。',
+    href: '/blog/attention-series-outline'
+  },
+  {
+    date: '2026-03',
+    text: 'Harness Engineering 系列：Agent 系统设计、CCContext、Tool Gateway。',
+    href: '/blog/agent-system-design-llm-limitations'
+  },
+  {
+    date: '2025-12',
+    text: 'Claude Agent SDK 源码系列，以及 Dicfuse / Buck2 的五篇深度复盘。',
+    href: '/blog/claude-agent-sdk-1'
+  },
+  { date: '2025-11', text: '博客从 Hexo 迁移到 Astro。' }
+]
+
+const series = SERIES.map((s) => {
+  const posts = s.slugs.map((x) => bySlug[x]).filter(Boolean)
+  const dates = posts.map((p) => p.data.publishDate.toISOString().slice(0, 7)).sort()
+  const span = dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]} → ${dates[dates.length - 1]}`
+  return { ...s, posts, span }
+})
 ---
 
-<PageLayout meta={{ title: 'Home' }} highlightColor='#659EB9'>
-  <main class='flex w-full flex-col items-center'>
-    <section class='animate mb-10 flex flex-col items-center gap-y-7' id='content-header'>
+<PageLayout meta={{ title: '首页' }}>
+  <main class='home'>
+    {/* Intro */}
+    <section class='intro'>
       <Image
-        src={images[imagePath]()}
-        alt={config.logo.alt || 'Logo'}
-        class='h-28 w-auto rounded-full border p-1'
+        src={avatar}
+        alt='Jerry Zhang 的头像'
+        width={176}
+        height={176}
+        class='avatar'
         loading='eager'
         fetchpriority='high'
       />
-
-      <div class='flex flex-col items-center gap-y-4'>
-        <h1 class='text-3xl font-bold'>{config.author}</h1>
-        <div class='flex flex-wrap justify-center gap-x-7 gap-y-3'>
-          <Label title='China'>
-            <Icon name='location' class='size-5' slot='icon' />
-          </Label>
-          <Label
-            title='Source code'
-            as='a'
-            href='https://github.com/cworld1/astro-theme-pure'
-            target='_blank'
+      <div class='intro-text'>
+        <p class='mono who'>
+          <span>M.S. Student</span><span>UCAS · Institute of Information Engineering</span><span
+            >Beijing</span
           >
-            <Icon name='github' class='size-5' slot='icon' />
-          </Label>
-        </div>
+        </p>
+        <h1>Jerry Zhang <small>张瑞杰</small></h1>
+        <p class='bio'>
+          中国科学院信息工程研究所硕士在读。我研究 <strong>Agent</strong> 以及支撑它运行的整条基础设施：从
+          harness 与工具调用，到沙箱运行时、模型机制与后训练，再到文件系统和构建系统。
+        </p>
+        <p class='bio muted'>
+          我习惯从源码和故障出发理解系统：读 Claude Code、E2B、ast-grep 的实现，复盘 FUSE
+          文件系统上的阻塞与竞态，也把 RL 和 Attention 的公式从头推一遍。这个站点是这些记录的索引。
+        </p>
+        <p class='links mono'>
+          <a href='https://github.com/jerry609' target='_blank' rel='noopener'>GitHub ↗</a>
+          <a href='https://github.com/jerry609/PaperBot' target='_blank' rel='noopener'>PaperBot ↗</a>
+          <a href='/blog'>Writing</a>
+          <a href='/about'>About</a>
+          <a href='/rss.xml'>RSS</a>
+        </p>
       </div>
-
-      {/* Get template */}
-      <a
-        href='https://github.com/cworld1/astro-theme-pure'
-        target='_blank'
-        class='flex flex-row items-center gap-x-3 rounded-full border bg-background px-4 py-2 text-sm shadow-sm transition-shadow hover:shadow-md'
-      >
-        <span class='relative flex items-center justify-center'>
-          <span
-            class='absolute size-2 animate-ping rounded-full border border-green-400 bg-green-400 opacity-75'
-          ></span>
-          <span class='size-2 rounded-full bg-green-400'></span>
-        </span>
-        <p class='font-medium text-muted-foreground'>Get Template</p>
-      </a>
     </section>
 
-    <div id='content' class='animate flex flex-col gap-y-10 md:w-4/5 lg:w-5/6'>
-      <Section title='About'>
-        <p class='text-muted-foreground'>所以，你要做的，就是增加自己被运气青睐的概率。而增加的方式，正是保持好奇心。尝试更多事、见更多人、读更多书、问更多问题。</p>
-        <p class='text-muted-foreground'>终极大奖就是寻找到缝隙中那根有可能生长出来的枝杈。你发现了知识表层的裂缝，将它破开，而后洞见了一个崭新的世界。</p>
-        <Button title='More about me' class='w-fit self-end' href='/about' variant='ahead' />
-      </Section>
-      {
-        allPostsByDate.length > 0 && (
-          <Section title='Posts'>
-            <ul class='flex flex-col gap-y-1.5 sm:gap-y-2'>
-              {allPostsByDate.map((p) => <PostPreview post={p} />)}
-            </ul>
-            <Button title='More posts' class='w-fit self-end' href='/blog' variant='ahead' />
-          </Section>
-        )
-      }
+    {/* Research + News */}
+    <section class='two-col'>
+      <div>
+        <div class='sec-head'><h2 class='sec-title'>Research<span class='zh'>研究方向</span></h2></div>
+        <ul class='research'>
+          {
+            research.map((r) => (
+              <li>
+                <a class='mono code' href={`/blog?layer=${r.layer}`}>
+                  {layerLabel(r.layer)}
+                </a>
+                <span>{r.text}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+      <div>
+        <div class='sec-head'><h2 class='sec-title'>News<span class='zh'>近况</span></h2></div>
+        <ul class='news'>
+          {
+            news.map((n) => (
+              <li>
+                <span class='mono date'>{n.date}</span>
+                {n.href ? <a href={n.href}>{n.text}</a> : <span>{n.text}</span>}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
 
-    </div>
-    <div class='mt-12 text-center italic text-muted-foreground'>如其所是</div>
+    {/* Stack trace */}
+    <section>
+      <div class='sec-head'>
+        <h2 class='sec-title'>The Stack<span class='zh'>写作轨迹</span></h2>
+        <span class='sec-note mono'>L6 Agent → L1 Math</span>
+      </div>
+      <StackTrace posts={allPosts} />
+    </section>
+
+    {/* Projects */}
+    <section>
+      <div class='sec-head'>
+        <h2 class='sec-title'>Selected Projects<span class='zh'>项目</span></h2>
+        <a class='sec-note mono' href='/projects'>全部项目 →</a>
+      </div>
+      <ul class='projects'>
+        {
+          PROJECTS.map((p) => (
+            <li class='proj'>
+              <div class='proj-head'>
+                <a
+                  class='proj-name'
+                  href={p.href}
+                  {...(p.href.startsWith('http') ? { target: '_blank', rel: 'noopener' } : {})}
+                >
+                  {p.name}
+                </a>
+                <span class='mono proj-meta'>
+                  {p.layers.map((l) => layerLabel(l)).join(' · ')}
+                  {p.stars ? ` · ★ ${p.stars}` : ''}
+                  {p.note ? ` · ${p.note}` : ''}
+                </span>
+              </div>
+              <p class='proj-sum'>{p.summary}</p>
+              {p.pipeline && (
+                <p class='pipe mono'>
+                  {p.pipeline.map((step, i) => (
+                    <>
+                      {i > 0 && <span class='arr'>→</span>}
+                      <span>{step}</span>
+                    </>
+                  ))}
+                </p>
+              )}
+              <p class='proj-stack'>
+                {p.stack.map((t) => (
+                  <span class='chip'>{t}</span>
+                ))}
+              </p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    {/* Series */}
+    <section>
+      <div class='sec-head'>
+        <h2 class='sec-title'>Series<span class='zh'>连载</span></h2>
+        <span class='sec-note mono'>按顺序读的成组文章</span>
+      </div>
+      <div class='series'>
+        {
+          series.map((s) => (
+            <a class='serie' href={`/blog/${s.posts[0].id}`}>
+              <span class='mono kicker'>{layerLabel(s.layer)}</span>
+              <h3>{s.title}</h3>
+              <p>{s.desc}</p>
+              <ol>
+                {s.posts.slice(0, 3).map((p) => (
+                  <li>{p.data.title}</li>
+                ))}
+              </ol>
+              <div class='serie-foot'>
+                {'planned' in s && s.planned && (
+                  <div class='meter' role='img' aria-label={`已发布 ${s.posts.length} / ${s.planned}`}>
+                    <i style={`width:${((s.posts.length / s.planned) * 100).toFixed(1)}%`} />
+                  </div>
+                )}
+                <div class='mono meta'>
+                  <span>
+                    {'planned' in s && s.planned
+                      ? `${s.posts.length} / ${s.planned} ${s.unit}`
+                      : `${s.posts.length} 篇`}
+                  </span>
+                  <span>{s.span}</span>
+                </div>
+              </div>
+            </a>
+          ))
+        }
+      </div>
+    </section>
+
+    {/* Writing */}
+    <section id='writing'>
+      <div class='sec-head'>
+        <h2 class='sec-title'>Writing<span class='zh'>文章</span></h2>
+        <a class='sec-note mono' href='/blog'>全部 {allPosts.length} 篇 →</a>
+      </div>
+      <WritingIndex posts={byDate} limit={10} id='home-writing' />
+    </section>
   </main>
 </PageLayout>
+
+<style>
+  .home {
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+    padding-top: 1.5rem;
+  }
+  .intro {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    gap: 2.25rem;
+    align-items: start;
+    padding-bottom: 2.5rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .avatar {
+    width: 8.5rem;
+    height: 8.5rem;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid hsl(var(--border));
+  }
+  .who {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    color: hsl(var(--muted-foreground));
+    margin: 0;
+  }
+  .who span + span::before {
+    content: '/';
+    margin-right: 0.75rem;
+    color: hsl(var(--faint));
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 6vw, 3.75rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.04;
+    margin: 0.75rem 0 1.25rem;
+    font-variation-settings: 'opsz' 60;
+  }
+  h1 small {
+    font-family: var(--font-body);
+    font-size: 0.36em;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: hsl(var(--muted-foreground));
+    margin-left: 0.5rem;
+    vertical-align: 0.5em;
+  }
+  .bio {
+    font-size: 1.125rem;
+    line-height: 1.75;
+    max-width: 40em;
+    margin: 0 0 0.75rem;
+    color: hsl(var(--foreground));
+  }
+  .bio strong {
+    font-weight: 600;
+  }
+  .bio.muted {
+    color: hsl(var(--muted-foreground));
+    font-size: 1rem;
+  }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin: 1.25rem 0 0;
+  }
+  .links a {
+    color: hsl(var(--primary));
+    text-decoration: none;
+    border-bottom: 1px solid hsl(var(--primary) / 0.3);
+  }
+  .links a:hover {
+    border-bottom-color: hsl(var(--primary));
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 3rem;
+  }
+  .research,
+  .news {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid hsl(var(--border));
+  }
+  .research li,
+  .news li {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid hsl(var(--border));
+    line-height: 1.65;
+    font-size: 0.94rem;
+  }
+  .research .code {
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+    padding-top: 0.1rem;
+  }
+  .research .code:hover {
+    color: hsl(var(--primary));
+  }
+  .news .date {
+    color: hsl(var(--faint));
+    padding-top: 0.1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .news a {
+    color: hsl(var(--foreground));
+    text-decoration: none;
+  }
+  .news a:hover {
+    color: hsl(var(--primary));
+  }
+
+  .projects {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid hsl(var(--border));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 3rem;
+  }
+  .proj {
+    padding: 1.125rem 0;
+    border-bottom: 1px solid hsl(var(--border));
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .proj-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.875rem;
+  }
+  .proj-name {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+    text-decoration: none;
+  }
+  .proj-name:hover {
+    color: hsl(var(--primary));
+  }
+  .proj-meta {
+    color: hsl(var(--faint));
+  }
+  .proj-sum {
+    margin: 0;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.65;
+    font-size: 0.94rem;
+  }
+  .pipe {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.4rem;
+    color: hsl(var(--foreground));
+  }
+  .pipe .arr {
+    color: hsl(var(--faint));
+  }
+  .proj-stack {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  .series {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+  .serie {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 1rem;
+    border-top: 2px solid hsl(var(--foreground));
+    text-decoration: none;
+    color: inherit;
+    min-width: 0;
+  }
+  .serie:hover h3 {
+    color: hsl(var(--primary));
+  }
+  .serie .kicker {
+    color: hsl(var(--faint));
+  }
+  .serie h3 {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 0;
+    text-wrap: balance;
+    transition: color 0.15s ease;
+  }
+  .serie p {
+    margin: 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+  .serie ol {
+    list-style: none;
+    margin: 0.25rem 0 0;
+    padding: 0.625rem 0 0;
+    border-top: 1px dashed hsl(var(--border));
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.8rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .serie ol li {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .serie-foot {
+    margin-top: auto;
+    padding-top: 0.5rem;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .serie .meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  @media (max-width: 960px) {
+    .series {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 800px) {
+    .two-col,
+    .projects {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 600px) {
+    .home {
+      gap: 2.75rem;
+      padding-top: 0.5rem;
+    }
+    .intro {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.25rem;
+    }
+    .avatar {
+      width: 5rem;
+      height: 5rem;
+    }
+    .series {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .research li,
+    .news li {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.125rem;
+    }
+  }
+</style>

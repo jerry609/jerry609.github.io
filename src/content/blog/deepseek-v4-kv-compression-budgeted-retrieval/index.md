@@ -2,6 +2,7 @@
 title: 'DeepSeek-V4 的 KV 压缩：从删 token 误解到预算检索'
 description: '从 CSA、HCA 和 SWA 的分工出发，将 DeepSeek-V4 的百万上下文注意力理解为带预算的检索、压缩与端到端损失最小化问题。'
 publishDate: '2026-04-30'
+layer: model
 tags: ['ai', 'deepseek', 'transformer', 'attention', 'kv-cache']
 language: 'zh-CN'
 draft: false

@@ -1,55 +1,55 @@
 ---
-// 此组件在客户端加载进度统计
+// 进度统计：总题数由服务端传入，完成数取 Supabase 与本地进度中较大者
+interface Props {
+  total?: number
+}
+const { total = 0 } = Astro.props
 ---
 
-<div id="progress-stats" class="mb-8 rounded-xl border border-border bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-950 dark:to-primary-900 p-6 shadow-lg">
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="text-2xl font-bold text-primary-900 dark:text-primary-100">
-      刷题进度
-    </h2>
-    <div id="stats-badge" class="px-4 py-2 rounded-full bg-white dark:bg-gray-800 shadow-sm">
-      <span class="text-sm font-medium text-gray-600 dark:text-gray-400">加载中...</span>
+<section id='progress-stats' class='pstats' aria-label='刷题进度' data-total={total}>
+  <div class='pstats-head'>
+    <h2 class='mono'>Progress · 刷题进度</h2>
+    <div id='stats-badge' class='mono'><span>加载中…</span></div>
+  </div>
+  <div class='pstats-bar'>
+    <div id='progress-bar' style='width: 0%'>
+      <span id='progress-text' class='sr-only'></span>
     </div>
   </div>
-  
-  <!-- Progress Bar -->
-  <div class="relative w-full h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
-    <div 
-      id="progress-bar"
-      class="h-full bg-gradient-to-r from-primary-500 to-primary-600 transition-all duration-500 ease-out flex items-center justify-end pr-3"
-      style="width: 0%"
-    >
-      <span id="progress-text" class="text-sm font-bold text-white drop-shadow-sm"></span>
-    </div>
-  </div>
-  
-  <!-- Stats Details -->
-  <div class="mt-4 grid grid-cols-3 gap-4">
-    <div class="text-center">
-      <div class="text-2xl font-bold text-primary-700 dark:text-primary-300" id="completed-count">0</div>
-      <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">已完成</div>
-    </div>
-    <div class="text-center">
-      <div class="text-2xl font-bold text-gray-700 dark:text-gray-300" id="total-count">0</div>
-      <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">总题数</div>
-    </div>
-    <div class="text-center">
-      <div class="text-2xl font-bold text-primary-700 dark:text-primary-300" id="remaining-count">0</div>
-      <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">待完成</div>
-    </div>
-  </div>
-</div>
+  <dl class='pstats-grid'>
+    <div><dt>已完成</dt><dd id='completed-count'>0</dd></div>
+    <div><dt>总题数</dt><dd id='total-count'>0</dd></div>
+    <div><dt>待完成</dt><dd id='remaining-count'>0</dd></div>
+  </dl>
+</section>
 
 <script>
   import { getProgressStats } from '@/lib/supabaseClient'
 
   async function updateProgressDisplay() {
-    // 计算总题目数
-    const allProblems = document.querySelectorAll('.prob-check')
-    const totalProblems = allProblems.length
+    // 计算总题目数（题单在 <template> 里，DOM 计数可能为 0，回退到服务端传入的总数）
+    const root = document.getElementById('progress-stats')
+    const domCount = document.querySelectorAll('.prob-check').length
+    const totalProblems = domCount || Number(root?.dataset.total || 0)
 
-    // 获取进度统计
-    const stats = await getProgressStats(totalProblems)
+    // 获取进度统计：远端（若配置了 Supabase）与本地浏览器进度取较大者
+    const remote = await getProgressStats(totalProblems)
+    let local = 0
+    try {
+      const fromWindow = (window as any).roadmapData?.progress
+      const saved = fromWindow && Object.keys(fromWindow).length
+        ? fromWindow
+        : JSON.parse(localStorage.getItem('algo-roadmap-progress') || '{}')
+      local = Object.values(saved).filter(Boolean).length
+    } catch {
+      local = 0
+    }
+    const completed = Math.min(totalProblems, Math.max(remote.completed, local))
+    const stats = {
+      total: totalProblems,
+      completed,
+      percentage: totalProblems ? Math.round((completed / totalProblems) * 100) : 0
+    }
 
     // 更新 UI
     const progressBar = document.getElementById('progress-bar')
@@ -66,11 +66,7 @@
         progressText.textContent = `${stats.percentage}%`
       }, 100)
 
-      statsBadge.innerHTML = `
-        <span class="text-sm font-bold text-primary-600 dark:text-primary-400">
-          ${stats.completed} / ${stats.total}
-        </span>
-      `
+      statsBadge.textContent = `${stats.completed} / ${stats.total} · ${stats.percentage}%`
 
       completedCount.textContent = stats.completed.toString()
       totalCount.textContent = stats.total.toString()
@@ -83,4 +79,63 @@
 
   // 监听自定义事件，当题目状态改变时更新进度
   document.addEventListener('problem-status-changed', updateProgressDisplay)
+  window.addEventListener('roadmap-updated', updateProgressDisplay)
+  window.addEventListener('roadmap-data-loaded', updateProgressDisplay)
 </script>
+
+<style>
+  .pstats {
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--card));
+    padding: 1rem 1.125rem;
+  }
+  .pstats-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  .pstats-head h2 {
+    margin: 0;
+    font-weight: 500;
+    color: hsl(var(--muted-foreground));
+  }
+  #stats-badge {
+    color: hsl(var(--foreground));
+    font-variant-numeric: tabular-nums;
+  }
+  #stats-badge :global(span) {
+    font-size: 0.85rem;
+  }
+  .pstats-bar {
+    height: 6px;
+    background: hsl(var(--muted));
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  #progress-bar {
+    height: 100%;
+    background: hsl(var(--primary));
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+  .pstats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 0.875rem 0 0;
+  }
+  .pstats-grid dt {
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .pstats-grid dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    color: hsl(var(--foreground));
+  }
+</style>

@@ -2,6 +2,7 @@
 title: 'SAE 深入理解：从 Superposition 到机制诊断'
 description: '从重构、稀疏字典、superposition 和干预验证角度理解 Sparse Autoencoder：它如何把混合 activation 转化为可检验的 feature 假设。'
 publishDate: '2026-05-07'
+layer: model
 tags: ['SAE', 'Sparse Autoencoder', 'interpretability', 'LLM', 'mechanistic interpretability']
 language: 'zh-CN'
 draft: false

@@ -1,6 +1,8 @@
 import { defineCollection, z } from 'astro:content'
 import { glob } from 'astro/loaders'
 
+import { LAYER_IDS } from './data/stack'
+
 function removeDupsAndLowerCase(array: string[]) {
   if (!array.length) return array
   const lowercaseItems = array.map((str) => str.toLowerCase())
@@ -33,6 +35,8 @@ const blog = defineCollection({
         })
         .optional(),
       tags: z.array(z.string()).default([]).transform(removeDupsAndLowerCase),
+      // Which layer of the agent × infra stack this post sits on (see src/data/stack.ts)
+      layer: z.enum(LAYER_IDS).default('notes'),
       language: z.string().optional(),
       draft: z.boolean().default(false),
       // `true` pins a post; larger numbers sort higher when multiple posts are pinned.
@@ -42,22 +46,6 @@ const blog = defineCollection({
         .transform((value) => (typeof value === 'number' ? value : value ? 1 : 0)),
       // Special fields
       comment: z.boolean().default(true)
-    })
-})
-
-// Define docs collection
-const docs = defineCollection({
-  loader: glob({ base: './src/content/docs', pattern: '**/*.{md,mdx}' }),
-  schema: () =>
-    z.object({
-      title: z.string().max(60),
-      description: z.string().max(160),
-      publishDate: z.coerce.date().optional(),
-      updatedDate: z.coerce.date().optional(),
-      tags: z.array(z.string()).default([]).transform(removeDupsAndLowerCase),
-      draft: z.boolean().default(false),
-      // Special fields
-      order: z.number().default(999)
     })
 })
 
@@ -96,4 +84,4 @@ const photos = defineCollection({
     })
 })
 
-export const collections = { blog, docs, murmurs, photos }
+export const collections = { blog, murmurs, photos }

@@ -2,6 +2,7 @@
 title: '数学工具 2：Ridge 问题'
 description: '把 Ridge regression 写成最小二乘加 L2 正则项的问题，解释它惩罚什么、为什么更稳定、解析解如何推导，以及和 LASSO 的区别。'
 publishDate: '2026-05-07'
+layer: math
 tags: ['数学', 'Ridge', '岭回归', '线性代数', '凸优化', '机器学习', '数学工具集合']
 language: 'zh-CN'
 draft: false

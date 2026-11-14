@@ -1,7 +1,7 @@
 ---
 import { BackToTop } from 'astro-pure/components/pages'
 import type { SiteMeta } from 'astro-pure/types'
-import { Button, Icon } from 'astro-pure/user'
+import { Icon } from 'astro-pure/user'
 import { cn } from 'astro-pure/utils'
 import PageLayout from '@/layouts/BaseLayout.astro'
 import { integ } from '@/site-config'
@@ -10,14 +10,18 @@ interface Props {
   meta: SiteMeta
   highlightColor?: string
   back?: string
+  backLabel?: string
+  /** Mark this article as the Pagefind search body (posts only) */
+  searchable?: boolean
 }
 
-const { meta, highlightColor, back = '/', ...props } = Astro.props
+const { meta, highlightColor, back = '/', backLabel = '首页', searchable = false, ...props } =
+  Astro.props
 ---
 
 <PageLayout {meta} {highlightColor} {...props}>
-  <Button title='Back' href={back} variant='back' />
-  <main class='mt-6 items-start gap-x-10 md:flex'>
+  <a class='crumb mono' href={back}>← {backLabel}</a>
+  <main class='mt-6 items-start gap-x-12 md:flex'>
     {/* Sidebar */}
     <aside
       class='animate top-20 min-w-48 basis-60 overflow-y-scroll max-md:hidden z-40 fixed md:sticky md:order-2 lg:shrink-0 max-md:border max-md:px-4 max-md:py-3 max-md:bg-muted max-md:rounded-xl'
@@ -33,7 +37,7 @@ const { meta, highlightColor, back = '/', ...props } = Astro.props
     >
     </div>
 
-    <article class='min-w-0 grow'>
+    <article class='min-w-0 grow' data-pagefind-body={searchable ? '' : undefined}>
       {/* Content header */}
       <div id='content-header' class='animate'>
         <slot name='header' />
@@ -43,7 +47,7 @@ const { meta, highlightColor, back = '/', ...props } = Astro.props
       <div
         id='content'
         class={cn(
-          'max-w-none animate mt-8 md:min-w-[45ch] overflow-x-hidden',
+          'reading animate mt-8 md:min-w-[45ch] overflow-x-hidden',
           integ.typography.class
         )}
       >
@@ -101,6 +105,18 @@ const { meta, highlightColor, back = '/', ...props } = Astro.props
   })
 </script>
 <style>
+  .crumb {
+    display: inline-block;
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+    margin-top: 0.5rem;
+  }
+  .crumb:hover {
+    color: hsl(var(--primary));
+  }
+  .reading {
+    max-width: 46rem;
+  }
   @media (min-width: 769px) {
     #sidebar-shade {
       display: none !important;

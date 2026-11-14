@@ -1,23 +1,29 @@
 ---
-import { Footer, Header, ThemeProvider } from 'astro-pure/components/basic'
+import { ThemeProvider } from 'astro-pure/components/basic'
 import type { SiteMeta } from 'astro-pure/types'
 import BaseHead from '@/components/BaseHead.astro'
+import SiteFooter from '@/components/site/SiteFooter.astro'
+import SiteHeader from '@/components/site/SiteHeader.astro'
 import config from '@/site-config'
 
-// Import the global.css file here so that it is included on
-// all pages through the use of the <BaseLayout /> component.
+// Self-hosted fonts (bundled at build time, no third-party font CDN)
+import '@fontsource-variable/geist/wght.css'
+import '@fontsource-variable/geist-mono/wght.css'
+import '@fontsource-variable/source-serif-4/opsz.css'
+// Global styles, included on every page through <BaseLayout />
 import '@/assets/styles/global.css'
 import '@/assets/styles/app.css'
 import 'katex/dist/katex.min.css'
 
 interface Props {
   meta: SiteMeta
+  /** Kept for compatibility with older callers; no longer rendered. */
   highlightColor?: string
 }
 
 const {
   meta: { articleDate, description = config.description, ogImage, title },
-  highlightColor,
+  highlightColor: _highlightColor,
   ...props
 } = Astro.props
 ---
@@ -28,37 +34,44 @@ const {
     <ThemeProvider />
   </head>
 
-  <body class='flex justify-center bg-background text-foreground' {...props}>
-    {
-      highlightColor && (
-        <div
-          id='highlight-gradient'
-          class='pointer-events-none absolute start-0 top-0 z-0 h-screen w-full opacity-25'
-          style={`background-image:linear-gradient(${highlightColor},transparent)`}
-        />
-      )
-    }
-    <div
-      class='w-full max-w-[70rem] px-4 sm:px-7 lg:px-10 min-h-[100dvh] flex flex-col justify-between'
-    >
-      <Header />
-      <div class='flex-1 w-full'>
+  <body class='bg-background text-foreground' {...props}>
+    <div class='site-shell'>
+      <SiteHeader />
+      <div class='site-wrap site-main'>
         <slot />
       </div>
-      <Footer />
+      <SiteFooter />
     </div>
-
-    {/* Set highlight color */}
-    <style define:vars={{ highlightColor }}>
-      :global(.highlight) {
-        color: var(--highlightColor, hsl(var(--primary) / var(--un-text-opacity))) !important;
-      }
-      :global(.highlight-bg) {
-        background-color: var(
-          --highlightColor,
-          hsl(var(--primary) / var(--un-text-opacity))
-        ) !important;
-      }
-    </style>
   </body>
 </html>
+
+<style is:global>
+  .site-shell {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  .site-wrap {
+    width: 100%;
+    max-width: 72rem;
+    margin-inline: auto;
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+  @media (min-width: 640px) {
+    .site-wrap {
+      padding-left: max(1.75rem, env(safe-area-inset-left, 0px));
+      padding-right: max(1.75rem, env(safe-area-inset-right, 0px));
+    }
+  }
+  .site-main {
+    flex: 1;
+    padding-top: 1.5rem;
+  }
+  .highlight {
+    color: hsl(var(--primary)) !important;
+  }
+  .highlight-bg {
+    background-color: hsl(var(--primary)) !important;
+  }
+</style>

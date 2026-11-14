@@ -1,42 +1,267 @@
 ---
-import PageLayout from '@/layouts/CommonPage.astro'
+import PageLayout from '@/layouts/BaseLayout.astro'
+import { layerLabel, OTHER_REPOS, PROJECTS } from '@/data/stack'
 
-const headings: { depth: number; slug: string; text: string }[] = []
+const [featured, ...rest] = PROJECTS
+const ext = (href: string) => (href.startsWith('http') ? { target: '_blank', rel: 'noopener' } : {})
 ---
 
-<PageLayout title='Projects' {headings} view>
-  <p>Github Activities:</p>
-  <p>
-    <img
-      class='w-full max-w-3xl rounded-lg border'
-      src='https://ghchart.rshah.org/659eb9/jerry609'
-      alt='github activities'
-      width='800'
-      height='160'
-      loading='lazy'
-      decoding='async'
-    />
-  </p>
+<PageLayout meta={{ title: '项目', description: 'PaperBot 等项目，以及 Mega 文件系统上的实践' }}>
+  <header class='page-intro'>
+    <p class='eyebrow mono'><span>Projects</span><span>{PROJECTS.length} selected</span><span>github.com/jerry609</span></p>
+    <h1>Projects <small>项目</small></h1>
+    <p class='lede'>做过和在做的东西。每个项目标了它主要落在哪一层栈上，相关的文章可以从层名进去找。</p>
+  </header>
 
-  <p>项目整理中...</p>
+  <article class='featured'>
+    <div class='f-main'>
+      <p class='mono kicker'>{featured.layers.map((l) => layerLabel(l)).join(' · ')}</p>
+      <h2>
+        <a href={featured.href} {...ext(featured.href)}>{featured.name}</a>
+      </h2>
+      <p class='summary'>{featured.summary}</p>
+      {featured.detail && <p class='detail'>{featured.detail}</p>}
+      <p class='chips'>{featured.stack.map((t) => <span class='chip'>{t}</span>)}</p>
+    </div>
+    <div class='f-side'>
+      {
+        featured.pipeline && (
+          <ol class='pipeline'>
+            {featured.pipeline.map((step, i) => (
+              <li>
+                <span class='mono n'>{String(i + 1).padStart(2, '0')}</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        )
+      }
+      <dl class='stats'>
+        {featured.stars && (
+          <div>
+            <dt class='mono'>Stars</dt>
+            <dd class='mono'>{featured.stars}</dd>
+          </div>
+        )}
+        <div>
+          <dt class='mono'>Repo</dt>
+          <dd><a class='mono' href={featured.href} {...ext(featured.href)}>jerry609/PaperBot ↗</a></dd>
+        </div>
+      </dl>
+    </div>
+  </article>
+
+  <section class='more-projects'>
+    <ul>
+      {
+        rest.map((p) => (
+          <li>
+            <div class='p-head'>
+              <a class='p-name' href={p.href} {...ext(p.href)}>
+                {p.name}
+              </a>
+              <span class='mono meta'>
+                {p.layers.map((l) => layerLabel(l)).join(' · ')}
+                {p.stars ? ` · ★ ${p.stars}` : ''}
+                {p.note ? ` · ${p.note}` : ''}
+              </span>
+            </div>
+            <p>{p.summary}</p>
+            <p class='chips'>{p.stack.map((t) => <span class='chip'>{t}</span>)}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class='repos'>
+    <div class='sec-head'>
+      <h2 class='sec-title'>Other repositories<span class='zh'>其他仓库</span></h2>
+      <a class='sec-note mono' href='https://github.com/jerry609?tab=repositories' target='_blank' rel='noopener'
+        >全部仓库 ↗</a
+      >
+    </div>
+    <ul class='rows'>
+      {
+        OTHER_REPOS.map((r) => (
+          <li>
+            <a class='row repo-row' href={r.href} target='_blank' rel='noopener'>
+              <span class='row-t mono'>{r.name}</span>
+              <span class='row-x'>{r.summary}</span>
+              <span class='row-l mono'>↗</span>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class='activity'>
+    <div class='sec-head'>
+      <h2 class='sec-title'>Activity<span class='zh'>GitHub 提交</span></h2>
+    </div>
+    <div class='panel chart'>
+      <img
+        src='https://ghchart.rshah.org/2a52cf/jerry609'
+        alt='jerry609 过去一年的 GitHub 贡献图'
+        width='800'
+        height='160'
+        loading='lazy'
+        decoding='async'
+      />
+    </div>
+  </section>
 </PageLayout>
 
 <style>
-  .sponsorship-card {
-    & .sponsorship-card-img {
-      opacity: 0.3;
-      --un-blur: blur(4px);
-      filter: var(--un-blur);
+  .featured {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 2.5rem;
+    padding: 1.75rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--card));
+  }
+  .kicker {
+    color: hsl(var(--faint));
+    margin: 0;
+  }
+  .featured h2 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0.375rem 0 0.75rem;
+  }
+  .featured h2 a {
+    color: hsl(var(--foreground));
+    text-decoration: none;
+  }
+  .featured h2 a:hover {
+    color: hsl(var(--primary));
+  }
+  .summary {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    margin: 0 0 0.75rem;
+  }
+  .detail {
+    color: hsl(var(--muted-foreground));
+    line-height: 1.75;
+    margin: 0 0 1rem;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin: 0;
+  }
+  .pipeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid hsl(var(--border));
+  }
+  .pipeline li {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0.5rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid hsl(var(--border));
+    font-size: 0.94rem;
+  }
+  .pipeline .n {
+    color: hsl(var(--faint));
+  }
+  .stats {
+    margin: 1rem 0 0;
+    display: grid;
+    gap: 0.375rem;
+  }
+  .stats div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .stats dt {
+    color: hsl(var(--faint));
+  }
+  .stats dd {
+    margin: 0;
+  }
+  .stats a {
+    color: hsl(var(--primary));
+    text-decoration: none;
+  }
+  .more-projects ul {
+    list-style: none;
+    margin: 2rem 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+  .more-projects li {
+    border-top: 2px solid hsl(var(--foreground));
+    padding-top: 0.875rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .p-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+  .p-name {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+    text-decoration: none;
+  }
+  .p-name:hover {
+    color: hsl(var(--primary));
+  }
+  .meta {
+    color: hsl(var(--faint));
+  }
+  .more-projects p {
+    margin: 0;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.92rem;
+    line-height: 1.7;
+  }
+  .repos,
+  .activity {
+    margin-top: 3.5rem;
+  }
+  .repo-row {
+    grid-template-columns: 14rem minmax(0, 1fr) auto;
+  }
+  .repo-row .row-x {
+    margin: 0;
+    white-space: normal;
+  }
+  .chart {
+    padding: 1rem;
+    overflow-x: auto;
+  }
+  .chart img {
+    display: block;
+    width: 100%;
+    min-width: 640px;
+    height: auto;
+  }
+  @media (max-width: 860px) {
+    .featured {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.5rem;
+      padding: 1.25rem;
     }
-
-    &:hover {
-      & .sponsorship-card-icon {
-        opacity: 0;
-      }
-      & .sponsorship-card-img {
-        opacity: 1;
-        --un-blur: blur(0);
-      }
+    .more-projects ul {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>

@@ -1,0 +1,189 @@
+---
+import type { CollectionEntry } from 'astro:content'
+
+import { ALL_LAYERS, layerLabel } from '@/data/stack'
+
+interface Props {
+  posts: CollectionEntry<'blog'>[]
+  /** Rows shown before "show all"; 0 shows everything. */
+  limit?: number
+  id?: string
+}
+
+const { posts, limit = 0, id = 'writing-index' } = Astro.props
+const day = (d: Date) => d.toISOString().slice(0, 10)
+const counts = Object.fromEntries(
+  ALL_LAYERS.map((l) => [l.id, posts.filter((p) => p.data.layer === l.id).length])
+)
+---
+
+<div class='windex' id={id} data-limit={limit}>
+  <div class='filters'>
+    <div class='pills' role='group' aria-label='按栈层筛选'>
+      <button class='pill' type='button' data-layer='all' aria-pressed='true'
+        >全部<span class='c'>{posts.length}</span></button
+      >
+      {
+        ALL_LAYERS.filter((l) => counts[l.id] > 0).map((l) => (
+          <button class='pill' type='button' data-layer={l.id} aria-pressed='false'>
+            {layerLabel(l.id)}
+            <span class='c'>{counts[l.id]}</span>
+          </button>
+        ))
+      }
+    </div>
+    <label class='filter-box'>
+      <span class='sr-only'>按标题或摘要过滤</span>
+      <svg viewBox='0 0 24 24' width='14' height='14' aria-hidden='true'
+        ><circle cx='11' cy='11' r='7' fill='none' stroke='currentColor' stroke-width='2'
+        ></circle><path d='M20 20l-3.5-3.5' stroke='currentColor' stroke-width='2' fill='none'
+        ></path></svg
+      >
+      <input type='search' placeholder='按标题或摘要过滤' autocomplete='off' id={`${id}-q`} />
+    </label>
+  </div>
+
+  <ul class='rows'>
+    {
+      posts.map((p) => (
+        <li
+          data-layer={p.data.layer}
+          data-q={`${p.data.title} ${p.data.description} ${p.data.tags.join(' ')}`.toLowerCase()}
+        >
+          <a class='row' href={`/blog/${p.id}`}>
+            <span class='row-d mono'>{day(p.data.publishDate)}</span>
+            <span>
+              <span class='row-t'>{p.data.title}</span>
+              <span class='row-x'>{p.data.description}</span>
+            </span>
+            <span class='row-l mono'>{layerLabel(p.data.layer)}</span>
+          </a>
+        </li>
+      ))
+    }
+    <li class='empty' hidden>没有匹配的文章。换个关键词，或者点“全部”清除筛选。</li>
+  </ul>
+
+  <div class='list-foot'>
+    <span class='mono shown'>共 {posts.length} 篇</span>
+    <button class='btn more' type='button' hidden>显示全部</button>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.windex').forEach((root) => {
+    const limit = Number(root.dataset.limit || 0)
+    const rows = Array.from(root.querySelectorAll<HTMLLIElement>('li[data-layer]'))
+    const empty = root.querySelector<HTMLLIElement>('li.empty')!
+    const shown = root.querySelector<HTMLElement>('.shown')!
+    const more = root.querySelector<HTMLButtonElement>('.more')!
+    const input = root.querySelector<HTMLInputElement>('input[type=search]')!
+    let layer = 'all'
+    let q = ''
+    let expanded = false
+
+    const render = () => {
+      const match = rows.filter(
+        (r) => (layer === 'all' || r.dataset.layer === layer) && (!q || r.dataset.q!.includes(q))
+      )
+      const cap = limit && !expanded ? limit : Infinity
+      rows.forEach((r) => (r.hidden = true))
+      match.forEach((r, i) => (r.hidden = i >= cap))
+      empty.hidden = match.length > 0
+      const visible = Math.min(match.length, cap)
+      shown.textContent =
+        visible === match.length ? `共 ${match.length} 篇` : `显示 ${visible} / ${match.length} 篇`
+      more.hidden = !limit || match.length <= limit
+      more.textContent = expanded ? '收起' : `显示全部 ${match.length} 篇`
+      root.querySelectorAll<HTMLButtonElement>('.pill').forEach((b) => {
+        b.setAttribute('aria-pressed', String(b.dataset.layer === layer))
+      })
+    }
+
+    root.querySelector('.pills')?.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLButtonElement>('.pill')
+      if (b) document.dispatchEvent(new CustomEvent('stack:change', { detail: b.dataset.layer }))
+    })
+    document.addEventListener('stack:change', (e) => {
+      layer = (e as CustomEvent<string>).detail || 'all'
+      expanded = false
+      render()
+    })
+    input.addEventListener('input', () => {
+      q = input.value.trim().toLowerCase()
+      render()
+    })
+    more.addEventListener('click', () => {
+      expanded = !expanded
+      render()
+    })
+
+    // Deep link: /blog?layer=systems
+    const fromUrl = new URLSearchParams(location.search).get('layer')
+    if (fromUrl) document.dispatchEvent(new CustomEvent('stack:change', { detail: fromUrl }))
+    else render()
+  })
+</script>
+
+<style>
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.625rem 1rem;
+    align-items: center;
+    margin-bottom: 0.875rem;
+  }
+  .pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .filter-box {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+    padding: 0.25rem 0.625rem;
+    color: hsl(var(--faint));
+    min-width: 0;
+  }
+  .filter-box:focus-within {
+    border-color: hsl(var(--primary));
+  }
+  .filter-box input {
+    font: inherit;
+    font-size: 0.875rem;
+    border: 0;
+    background: transparent;
+    color: hsl(var(--foreground));
+    outline: none;
+    width: 13rem;
+    min-width: 0;
+  }
+  .empty {
+    padding: 1.5rem 0.25rem;
+    color: hsl(var(--muted-foreground));
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .list-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.875rem;
+    color: hsl(var(--muted-foreground));
+  }
+  @media (max-width: 640px) {
+    .filter-box {
+      margin-left: 0;
+      width: 100%;
+    }
+    .filter-box input {
+      width: 100%;
+    }
+  }
+</style>

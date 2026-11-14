@@ -2,6 +2,7 @@
 title: 'Softmax 的几何本质：从相对优势到概率单纯形'
 description: '从平移不变性、log-odds、log-sum-exp、最大熵优化和 Jacobian 出发，看 softmax 如何把 logit 的相对结构变成注意力中的概率竞争。'
 publishDate: '2026-05-24'
+layer: model
 tags: ['LLM', 'Transformer', 'Attention', 'Softmax', '机制分析']
 language: 'zh-CN'
 draft: false

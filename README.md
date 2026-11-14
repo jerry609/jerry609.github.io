@@ -1,103 +1,53 @@
-# Astro Theme Pure
+# jerry609.github.io
 
-English | [简体中文](./README-zh-CN.md)
+Jerry Zhang 的个人站点：Agent × Infra 全栈研究笔记。线上地址 <https://jerry609.github.io>。
 
-A simple, fast and powerful blog & document theme built by Astro.
+## 结构
 
-[![GitHub deployments](https://img.shields.io/github/deployments/cworld1/astro-theme-pure/production?style=flat&logo=vercel&label=vercel)](https://astro-pure.js.org/)
-[![NPM Version](https://img.shields.io/npm/v/astro-pure?logo=npm&style=flat)](https://www.npmjs.com/package/astro-pure)
-[![GitHub Release](https://img.shields.io/github/v/release/cworld1/astro-theme-pure?include_prereleases&style=flat&label=template)](https://github.com/cworld1/astro-theme-pure/releases)
-[![GitHub License](https://img.shields.io/github/license/cworld1/astro-theme-pure?style=flat)](https://github.com/cworld1/astro-theme-pure/blob/main/LICENSE)
+文章按「栈层」组织，每篇在 frontmatter 里声明一个 `layer`：
 
-![image](./.github/assets/header.webp)
-![image](./.github/assets/body.webp)
+| layer      | 含义                               |
+| ---------- | ---------------------------------- |
+| `agent`    | L6 Agent：harness、上下文、工具调用 |
+| `runtime`  | L5 Runtime：沙箱、网关、隔离执行    |
+| `model`    | L4 Model：Attention、KV Cache、可解释性 |
+| `training` | L3 Training：RL、GRPO、KL 投影      |
+| `systems`  | L2 Systems：FUSE、构建、性能剖析    |
+| `math`     | L1 Math：概率、优化、线性模型       |
+| `notes`    | 随笔（默认值，不进栈图）            |
 
-> [!NOTE]
-> Known issues: 1. Header & customize options is still under development (template exposed still). 2. Theme template v4.0.5^ UnoCSS preset changed to PresetMini. If there's any problem, please report as issue.
+层的定义、连载（series）和项目列表都在 `src/data/stack.ts`。新增连载时把文章 id 按顺序加到 `SERIES` 里，文章页会自动出现连载导航。
 
-## Introduction
-
-Checkout [Demo Site →](https://astro-pure.js.org/)
-
-### :fire: Features
-
-- [x] :rocket: Fast & high performance
-- [x] :star: Simple & clean design
-- [x] :iphone: Responsive design
-- [x] :mag: Full-site search built with [pagefind](https://pagefind.app/)
-- [x] :world_map: Sitemap & RSS feed
-- [x] :spider_web: SEO-friendly
-- [x] :book: TOC (table of contents)
-- [x] :framed_picture: Dynamic open graph generation for posts
-- [x] :framed_picture: Mediumzoom lightbox for images
-
-### :package: Components
-
-Theme includes a lot of components, which can not only be used in the theme, but also in other astro projects.
-
-> For other astro projects, UnoCSS is required. See [Package README](https://github.com/cworld1/astro-theme-pure/blob/main/packages/pure/README.md#use-with-common-astro-project) for more details.
-
-- Basic components: `Aside`, `Tabs`, `Timeline`, `Steps`, `Spoiler`...
-- Advanced components: `GithubCard`, `LinkPreview`, `Quote`, `QRCode`...
-
-### :white_check_mark: Lighthouse score
-
-[![lighthouse-score](./.github/assets/lighthouse-score.png)](https://pagespeed.web.dev/analysis/https-cworld-top/o229zrt5o4?form_factor=mobile&hl=en)
-
-## Documentation
-
-[Docs](https://astro-pure.js.org/docs) | [Showcase](https://github.com/cworld1/astro-theme-pure/issues/10)
-
-## Package
-
-See [astro-theme-pure](https://www.npmjs.com/package/astro-pure) on npm.
-
-## Local development
-
-Environment requirements:
-
-- [Nodejs](https://nodejs.org/): 18.0.0+
-
-Clone the repository:
-
-```shell
-git clone https://github.com/cworld1/astro-theme-pure.git
-cd astro-theme-pure
+```md
+---
+title: '...'
+description: '...'
+publishDate: '2026-06-07'
+layer: training
+tags: ['RL', 'KL']
+---
 ```
 
-Useful commands:
+主要页面：
+
+- `/`：简介、研究方向、近况、写作轨迹图（Fig. 1）、项目、连载、最近文章
+- `/blog`：全部文章，可按栈层筛选（`/blog?layer=systems`）和按标题过滤
+- `/math-notes`：数学笔记与讲义 PDF
+- `/roadmap`：算法刷题路线与进度
+- `/projects`、`/about`
+
+## 本地开发
+
+需要 Node 18+。CI（GitHub Actions + `withastro/action`）使用 npm 和 `package-lock.json`。
 
 ```shell
-# install dependencies
-bun install
-
-# start the dev server
-bun dev
-
-# build the project
-bun run build
-
-# preview (after the build)
-bun preview
-
-# create a new post
-bun new
+npm ci
+npm run dev      # http://localhost:4321
+npm run build    # astro check + astro build
 ```
 
-## Contributions
+推送到 `main` 后由 `.github/workflows/deploy.yml` 构建并发布到 GitHub Pages。
 
-To spend more time coding and less time fiddling with whitespace, this project uses code conventions and styles to encourage consistency. Code with a consistent style is easier (and less error-prone!) to review, maintain, and understand.
+## 致谢
 
-## Thanks
-
-- [Astro Cactus](https://github.com/chrismwilliams/astro-theme-cactus)
-- [Astro Resume](https://github.com/srleom/astro-theme-resume)
-- [Starlight](https://github.com/withastro/starlight)
-
-Other third party references are on [Docs#Contributions](https://astro-pure.js.org/docs/advanced/thanks). Appreciate for all open source libraries.
-
-## License
-
-This project is licensed under the Apache 2.0 License.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=cworld1/astro-theme-pure&type=Date)](https://star-history.com/#cworld1/astro-theme-pure&Date)
+基于 [Astro](https://astro.build/) 与 [astro-theme-pure](https://github.com/cworld1/astro-theme-pure)（Apache-2.0，见 `LICENSE` 与 `packages/pure`）改造。字体为 Source Serif 4、Geist、Geist Mono，经 Fontsource 自托管。

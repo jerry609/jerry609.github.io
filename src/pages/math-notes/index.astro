@@ -1,131 +1,314 @@
 ---
 import type { CollectionEntry } from 'astro:content'
 
+import katex from 'katex'
 import { getBlogCollection } from 'astro-pure/server'
-import { Button } from 'astro-pure/user'
-import PageLayout from '@/layouts/CommonPage.astro'
-import PostPreview from '@/components/blog/PostPreview.astro'
-import { sortBlogPosts } from '@/utils/blog'
+import PageLayout from '@/layouts/BaseLayout.astro'
+import { layerLabel } from '@/data/stack'
 
-type BlogPost = CollectionEntry<'blog'>
-
-const mathKeywords = [
-  '数学',
-  '概率',
-  '统计',
-  '线性代数',
-  '凸优化',
-  '最小二乘',
-  '极大似然',
-  '正态',
-  'ridge',
-  'lasso'
-]
+const posts = (await getBlogCollection('blog')) as CollectionEntry<'blog'>[]
+const bySlug = Object.fromEntries(posts.map((p) => [p.id, p]))
+const day = (d: Date) => d.toISOString().slice(0, 10)
 
 const tracks = [
   {
-    title: '概率与统计',
-    description: '从随机变量、概率密度、正态分布，到极大似然和统计学习。',
-    keywords: ['概率', '统计', '正态', '极大似然', '概率密度']
+    en: 'Probability & Statistics',
+    zh: '概率与统计',
+    desc: '从误差模型推出正态分布，从极大似然推出最小二乘，再把高斯分布用到连续动作的策略上。',
+    slugs: ['normal-distribution-derivation', 'least-squares-mle-likelihood', 'gaussian-policy-maximum-entropy']
   },
   {
-    title: '线性模型',
-    description: '围绕最小二乘、Ridge、LASSO 和正则化展开的建模笔记。',
-    keywords: ['最小二乘', 'ridge', 'lasso', '线性', '正则']
+    en: 'Linear Models & Regularization',
+    zh: '线性模型与正则化',
+    desc: '最小二乘之后加上 L2 和 L1：Ridge 的闭式解、LASSO 的稀疏性，以及背后的凸优化工具。',
+    slugs: ['math-toolkit-collection', 'ridge-regression-l2-regularization', 'lasso-textbook']
   },
   {
-    title: '优化工具',
-    description: '记录凸优化、KKT、对偶、近端算法等可复用的数学工具。',
-    keywords: ['凸优化', 'kkt', '对偶', '近端', '优化']
+    en: 'Information & Projections',
+    zh: '信息论与分布投影',
+    desc: '把 SFT 和 RL 都写成分布上的 KL 投影；用熵和单纯形几何解释 softmax 与注意力。',
+    slugs: [
+      'sft-forward-kl-formal-modeling',
+      'rl-reward-tilting-kl-regularized-projection',
+      'softmax-geometric-essence',
+      'attention-entropy-dynamic-topology'
+    ]
+  },
+  {
+    en: 'Optimization & Dynamics',
+    zh: '优化与训练动力学',
+    desc: '谱半径、随机矩阵连乘与 Lyapunov 指数，用来解释深层网络的梯度传播和 warmup。',
+    slugs: ['spectral-radius-to-random-jacobian-products', 'post-ln-warmup-layernorm-gradient']
+  },
+  {
+    en: 'Writing Toolkit',
+    zh: '论文写作素材',
+    desc: '写理论和机制型论文时反复用到的 LaTeX 环境、定理模板与表述。',
+    slugs: ['machine-learning-theory-latex-template-library', 'transformer-llm-mechanism-paper-writing-library']
   }
+].map((t) => ({ ...t, posts: t.slugs.map((s) => bySlug[s]).filter(Boolean) }))
+
+const noteCount = tracks.reduce((n, t) => n + t.posts.length, 0)
+
+const pdfs = [
+  { file: 'rope-lecture.pdf', title: 'RoPE 讲义', note: '41 页，从问题到工程实践', size: '1.0 MB', post: 'rope-lecture' },
+  { file: 'rl-textbook.pdf', title: '强化学习自学教程', note: '从表格方法到大模型对齐', size: '356 KB', post: 'rl-textbook-from-tabular-to-alignment' },
+  { file: 'grpo-textbook.pdf', title: 'GRPO 教材', note: '理解 GRPO 的 7 个元维度', size: '736 KB', post: 'grpo-seven-dimensions' },
+  { file: 'lasso-textbook.pdf', title: 'LASSO 教材', note: '稀疏表示与凸优化', size: '384 KB', post: 'lasso-textbook' }
 ]
 
-const allPosts = sortBlogPosts((await getBlogCollection('blog')) as BlogPost[])
-const mathPosts = allPosts.filter((post) =>
-  post.data.tags.some((tag) => mathKeywords.some((keyword) => tag.includes(keyword)))
+const eq = katex.renderToString(
+  String.raw`P^{\star}(y \mid x) = \frac{P_{\mathrm{ref}}(y \mid x)\,\exp\!\big(R(x,y)/\beta\big)}{Z_\beta(x)}`,
+  { displayMode: true, throwOnError: false }
 )
-
-const latestPosts = mathPosts.slice(0, 6)
-const trackSections = tracks.map((track) => ({
-  ...track,
-  posts: mathPosts
-    .filter((post) =>
-      post.data.tags.some((tag) => track.keywords.some((keyword) => tag.includes(keyword)))
-    )
-    .slice(0, 4)
-}))
 ---
 
-<PageLayout title='数学笔记'>
-  <div class='mx-auto mt-4 max-w-6xl px-4 sm:px-6 lg:px-8'>
-    <header class='mb-10 border-b pb-8'>
-      <p class='mb-3 text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground'>
-        Math Notes
+<PageLayout meta={{ title: '数学笔记', description: '概率统计、线性模型、信息论投影与训练动力学的推导笔记' }}>
+  <header class='page-intro math-intro'>
+    <div>
+      <p class='eyebrow mono'><span>Math Notes</span><span>{noteCount} notes</span><span>{pdfs.length} PDFs</span></p>
+      <h1>Math <small>数学笔记</small></h1>
+      <p class='lede'>
+        这里放模型与系统背后用到的数学。每篇笔记从一个具体问题出发，把直觉、推导和可复用的结论写在同一条线上。
       </p>
-      <h1 class='mb-4 text-3xl font-semibold tracking-tight sm:text-4xl'>数学笔记</h1>
-      <p class='max-w-3xl text-muted-foreground'>
-        这里集中放概率统计、线性代数、优化方法和机器学习理论里的数学推导。每篇笔记尽量从一个具体问题出发，把直觉、公式和可复用结论放在同一条线上。
-      </p>
-    </header>
+    </div>
+    <figure class='eq'>
+      <div class='eq-body' set:html={eq} />
+      <figcaption>
+        <span class='mono'>Eq. 1</span>
+        <span>
+          KL 正则下的最优输出分布：参考分布按奖励做指数倾斜（Gibbs 解）。见
+          <a href='/blog/rl-reward-tilting-kl-regularized-projection'>RL 的 reward-tilting 与 KL 投影</a>，定理 4.5。
+        </span>
+      </figcaption>
+    </figure>
+  </header>
 
-    <section class='mb-12 grid gap-4 md:grid-cols-3'>
-      {
-        tracks.map((track) => (
-          <article class='rounded-lg border bg-background p-5'>
-            <h2 class='mb-2 text-lg font-semibold'>{track.title}</h2>
-            <p class='text-sm leading-6 text-muted-foreground'>{track.description}</p>
-          </article>
-        ))
-      }
-    </section>
+  <nav class='toc mono' aria-label='主题'>
+    {
+      tracks.map((t, i) => (
+        <a href={`#track-${i}`}>
+          {t.zh}
+          <span>{t.posts.length}</span>
+        </a>
+      ))
+    }
+    <a href='#pdfs'>讲义 PDF<span>{pdfs.length}</span></a>
+  </nav>
 
-    <section class='mb-14'>
-      <div class='mb-4 flex items-end justify-between gap-4'>
-        <div>
-          <h2 class='text-2xl font-semibold'>最新笔记</h2>
-          <p class='mt-1 text-sm text-muted-foreground'>按发布时间排列的数学相关内容。</p>
+  {
+    tracks.map((t, i) => (
+      <section class='track' id={`track-${i}`}>
+        <div class='track-side'>
+          <p class='mono en'>{t.en}</p>
+          <h2>{t.zh}</h2>
+          <p class='desc'>{t.desc}</p>
         </div>
-        <Button title='全部博客' href='/blog' variant='ahead' />
-      </div>
+        <ul class='rows'>
+          {t.posts.map((p) => (
+            <li>
+              <a class='row' href={`/blog/${p.id}`}>
+                <span class='row-d mono'>{day(p.data.publishDate)}</span>
+                <span>
+                  <span class='row-t'>{p.data.title}</span>
+                  <span class='row-x'>{p.data.description}</span>
+                </span>
+                <span class='row-l mono'>{layerLabel(p.data.layer)}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))
+  }
 
+  <section class='track' id='pdfs'>
+    <div class='track-side'>
+      <p class='mono en'>Lecture Notes</p>
+      <h2>讲义 PDF</h2>
+      <p class='desc'>成体系的长文整理成了 PDF，可以直接下载离线读。每份都对应一篇在线文章。</p>
+    </div>
+    <ul class='pdfs'>
       {
-        latestPosts.length > 0 ? (
-          <ul class='flex flex-col gap-y-4 text-start'>
-            {latestPosts.map((post) => (
-              <PostPreview {post} detailed />
-            ))}
-          </ul>
-        ) : (
-          <p class='rounded-lg border p-6 text-muted-foreground'>还没有数学笔记。</p>
-        )
-      }
-    </section>
-
-    <section class='grid gap-6 lg:grid-cols-3'>
-      {
-        trackSections.map((track) => (
-          <article class='rounded-lg border bg-background p-5'>
-            <h2 class='mb-2 text-lg font-semibold'>{track.title}</h2>
-            <p class='mb-4 text-sm leading-6 text-muted-foreground'>{track.description}</p>
-            {track.posts.length > 0 ? (
-              <ul class='space-y-3'>
-                {track.posts.map((post) => (
-                  <li>
-                    <a
-                      href={`/blog/${post.id}`}
-                      class='block rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted hover:text-primary'
-                    >
-                      <span class='line-clamp-2'>{post.data.title}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p class='text-sm text-muted-foreground'>等待补充。</p>
+        pdfs.map((f) => (
+          <li>
+            <a class='pdf' href={`/pdf/${f.file}`} target='_blank' rel='noopener'>
+              <span class='mono ext'>PDF</span>
+              <span class='pdf-main'>
+                <span class='pdf-t'>{f.title}</span>
+                <span class='pdf-n'>{f.note}</span>
+              </span>
+              <span class='mono size'>{f.size}</span>
+            </a>
+            {bySlug[f.post] && (
+              <a class='mono post-link' href={`/blog/${f.post}`}>
+                在线阅读 →
+              </a>
             )}
-          </article>
+          </li>
         ))
       }
-    </section>
-  </div>
+    </ul>
+  </section>
 </PageLayout>
+
+<style>
+  .math-intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 2.5rem;
+    align-items: end;
+  }
+  .eq {
+    margin: 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--card));
+  }
+  .eq-body {
+    padding: 1.25rem 1rem 0.5rem;
+    overflow-x: auto;
+    font-size: 1.15rem;
+    color: hsl(var(--foreground));
+  }
+  .eq-body :global(.katex-display) {
+    margin: 0;
+    overflow: visible;
+    padding: 0;
+  }
+  .eq figcaption {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+    border-top: 1px solid hsl(var(--border));
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: hsl(var(--muted-foreground));
+  }
+  .eq figcaption .mono {
+    color: hsl(var(--foreground));
+    white-space: nowrap;
+  }
+  .eq figcaption a {
+    color: hsl(var(--primary));
+  }
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-bottom: 1rem;
+  }
+  .toc a {
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+  }
+  .toc a:hover {
+    color: hsl(var(--primary));
+  }
+  .toc span {
+    margin-left: 0.375rem;
+    color: hsl(var(--faint));
+  }
+  .track {
+    display: grid;
+    grid-template-columns: 16rem minmax(0, 1fr);
+    gap: 2.5rem;
+    padding-block: 2.25rem;
+    border-top: 1px solid hsl(var(--border));
+    scroll-margin-top: 4.5rem;
+  }
+  .track-side .en {
+    color: hsl(var(--faint));
+    margin: 0;
+  }
+  .track-side h2 {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0.375rem 0 0.625rem;
+  }
+  .track-side .desc {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.9rem;
+    line-height: 1.7;
+    margin: 0;
+  }
+  .track .rows {
+    border-top: 0;
+  }
+  .track .rows li:first-child .row {
+    padding-top: 0.25rem;
+  }
+  .track .rows li:last-child .row {
+    border-bottom: 0;
+  }
+  .pdfs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.875rem;
+  }
+  .pdfs li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+  .pdf {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.875rem;
+    align-items: center;
+    padding: 0.875rem 1rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--card));
+    text-decoration: none;
+    color: inherit;
+  }
+  .pdf:hover {
+    border-color: hsl(var(--primary) / 0.5);
+    color: inherit;
+  }
+  .ext {
+    font-size: 0.68rem;
+    border: 1px solid hsl(var(--foreground));
+    color: hsl(var(--foreground));
+    padding: 0.15rem 0.35rem;
+    border-radius: 2px;
+  }
+  .pdf-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .pdf-t {
+    font-weight: 600;
+  }
+  .pdf-n {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.85rem;
+  }
+  .size {
+    color: hsl(var(--faint));
+  }
+  .post-link {
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+    padding-left: 0.25rem;
+  }
+  .post-link:hover {
+    color: hsl(var(--primary));
+  }
+  @media (max-width: 860px) {
+    .math-intro,
+    .track {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.25rem;
+    }
+    .pdfs {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

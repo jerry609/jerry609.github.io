@@ -2,6 +2,7 @@
 title: "Monorepo 详解：从理念到 Mega 实践"
 description: "深入理解 Monorepo 的核心价值、技术挑战，以及为什么普通团队需要类似 Google Piper 的基础设施。介绍开源方案 Mega 如何填补这一空白。"
 publishDate: "2025-12-09"
+layer: systems
 tags: ["Monorepo", "DevOps", "Git", "Mega", "Infrastructure"]
 language: "zh-CN"
 draft: false

@@ -1,209 +1,118 @@
-import type { CardListData, Config, IntegrationUserConfig, ThemeUserConfig } from 'astro-pure/types'
+import type { Config, IntegrationUserConfig, ThemeUserConfig } from 'astro-pure/types'
 
 export const theme: ThemeUserConfig = {
   // === Basic configuration ===
-  /** Title for your website. Will be used in metadata and as browser tab title. */
-  title: "Jerry's Blog",
-  /** Will be used in index page & copyright declaration */
-  author: 'Jerry',
-  /** Description metadata for your website. Can be used in page metadata. */
-  description: '如其所是',
-  /** The default favicon for your site which should be a path to an image in the `public/` directory. */
+  /** Title for your website. Used in metadata and as the browser tab title. */
+  title: 'Jerry Zhang',
+  /** Used on the homepage and in the copyright line */
+  author: 'Jerry Zhang',
+  /** Description metadata for your website. */
+  description:
+    'Agent × Infra 全栈研究笔记：harness 与工具调用、沙箱运行时、模型机制与后训练、文件系统与构建。',
+  /** The default favicon, a path in `public/`. */
   favicon: '/favicon/favicon.ico',
-  /** The default social card image for your site which should be a path to an image in the `public/` directory. */
+  /** The default social card image, a path in `public/`. */
   socialCard: '/images/social-card.png',
-  /** Specify the default language for this site. */
   locale: {
-    lang: 'en-US',
-    attrs: 'en_US',
-    // Date locale
-    dateLocale: 'en-US',
+    lang: 'zh-CN',
+    attrs: 'zh_CN',
+    dateLocale: 'zh-CN',
     dateOptions: {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
     }
   },
-  /** Set a logo image to show in the homepage. */
+  /** Avatar */
   logo: {
     src: '/src/assets/jerry.jpg',
-    alt: 'Avatar'
+    alt: 'Jerry Zhang'
   },
 
   // === Global configuration ===
-  titleDelimiter: '•',
+  titleDelimiter: '·',
   prerender: true,
   npmCDN: 'https://cdn.jsdelivr.net/npm',
 
-  // Still in test
-  head: [
-    /* Telegram channel */
-    // {
-    //   tag: 'meta',
-    //   attrs: { name: 'telegram:channel', content: '@cworld0_cn' },
-    //   content: ''
-    // }
-  ],
+  head: [],
   customCss: [],
 
-  /** Configure the header of your site. */
+  /** Primary navigation. Murmurs, photos, links and archives live in the footer. */
   header: {
     menu: [
-      { title: 'Blog', link: '/blog' },
-      { title: 'Math', link: '/math-notes' },
-      { title: 'Roadmap', link: '/roadmap' },
-      { title: 'Murmurs', link: '/murmurs' },
-      { title: 'Photos', link: '/photos' },
-      { title: 'Projects', link: '/projects' },
-      { title: 'Links', link: '/links' },
-      { title: 'About', link: '/about' }
+      { title: '文章', link: '/blog' },
+      { title: '项目', link: '/projects' },
+      { title: '数学', link: '/math-notes' },
+      { title: '路线', link: '/roadmap' },
+      { title: '关于', link: '/about' }
     ]
   },
 
-  /** Configure the footer of your site. */
   footer: {
-    // Year format
     year: `© ${new Date().getFullYear()}`,
-    // year: `© 2019 - ${new Date().getFullYear()}`,
-    links: [
-      // Registration link
-      {
-        title: 'Moe ICP 114514',
-        link: 'https://icp.gov.moe/?keyword=114514',
-        style: 'text-sm' // Uno/TW CSS class
-      },
-      {
-        title: 'Travelling',
-        link: 'https://www.travellings.cn/go.html',
-        style: 'text-sm'
-      },
-      // Privacy Policy link
-      {
-        title: 'Site Policy',
-        link: '/terms/list',
-        pos: 2 // position set to 2 will be appended to copyright line
-      }
-    ],
-    /** Enable displaying a “Astro & Pure theme powered” link in your site’s footer. */
-    credits: true,
-    /** Optional details about the social media accounts for this site. */
-    social: { github: 'https://github.com/cworld1/astro-theme-pure' }
+    links: [],
+    credits: false,
+    social: { github: 'https://github.com/jerry609' }
   },
 
   content: {
-    /** External links configuration */
     externalLinks: {
       content: ' ↗',
-      /** Properties for the external links element */
       properties: {
         style: 'user-select:none'
       }
     },
-    /** Blog page size for pagination (optional) */
-    blogPageSize: 8,
-    // Currently support weibo, x, bluesky
+    blogPageSize: 12,
     share: ['weibo', 'x', 'bluesky']
   }
 }
 
 export const integ: IntegrationUserConfig = {
-  // Links management
-  // See: https://astro-pure.js.org/docs/integrations/links
   links: {
-    // Friend logbook
-    logbook: [
-      { date: '2025-03-16', content: 'Is there a leakage?' },
-      { date: '2025-03-16', content: 'A leakage of what?' },
-      { date: '2025-03-16', content: 'I have a full seat of water, like, full of water!' },
-      { date: '2025-03-16', content: 'Must be the water.' },
-      { date: '2025-03-16', content: "Let's add that to the words of wisdom." }
-    ],
-    // Yourself link info
+    logbook: [],
     applyTip: [
       { name: 'Name', val: theme.title },
-      { name: 'Desc', val: theme.description || 'Null' },
+      { name: 'Desc', val: 'Agent × Infra 全栈研究笔记' },
       { name: 'Link', val: 'https://jerry609.github.io/' },
-      { name: 'Avatar', val: 'https://jerry609.github.io/favicon/favicon.ico' }
+      { name: 'Avatar', val: 'https://jerry609.github.io/favicon/android-chrome-512x512.png' }
     ],
-    // Cache avatars in `public/avatars/` to improve user experience.
     cacheAvatar: false
   },
-  // Enable page search function
+  // Full-site search (Pagefind)
   pagefind: true,
-  // Add a random quote to the footer (default on homepage footer)
-  // See: https://astro-pure.js.org/docs/integrations/advanced#web-content-render
+  // Required by the theme schema; the random-quote widget is not used on this site.
   quote: {
-    // Hitokoto
-    // https://developer.hitokoto.cn/sentence/#%E8%AF%B7%E6%B1%82%E5%9C%B0%E5%9D%80
-    // server: 'https://v1.hitokoto.cn/?c=i',
-    // target: `(data) => (data.hitokoto || 'Error')`
-    // Quoteable API (down temporarily)
-    // https://github.com/lukePeavey/quotable
-    // server: 'https://api.quotable.io/quotes/random?maxLength=60',
-    // target: `(data) => data[0].content || 'Error'`
-    // DummyJSON
-    server: 'https://dummyjson.com/quotes/random',
-    target: `(data) => (data.quote.length > 80 ? \`\${data.quote.slice(0, 80)}...\` : data.quote || 'Error')`
+    server: '',
+    target: `() => ''`
   },
-  // UnoCSS typography
-  // See: https://unocss.dev/presets/typography
   typography: {
     class: 'prose text-base',
-    // The style of blockquote font, normal or italic (default to italic in typography)
-    blockquoteStyle: 'italic',
-    // The style of inline code block, code or modern (default to code in typography)
+    blockquoteStyle: 'normal',
     inlineCodeBlockStyle: 'modern'
   },
-  // A lightbox library that can add zoom effect
-  // See: https://astro-pure.js.org/docs/integrations/others#medium-zoom
   mediumZoom: {
-    enable: true, // disable it will not load the whole library
+    enable: true,
     selector: '.prose .zoomable',
     options: {
       className: 'zoomable'
     }
   },
-  // Comment system
+  // Comments are off until this site has its own Waline server.
+  // To turn them back on, deploy Waline (https://waline.js.org) and set `server` + `enable: true`.
   waline: {
-    enable: true,
-    // Server service link
-    server: 'https://astro-theme-pure-waline.arthals.ink/',
-    // Refer https://waline.js.org/en/guide/features/emoji.html
+    enable: false,
+    server: '',
     emoji: ['bmoji', 'weibo'],
-    // Refer https://waline.js.org/en/reference/client/props.html
     additionalConfigs: {
-      // search: false,
       pageview: true,
       comment: true,
       locale: {
         reaction0: 'Like',
-        placeholder: 'Welcome to comment. (Email to receive replies. Login is unnecessary)'
+        placeholder: '欢迎留言（填写邮箱可收到回复，无需登录）'
       },
       imageUploader: false
     }
   }
-}
-
-export const terms: CardListData = {
-  title: 'Terms content',
-  list: [
-    {
-      title: 'Privacy Policy',
-      link: '/terms/privacy-policy'
-    },
-    {
-      title: 'Terms and Conditions',
-      link: '/terms/terms-and-conditions'
-    },
-    {
-      title: 'Copyright',
-      link: '/terms/copyright'
-    },
-    {
-      title: 'Disclaimer',
-      link: '/terms/disclaimer'
-    }
-  ]
 }
 
 const config = { ...theme, integ } as Config

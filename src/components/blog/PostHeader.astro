@@ -1,0 +1,116 @@
+---
+import type { CollectionEntry } from 'astro:content'
+
+import { layerLabel, SERIES } from '@/data/stack'
+
+interface Props {
+  post: CollectionEntry<'blog'>
+  minutesRead?: unknown
+}
+
+const { post, minutesRead } = Astro.props
+const { title, description, publishDate, updatedDate, tags, layer, draft } = post.data
+const fmt = (d: Date) => d.toISOString().slice(0, 10)
+const series = SERIES.find((s) => (s.slugs as readonly string[]).includes(post.id))
+const pos = series ? (series.slugs as readonly string[]).indexOf(post.id) + 1 : 0
+---
+
+<header class='post-head'>
+  <p class='kicker mono'>
+    <a href={`/blog?layer=${layer}`}>{layerLabel(layer)}</a>
+    {
+      series && (
+        <span>
+          连载 · <a href='#series-nav'>{series.title}</a> · {pos}/{series.slugs.length}
+        </span>
+      )
+    }
+    {draft && <span class='draft'>草稿</span>}
+  </p>
+  <h1>{title}</h1>
+  {description && <p class='lede'>{description}</p>}
+  <p class='meta mono'>
+    <time datetime={publishDate.toISOString()}>{fmt(publishDate)}</time>
+    {updatedDate && <span>更新于 {fmt(updatedDate)}</span>}
+    {minutesRead && <span>{String(minutesRead)}</span>}
+  </p>
+  {
+    tags.length > 0 && (
+      <p class='tags'>
+        {tags.map((t) => (
+          <a class='chip' href={`/tags/${t}`} data-pagefind-filter='tag'>
+            {t}
+          </a>
+        ))}
+      </p>
+    )
+  }
+</header>
+
+<style>
+  .post-head {
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid hsl(var(--border));
+    max-width: 46rem;
+  }
+  .kicker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    color: hsl(var(--muted-foreground));
+    margin: 0;
+  }
+  .kicker span::before {
+    content: '/';
+    margin-right: 0.75rem;
+    color: hsl(var(--faint));
+  }
+  .kicker a {
+    color: hsl(var(--primary));
+    text-decoration: none;
+  }
+  .kicker a:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .draft {
+    color: hsl(var(--destructive));
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(1.9rem, 4.2vw, 2.75rem);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    margin: 0.875rem 0 1rem;
+    text-wrap: pretty;
+    color: hsl(var(--foreground));
+  }
+  .lede {
+    font-size: 1.1rem;
+    line-height: 1.75;
+    color: hsl(var(--muted-foreground));
+    margin: 0 0 1.25rem;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    color: hsl(var(--faint));
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin: 0.875rem 0 0;
+  }
+  .tags .chip {
+    text-decoration: none;
+  }
+  .tags .chip:hover {
+    color: hsl(var(--primary));
+    border-color: hsl(var(--primary) / 0.5);
+  }
+</style>

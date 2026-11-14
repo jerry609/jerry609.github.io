@@ -2,6 +2,7 @@
 title: '通用领域学习一页纸：核心方法'
 description: '一个简练的领域学习模板：用问题、对象、边界、例子和最终压缩，把碎片知识整理成可调用的内部模型。'
 publishDate: '2026-04-27'
+layer: notes
 tags: ['学习方法', '知识管理', '认知框架', '模板']
 language: 'zh-CN'
 draft: false

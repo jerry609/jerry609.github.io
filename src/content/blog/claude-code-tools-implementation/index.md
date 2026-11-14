@@ -2,6 +2,7 @@
 title: 'Claude Code 工具系统：内置工具的实现剖析'
 description: '深入解析 Claude Code 的内置工具系统，包括 Bash、Grep、Glob、Read、Write、Edit 等核心工具的设计理念与实现细节。'
 publishDate: '2025-12-06'
+layer: agent
 tags: ['Claude', 'Agent', '源码分析', 'Tools', 'Python']
 language: 'zh-CN'
 draft: false

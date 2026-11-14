@@ -2,6 +2,7 @@
 title: '注意力熵与动态拓扑：从信息路由到隧道视野'
 description: '把自注意力看成输入依赖的动态图，用香农熵刻画信息路由宽度，并解释低熵注意力何时有利、何时会造成隧道视野。'
 publishDate: '2026-05-24'
+layer: model
 tags: ['LLM', 'Transformer', 'Attention', '信息熵', '机制分析']
 language: 'zh-CN'
 draft: false

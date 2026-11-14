@@ -1,7 +1,7 @@
 import { rehypeHeadingIds } from '@astrojs/markdown-remark'
 
 import AstroPureIntegration from 'astro-pure'
-import { defineConfig, fontProviders } from 'astro/config'
+import { defineConfig } from 'astro/config'
 import rehypeKatex from 'rehype-katex'
 import remarkMath from 'remark-math'
 
@@ -99,20 +99,6 @@ export default defineConfig({
     }
   },
   experimental: {
-    contentIntellisense: true, // allow vscode plugin to support *mdx files
-    fonts: [
-      {
-        provider: fontProviders.fontshare(),
-        name: 'Satoshi',
-        cssVariable: '--font-satoshi',
-        // Default included:
-        // weights: [400],
-        // styles: ["normal", "italics"],
-        // subsets: ["cyrillic-ext", "cyrillic", "greek-ext", "greek", "vietnamese", "latin-ext", "latin"],
-        // fallbacks: ["sans-serif"],
-        weights: [400, 500],
-        subsets: ['latin']
-      }
-    ]
+    contentIntellisense: true // allow vscode plugin to support *mdx files
   }
 })

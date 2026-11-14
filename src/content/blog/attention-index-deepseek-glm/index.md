@@ -2,6 +2,7 @@
 title: '注意力机制中的 Index：从位置下标到预算检索'
 description: '从普通 attention 的位置索引、DeepSeek 的 lightning indexer 和 GLM-5/5.1 的 DSA index 配置出发，将 index 理解为读写地址、相关性打分、top-k 路由和训练约束的组合问题。'
 publishDate: '2026-05-02'
+layer: model
 tags: ['ai', 'transformer', 'attention', 'deepseek', 'glm']
 language: 'zh-CN'
 draft: false

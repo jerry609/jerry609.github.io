@@ -2,6 +2,7 @@
 title: '形式化建模：RL 是当前策略分布上的 reward-tilting 与 KL 正则投影'
 description: '从策略梯度、轨迹级 KL 正则化和状态级局部策略改进入手，推导 RL 中 reward-tilted Gibbs 分布与 Boltzmann teacher。'
 publishDate: '2026-06-07'
+layer: training
 tags: ['RL', 'KL', '强化学习', 'LLM', '策略梯度', 'PPO', 'GRPO']
 language: 'zh-CN'
 draft: false

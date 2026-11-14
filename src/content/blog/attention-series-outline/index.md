@@ -2,6 +2,7 @@
 title: "Attention 机制完全指南：16 讲从直觉到工程"
 description: "一套完整的 Attention 学习路径，覆盖直觉、公式、变体和工程实现。"
 publishDate: "2026-03-16"
+layer: model
 tags: ["LLM", "Transformer", "Attention", "专题", "学习路径"]
 language: "zh-CN"
 draft: false

@@ -7,15 +7,15 @@
       {/* Grid will be populated by JS */}
     </div>
     <div class='mt-2 flex items-center justify-end gap-2 text-xs text-muted-foreground'>
-      <span>Less</span>
+      <span>少</span>
       <div class='flex gap-1'>
-        <div class='h-3 w-3 rounded-sm bg-muted'></div>
-        <div class='h-3 w-3 rounded-sm bg-green-200 dark:bg-green-900'></div>
-        <div class='h-3 w-3 rounded-sm bg-green-400 dark:bg-green-700'></div>
-        <div class='h-3 w-3 rounded-sm bg-green-600 dark:bg-green-500'></div>
-        <div class='h-3 w-3 rounded-sm bg-green-800 dark:bg-green-300'></div>
+        <div class='h-3 w-3 rounded-sm lv0'></div>
+        <div class='h-3 w-3 rounded-sm lv1'></div>
+        <div class='h-3 w-3 rounded-sm lv2'></div>
+        <div class='h-3 w-3 rounded-sm lv3'></div>
+        <div class='h-3 w-3 rounded-sm lv4'></div>
       </div>
-      <span>More</span>
+      <span>多</span>
     </div>
   </div>
 </div>
@@ -67,11 +67,11 @@
       const count = activityData[dateStr] || 0
       
       // Determine color intensity
-      let colorClass = 'bg-muted'
-      if (count > 0) colorClass = 'bg-green-200 dark:bg-green-900'
-      if (count > 2) colorClass = 'bg-green-400 dark:bg-green-700'
-      if (count > 4) colorClass = 'bg-green-600 dark:bg-green-500'
-      if (count > 6) colorClass = 'bg-green-800 dark:bg-green-300'
+      let colorClass = 'lv0'
+      if (count > 0) colorClass = 'lv1'
+      if (count > 2) colorClass = 'lv2'
+      if (count > 4) colorClass = 'lv3'
+      if (count > 6) colorClass = 'lv4'
 
       currentWeek.push({
         date: dateStr,
@@ -101,7 +101,7 @@
             data-count="${day.count}"
           >
             <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 w-max rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md border border-border">
-              ${day.count} problems on ${day.date}
+              ${day.date} · ${day.count} 题
             </div>
           </div>
         `).join('')}

@@ -2,6 +2,7 @@
 title: "Scorpio：基于 FUSE 的 Monorepo 虚拟文件系统"
 description: "系统拆解 Mega 项目中的 Scorpio 模块：FUSE 原理、Overlay 分层设计、按需加载的实现，以及面向 CI/CD 的 Antares 构建隔离方案。"
 publishDate: "2025-12-11"
+layer: systems
 tags: ["FUSE", "Monorepo", "Mega", "Scorpio", "文件系统"]
 language: "zh-CN"
 draft: false

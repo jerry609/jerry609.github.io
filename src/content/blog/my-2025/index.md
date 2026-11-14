@@ -2,6 +2,7 @@
 title: '我的2025'
 description: '记录我的2025年'
 publishDate: '2025-12-26'
+layer: notes
 tags: ['life', '2025']
 ---
 

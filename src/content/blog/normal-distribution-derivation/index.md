@@ -2,6 +2,7 @@
 title: '正态分布公式的理论推导'
 description: '从误差模型、函数方程、高斯积分和线性变换推导正态分布公式，并解释归一化常数、参数意义和三西格玛法则。'
 publishDate: '2026-05-11'
+layer: math
 tags: ['数学', '概率论', '统计学', '正态分布', '高斯积分']
 language: 'zh-CN'
 draft: false

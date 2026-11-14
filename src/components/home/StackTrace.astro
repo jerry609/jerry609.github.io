@@ -1,0 +1,384 @@
+---
+import type { CollectionEntry } from 'astro:content'
+
+import { LAYERS } from '@/data/stack'
+
+interface Props {
+  posts: CollectionEntry<'blog'>[]
+}
+
+const { posts } = Astro.props
+const day = (d: Date) => d.toISOString().slice(0, 10)
+const data = posts
+  .filter((p) => p.data.layer !== 'notes')
+  .map((p) => ({ s: p.id, t: p.data.title, d: day(p.data.publishDate), l: p.data.layer }))
+  .sort((a, b) => a.d.localeCompare(b.d) || a.s.localeCompare(b.s))
+const notes = posts.length - data.length
+const counts = Object.fromEntries(LAYERS.map((l) => [l.id, data.filter((p) => p.l === l.id).length]))
+const first = data[0]?.d.slice(0, 7)
+const last = data[data.length - 1]?.d.slice(0, 7)
+---
+
+<figure class='trace' id='trace'>
+  <div class='trace-scroll'>
+    <div class='trace-grid'>
+      <div class='lanes' role='group' aria-label='按栈层筛选文章'>
+        {
+          LAYERS.map((l) => (
+            <button class='lane-btn' type='button' data-layer={l.id} aria-pressed='false'>
+              <span class='l1'>
+                <span class='code'>{l.code}</span>
+                <span class='name'>{l.name}</span>
+                <span class='cnt'>{counts[l.id]}</span>
+              </span>
+              <span class='zh'>{l.zh}</span>
+            </button>
+          ))
+        }
+        <div class='axis-spacer'></div>
+      </div>
+      <div class='plot' id='trace-plot'>
+        <div class='tip' id='trace-tip' hidden></div>
+      </div>
+    </div>
+  </div>
+  <figcaption>
+    <span class='mono fig'>Fig. 1</span>
+    <span>
+      {data.length} 篇文章按所在栈层（纵轴）与发布日期（横轴）排布，另有 {notes} 篇随笔未计入。同一天发布的文章叠成一列。点击左侧层名可筛选下方列表。
+    </span>
+    <span class='mono range'>{first} → {last}</span>
+  </figcaption>
+  <script type='application/json' id='trace-data' set:html={JSON.stringify(data)} />
+</figure>
+
+<script>
+  import { LAYERS } from '@/data/stack'
+
+  type P = { s: string; t: string; d: string; l: string }
+  const root = document.getElementById('trace')
+  const plot = document.getElementById('trace-plot')
+  const tip = document.getElementById('trace-tip')
+  const dataEl = document.getElementById('trace-data')
+
+  if (root && plot && tip && dataEl) {
+    const posts: P[] = JSON.parse(dataEl.textContent || '[]')
+    const bySlug = Object.fromEntries(posts.map((p) => [p.s, p]))
+    const MARK = 8
+    const STEP = 10
+    const AXIS = 30
+
+    // Stack same-day posts within a lane
+    const seen: Record<string, number> = {}
+    const placed = posts.map((p) => {
+      const k = `${p.l}|${p.d}`
+      seen[k] = (seen[k] ?? 0) + 1
+      return { p, i: seen[k] - 1 }
+    })
+    const maxStack: Record<string, number> = {}
+    for (const { p, i } of placed) maxStack[p.l] = Math.max(maxStack[p.l] ?? 1, i + 1)
+    const laneH = (id: string) => Math.max(56, 26 + (maxStack[id] ?? 1) * STEP + 8)
+
+    root.querySelectorAll<HTMLButtonElement>('.lane-btn').forEach((b) => {
+      b.style.height = `${laneH(b.dataset.layer || '')}px`
+    })
+    const spacer = root.querySelector<HTMLElement>('.axis-spacer')
+    if (spacer) spacer.style.height = `${AXIS}px`
+
+    // Time axis: everything before Nov 2025 goes into an "earlier" bucket
+    const T0 = Date.UTC(2025, 10, 1)
+    const lastDay = Date.parse(`${posts[posts.length - 1]?.d ?? '2026-06-30'}T00:00:00Z`)
+    const endDate = new Date(lastDay)
+    const months = (endDate.getUTCFullYear() - 2025) * 12 + endDate.getUTCMonth() - 10 + 1
+    const T1 = Date.UTC(2025, 10 + months, 1)
+
+    let layer = 'all'
+
+    const render = () => {
+      const W = Math.max(480, Math.round(plot.clientWidth))
+      const EARLY = 46
+      const GAP = 20
+      const x0 = EARLY + GAP
+      const x1 = W - 14
+      const xOf = (d: string) => {
+        const t = Date.parse(`${d}T00:00:00Z`)
+        return t < T0 ? EARLY / 2 : x0 + ((t - T0) / (T1 - T0)) * (x1 - x0)
+      }
+      const tops: Record<string, number> = {}
+      let y = 0
+      for (const l of LAYERS) {
+        tops[l.id] = y
+        y += laneH(l.id)
+      }
+      const H = y + AXIS
+      let s = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${posts.length} 篇文章按栈层与发布日期排布">`
+      LAYERS.forEach((l, k) => {
+        s += `<rect class="${k % 2 === 0 ? 'band-a' : 'band-b'}" x="0" y="${tops[l.id]}" width="${W}" height="${laneH(l.id)}"></rect>`
+        if (k > 0)
+          s += `<line class="rule" x1="0" x2="${W}" y1="${tops[l.id] + 0.5}" y2="${tops[l.id] + 0.5}"></line>`
+      })
+      s += `<line class="rule" x1="0" x2="${W}" y1="${y + 0.5}" y2="${y + 0.5}"></line>`
+      for (let m = 0; m <= months; m++) {
+        const t = Date.UTC(2025, 10 + m, 1)
+        const xx = Math.round(x0 + ((t - T0) / (T1 - T0)) * (x1 - x0)) + 0.5
+        s += `<line class="grid" x1="${xx}" x2="${xx}" y1="0" y2="${y + 5}"></line>`
+        if (m < months) {
+          const dt = new Date(t)
+          const yr = dt.getUTCFullYear()
+          const mo = dt.getUTCMonth() + 1
+          const lab = m === 0 || mo === 1 ? `${yr}.${String(mo).padStart(2, '0')}` : String(mo).padStart(2, '0')
+          s += `<text x="${xx + 4}" y="${y + 19}">${lab}</text>`
+        }
+      }
+      s += `<line class="brk" x1="${EARLY + GAP / 2}" x2="${EARLY + GAP / 2}" y1="0" y2="${y}"></line>`
+      s += `<text x="${EARLY / 2}" y="${y + 19}" text-anchor="middle">更早</text>`
+      for (const { p, i } of placed) {
+        const k = LAYERS.findIndex((l) => l.id === p.l)
+        const cx = xOf(p.d)
+        const ry = tops[p.l] + laneH(p.l) - 10 - MARK - i * STEP
+        const cls = `mark ${k % 2 === 0 ? 'on-a' : 'on-b'}${layer === p.l ? ' sel' : ''}`
+        const label = `${p.d} ${p.t}`.replace(/"/g, '&quot;')
+        s += `<a href="/blog/${p.s}" aria-label="${label}"><rect class="${cls}" data-s="${p.s}" x="${(cx - MARK / 2).toFixed(1)}" y="${ry}" width="${MARK}" height="${MARK}" rx="1.5"></rect></a>`
+      }
+      s += '</svg>'
+      plot.querySelector('svg')?.remove()
+      plot.insertAdjacentHTML('afterbegin', s)
+      plot.classList.toggle('filtering', layer !== 'all' && layer !== 'notes')
+    }
+
+    const showTip = (rect: Element) => {
+      const p = bySlug[(rect as HTMLElement).dataset.s || '']
+      if (!p) return
+      const L = LAYERS.find((l) => l.id === p.l)
+      tip.textContent = ''
+      const m = document.createElement('span')
+      m.className = 'm'
+      m.textContent = `${p.d} · ${L ? `${L.code} ${L.name}` : p.l}`
+      tip.append(m, document.createTextNode(p.t))
+      tip.hidden = false
+      const pr = plot.getBoundingClientRect()
+      const r = rect.getBoundingClientRect()
+      const tw = tip.offsetWidth
+      const th = tip.offsetHeight
+      let left = r.left - pr.left + r.width / 2 - tw / 2
+      left = Math.max(8, Math.min(left, pr.width - tw - 8))
+      let top = r.top - pr.top - th - 10
+      if (top < 4) top = r.bottom - pr.top + 10
+      tip.style.left = `${left}px`
+      tip.style.top = `${top}px`
+    }
+    plot.addEventListener('mouseover', (e) => {
+      const r = (e.target as Element).closest('rect.mark')
+      if (r) showTip(r)
+    })
+    plot.addEventListener('mouseout', (e) => {
+      if ((e.target as Element).closest('rect.mark')) tip.hidden = true
+    })
+    plot.addEventListener('focusin', (e) => {
+      const r = (e.target as Element).querySelector?.('rect.mark')
+      if (r) showTip(r)
+    })
+    plot.addEventListener('focusout', () => {
+      tip.hidden = true
+    })
+
+    root.querySelector('.lanes')?.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLButtonElement>('.lane-btn')
+      if (!b) return
+      const next = layer === b.dataset.layer ? 'all' : b.dataset.layer || 'all'
+      document.dispatchEvent(new CustomEvent('stack:change', { detail: next }))
+      document.getElementById('writing')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+    document.addEventListener('stack:change', (e) => {
+      layer = (e as CustomEvent<string>).detail
+      root.querySelectorAll('.lane-btn').forEach((b) => {
+        b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.layer === layer))
+      })
+      render()
+    })
+
+    render()
+    let w = plot.clientWidth
+    new ResizeObserver(() => {
+      if (Math.abs(plot.clientWidth - w) > 2) {
+        w = plot.clientWidth
+        render()
+      }
+    }).observe(plot)
+  }
+</script>
+
+<style>
+  .trace {
+    margin: 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--card));
+  }
+  .trace-scroll {
+    overflow-x: auto;
+  }
+  .trace-grid {
+    display: grid;
+    grid-template-columns: 13rem minmax(0, 1fr);
+    min-width: 720px;
+  }
+  .lanes {
+    border-right: 1px solid hsl(var(--border));
+  }
+  .lane-btn {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 100%;
+    height: 56px;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid hsl(var(--border));
+    padding: 0 0.875rem 0 1.125rem;
+    cursor: pointer;
+  }
+  .lane-btn:nth-child(odd) {
+    background: hsl(var(--band));
+  }
+  .lane-btn .l1 {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  .lane-btn .code {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+    width: 1.25rem;
+  }
+  .lane-btn .name {
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+  .lane-btn .cnt {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+    font-variant-numeric: tabular-nums;
+  }
+  .lane-btn .zh {
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+    padding-left: 1.75rem;
+    line-height: 1.4;
+  }
+  .lane-btn:hover .name {
+    color: hsl(var(--primary));
+  }
+  .lane-btn[aria-pressed='true'] {
+    box-shadow: inset 3px 0 0 hsl(var(--primary));
+  }
+  .lane-btn[aria-pressed='true'] .name {
+    color: hsl(var(--primary));
+  }
+  .plot {
+    position: relative;
+    min-height: 360px;
+  }
+  .plot :global(svg) {
+    display: block;
+    width: 100%;
+  }
+  .plot :global(text) {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    fill: hsl(var(--faint));
+  }
+  .plot :global(.band-a) {
+    fill: hsl(var(--band));
+  }
+  .plot :global(.band-b) {
+    fill: hsl(var(--card));
+  }
+  .plot :global(.rule),
+  .plot :global(.grid) {
+    stroke: hsl(var(--border));
+    stroke-width: 1;
+  }
+  .plot :global(.brk) {
+    stroke: hsl(var(--faint));
+    stroke-dasharray: 2 3;
+  }
+  .plot :global(rect.mark) {
+    fill: hsl(var(--mark));
+    stroke-width: 2;
+    cursor: pointer;
+    transition:
+      opacity 0.18s,
+      fill 0.12s;
+  }
+  .plot :global(rect.mark.on-a) {
+    stroke: hsl(var(--band));
+  }
+  .plot :global(rect.mark.on-b) {
+    stroke: hsl(var(--card));
+  }
+  .plot.filtering :global(rect.mark) {
+    opacity: 0.16;
+  }
+  .plot.filtering :global(rect.mark.sel) {
+    opacity: 1;
+    fill: hsl(var(--primary));
+  }
+  .plot :global(a:hover rect.mark),
+  .plot :global(a:focus-visible rect.mark) {
+    fill: hsl(var(--primary));
+    opacity: 1;
+  }
+  .plot :global(a:focus-visible) {
+    outline: none;
+  }
+  .tip {
+    position: absolute;
+    z-index: 3;
+    pointer-events: none;
+    width: 18rem;
+    max-width: calc(100% - 16px);
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border-radius: 4px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+  }
+  .tip :global(.m) {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    opacity: 0.7;
+    margin-bottom: 0.2rem;
+  }
+  figcaption {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    align-items: baseline;
+    padding: 0.7rem 1.125rem;
+    border-top: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+  figcaption > span:nth-child(2) {
+    flex: 1 1 24rem;
+    min-width: 0;
+  }
+  .fig {
+    color: hsl(var(--foreground));
+    font-weight: 500;
+  }
+  .range {
+    color: hsl(var(--faint));
+  }
+</style>

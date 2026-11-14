@@ -2,6 +2,7 @@
 title: '从极大似然到最小二乘'
 description: '从残差为什么不能直接相加讲起，解释为什么选择平方误差，以及正态误差假设如何通过极大似然推出最小二乘。'
 publishDate: '2026-05-09'
+layer: math
 tags: ['数学', '最小二乘', '极大似然估计', '概率密度', '机器学习', '统计学习']
 language: 'zh-CN'
 draft: false

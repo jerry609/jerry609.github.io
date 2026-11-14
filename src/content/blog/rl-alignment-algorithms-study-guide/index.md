@@ -2,6 +2,7 @@
 title: 'RL 对齐算法学习笔记：从 PPO 到 DAPO 的演进全景'
 description: '一份系统梳理 RL 对齐算法的学习笔记，覆盖 PPO → DPO → GRPO → GSPO → DAPO 的演进脉络、核心对比、工程选型与知识卡片模板。'
 publishDate: '2026-04-15'
+layer: training
 tags: ['强化学习', 'RL', 'PPO', 'DPO', 'GRPO', 'RLHF', 'alignment', '学习笔记']
 language: 'zh-CN'
 draft: false

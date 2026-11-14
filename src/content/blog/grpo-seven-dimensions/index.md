@@ -2,6 +2,7 @@
 title: '理解 GRPO 的 7 个元维度'
 description: '从 PPO 的 critic 成本讲起，推导 GRPO 如何用同题多答案的组内相对奖励替代 value baseline，并用 clipping 与 KL 稳定更新。'
 publishDate: '2026-05-10'
+layer: training
 tags: ['GRPO', 'DeepSeek-R1', 'RLHF', 'PPO', 'DPO', '强化学习', 'LLM', '机器学习']
 language: 'zh-CN'
 draft: false

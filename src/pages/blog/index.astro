@@ -1,0 +1,119 @@
+---
+import type { CollectionEntry } from 'astro:content'
+
+import { getBlogCollection, getUniqueTags } from 'astro-pure/server'
+import PageLayout from '@/layouts/BaseLayout.astro'
+import WritingIndex from '@/components/home/WritingIndex.astro'
+import { layerLabel, SERIES } from '@/data/stack'
+
+export const prerender = true
+
+const posts = ((await getBlogCollection('blog')) as CollectionEntry<'blog'>[]).sort(
+  (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
+)
+const tags = getUniqueTags(posts)
+const bySlug = Object.fromEntries(posts.map((p) => [p.id, p]))
+const series = SERIES.map((s) => ({
+  ...s,
+  posts: s.slugs.map((x) => bySlug[x]).filter(Boolean)
+}))
+const years = [...new Set(posts.map((p) => p.data.publishDate.getFullYear()))]
+---
+
+<PageLayout meta={{ title: '文章', description: '按 Agent × Infra 栈分层的全部文章' }}>
+  <header class='page-intro'>
+    <p class='eyebrow mono'><span>Writing</span><span>{posts.length} posts</span><span>{years[years.length - 1]} – {years[0]}</span></p>
+    <h1>Writing <small>文章</small></h1>
+    <p class='lede'>
+      源码拆解、故障复盘和公式推导。每篇文章挂在它所在的那一层栈上，可以按层筛选，也可以直接搜标题和摘要。
+    </p>
+  </header>
+
+  <section class='series-strip' aria-label='连载'>
+    {
+      series.map((s) => (
+        <a href={`/blog/${s.posts[0].id}`}>
+          <span class='mono'>{layerLabel(s.layer)} · 连载</span>
+          <strong>{s.title}</strong>
+          <span class='mono n'>
+            {'planned' in s && s.planned ? `${s.posts.length} / ${s.planned} ${s.unit}` : `${s.posts.length} 篇`}
+          </span>
+        </a>
+      ))
+    }
+  </section>
+
+  <WritingIndex posts={posts} id='blog-writing' />
+
+  <section class='tags'>
+    <div class='sec-head'>
+      <h2 class='sec-title'>Tags<span class='zh'>标签</span></h2>
+      <a class='sec-note mono' href='/archives'>按年份归档 →</a>
+    </div>
+    <p>
+      {
+        tags.map((t) => (
+          <a class='chip' href={`/tags/${t}`}>
+            {t}
+          </a>
+        ))
+      }
+    </p>
+  </section>
+</PageLayout>
+
+<style>
+  .series-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+  .series-strip a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-top: 0.75rem;
+    border-top: 2px solid hsl(var(--foreground));
+    text-decoration: none;
+    color: inherit;
+    min-width: 0;
+  }
+  .series-strip .mono {
+    color: hsl(var(--faint));
+  }
+  .series-strip strong {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1.05rem;
+    line-height: 1.35;
+  }
+  .series-strip a:hover strong {
+    color: hsl(var(--primary));
+  }
+  .series-strip .n {
+    color: hsl(var(--muted-foreground));
+  }
+  .tags {
+    margin-top: 3.5rem;
+  }
+  .tags p {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0;
+  }
+  .tags .chip {
+    text-decoration: none;
+    font-size: 0.75rem;
+  }
+  .tags .chip:hover {
+    color: hsl(var(--primary));
+    border-color: hsl(var(--primary) / 0.5);
+  }
+  @media (max-width: 860px) {
+    .series-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>
