@@ -66,7 +66,7 @@ MDX 文章可以用交互图组件（`src/components/figures`）：`Figure`（�
 - `/`：简介、研究方向、近况、写作轨迹图（Fig. 1）、项目、连载、最近文章
 - `/blog`：全部文章，可按栈层筛选（`/blog?layer=systems`）和按标题过滤
 - `/math-notes`：数学笔记与讲义 PDF
-- `/roadmap`：算法刷题路线与进度
+- `/roadmap`：算法训练（灵茶山艾府题单的索引）：专题依赖图、难度分布，以及每个专题一页（`/roadmap/<topic>`）。题单数据在 `src/data/algorithms/topics.ts`；改完题单后运行 `node scripts/fetch-leetcode-slugs.mjs` 刷新题目链接和官方难度
 - `/projects`、`/about`
 
 ## 本地开发

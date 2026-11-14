@@ -1,0 +1,657 @@
+---
+import type { GetStaticPaths } from 'astro'
+
+import PageLayout from '@/layouts/BaseLayout.astro'
+import PixelMouse from '@/components/brand/PixelMouse.astro'
+import {
+  band,
+  BANDS,
+  bins,
+  flatten,
+  levels,
+  MAIN_LINE,
+  median,
+  meta,
+  nexts,
+  prereqs,
+  problemUrl,
+  rating,
+  TOPIC_SLUGS,
+  topicHref,
+  TOPICS,
+  type Problem,
+  type Section
+} from '@/data/algorithms'
+
+export const getStaticPaths = (() =>
+  Object.keys(TOPICS)
+    .filter((id) => flatten(TOPICS[id]).length > 0)
+    .map((id) => ({ params: { topic: TOPIC_SLUGS[id] }, props: { id } }))) satisfies GetStaticPaths
+
+const { id } = Astro.props as { id: string }
+const topic = TOPICS[id]
+const ps = flatten(topic)
+const depth = levels()
+const ready = (tid: string) => flatten(TOPICS[tid]).length > 0
+const before = prereqs(id)
+const after = nexts(id)
+const m = median(ps)
+const vip = ps.filter((p) => p.vip || meta(p.id)?.paid).length
+const rated = ps.filter((p) => rating(p) !== undefined).length
+
+// Sections: first level = numbered chapters; deeper levels = sub-sections
+type Chapter = { title: string; desc?: string; subs: { title: string; desc?: string; problems: Problem[] }[] }
+const chapters: Chapter[] = []
+if (topic.problems) {
+  chapters.push({ title: topic.title, subs: [{ title: '', problems: topic.problems }] })
+} else if (topic.rootSection) {
+  const collect = (s: Section, into: Chapter['subs']) => {
+    if (s.problems?.length) into.push({ title: s.title, desc: s.desc, problems: s.problems })
+    for (const c of s.children ?? []) collect(c, into)
+  }
+  for (const c of topic.rootSection.children ?? []) {
+    const ch: Chapter = { title: c.title, desc: c.desc, subs: [] }
+    if (c.problems?.length) ch.subs.push({ title: '', problems: c.problems })
+    for (const s of c.children ?? []) collect(s, ch.subs)
+    if (ch.subs.length) chapters.push(ch)
+  }
+  if (topic.rootSection.problems?.length)
+    chapters.unshift({ title: topic.title, subs: [{ title: '', problems: topic.rootSection.problems }] })
+}
+const pad = (n: number) => String(n).padStart(2, '0')
+const slugify = (i: number) => `ch-${pad(i + 1)}`
+const clean = (s?: string) => (s ?? '').replace(/​/g, '').trim()
+
+// Mini histogram for the header
+const b = bins(ps)
+const bkeys = Array.from({ length: 11 }, (_, i) => 1000 + i * 200)
+const bmax = Math.max(1, ...Object.values(b))
+
+// Neighbours along the level order, for prev/next topic links
+const order = Object.keys(TOPICS)
+  .filter(ready)
+  .sort((a, c) => depth[a] - depth[c] || flatten(TOPICS[c]).length - flatten(TOPICS[a]).length)
+const at = order.indexOf(id)
+const prevT = order[at - 1]
+const nextT = order[at + 1]
+const DIFF: Record<string, string> = { easy: 'E', medium: 'M', hard: 'H' }
+---
+
+<PageLayout meta={{ title: `${topic.title} · 算法训练`, description: `${topic.title}：${ps.length} 道题，按小节和难度整理` }}>
+  <a class='crumb mono' href='/roadmap'>← Algorithms</a>
+
+  <header class='page-intro'>
+    <p class='eyebrow mono'>
+      <span>Lv {pad(depth[id] + 1)}</span><span>{ps.length} problems</span>
+      {MAIN_LINE.includes(id) && <span class='main'>main line</span>}
+    </p>
+    <h1>{topic.title}</h1>
+    {topic.rootSection?.desc && <p class='lede'>{clean(topic.rootSection.desc)}</p>}
+    <div class='deps mono'>
+      <span>
+        前置：{
+          before.length
+            ? before.map((t, i) => (
+                <>
+                  {i > 0 && '、'}
+                  {ready(t) ? <a href={topicHref(t)}>{TOPICS[t].title}</a> : <span class='todo'>{TOPICS[t].title}</span>}
+                </>
+              ))
+            : '起点'
+        }
+      </span>
+      <span>
+        下一步：{
+          after.length
+            ? after.map((t, i) => (
+                <>
+                  {i > 0 && '、'}
+                  {ready(t) ? <a href={topicHref(t)}>{TOPICS[t].title}</a> : <span class='todo'>{TOPICS[t].title}</span>}
+                </>
+              ))
+            : '终点'
+        }
+      </span>
+    </div>
+  </header>
+
+  <div class='summary'>
+    <div><span class='k'>Problems</span><b class='readout'>{ps.length}</b></div>
+    <div><span class='k'>Rated</span><b class='readout'>{rated}</b></div>
+    <div><span class='k'>Median</span><b class='readout'>{m ?? '—'}</b></div>
+    <div><span class='k'>Premium</span><b class='readout'>{vip}</b></div>
+    <div class='mini'>
+      <span class='k'>1000 → 3000</span>
+      <span class='spark'>
+        {bkeys.map((k) => <i style={`height:${Math.max(1, ((b[k] ?? 0) / bmax) * 26).toFixed(1)}px`} />)}
+      </span>
+    </div>
+  </div>
+
+  <div class='layout'>
+    {
+      chapters.length > 1 && (
+        <nav class='rail' aria-label='小节'>
+          <ol>
+            {chapters.map((c, i) => (
+              <li>
+                <a href={`#${slugify(i)}`} data-rail={slugify(i)}>
+                  <span class='n'>{pad(i + 1)}</span>
+                  <span class='t'>{c.title}</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )
+    }
+
+    <div class='main-col' id='problems'>
+      <div class='filters' role='group' aria-label='筛选题目'>
+        <button class='fbtn' type='button' data-band='all' aria-pressed='true'>All</button>
+        {
+          BANDS.map((bd) => (
+            <button class='fbtn' type='button' data-band={bd.id} aria-pressed='false'>
+              {bd.label}
+            </button>
+          ))
+        }
+        <button class='fbtn' type='button' data-band='unrated' aria-pressed='false'>Unrated</button>
+        <label class='fbtn check'>
+          <input type='checkbox' id='hide-vip' /> Hide premium
+        </label>
+        <input class='q' type='search' id='q' placeholder='题号 / 标题' autocomplete='off' />
+        <span class='count mono' id='count'>{ps.length} shown</span>
+      </div>
+
+      {
+        chapters.map((c, i) => (
+          <section class='chapter' id={slugify(i)}>
+            <h2>
+              <span class='num mono'>{pad(i + 1)}</span>
+              {c.title}
+            </h2>
+            {c.desc && <p class='desc'>{clean(c.desc)}</p>}
+            {c.subs.map((s) => (
+              <div class='sub'>
+                {s.title && <h3>{s.title}</h3>}
+                {s.desc && <p class='desc'>{clean(s.desc)}</p>}
+                <ul class='plist'>
+                  {s.problems.map((p) => {
+                    const r = rating(p)
+                    const d = meta(p.id)?.difficulty
+                    const paid = p.vip || meta(p.id)?.paid
+                    return (
+                      <li data-band={band(p)} data-vip={paid ? '1' : '0'} data-q={`${p.id} ${p.title}`.toLowerCase()}>
+                        <a class='prow' href={problemUrl(p)} target='_blank' rel='noopener'>
+                          <span class='pid mono'>{p.id}</span>
+                          <span class='ptitle'>
+                            {p.title}
+                            {paid && <span class='vip mono'>Premium</span>}
+                            {p.desc && clean(p.desc) && <span class='pdesc'>{clean(p.desc)}</span>}
+                          </span>
+                          <span class='score mono'>
+                            {r ?? (d ? <span class={`diff d-${d}`}>{DIFF[d]}</span> : '—')}
+                          </span>
+                          <span class='rbar' aria-hidden='true'>
+                            <i style={`width:${r ? Math.min(100, Math.max(3, ((r - 1100) / 2000) * 100)).toFixed(0) : 0}%`} />
+                          </span>
+                        </a>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            ))}
+          </section>
+        ))
+      }
+      <p class='none' id='none' hidden>
+        <PixelMouse variant='puzzled' px={2} label='' />
+        <span>没有符合筛选条件的题。</span>
+      </p>
+
+      <nav class='pn' aria-label='其他专题'>
+        {
+          prevT ? (
+            <a href={topicHref(prevT)}>
+              <span class='mono'>← 上一个专题</span>
+              {TOPICS[prevT].title}
+            </a>
+          ) : (
+            <span />
+          )
+        }
+        {
+          nextT && (
+            <a class='next' href={topicHref(nextT)}>
+              <span class='mono'>下一个专题 →</span>
+              {TOPICS[nextT].title}
+            </a>
+          )
+        }
+      </nav>
+    </div>
+  </div>
+</PageLayout>
+
+<script>
+  const items = Array.from(document.querySelectorAll<HTMLLIElement>('.plist li'))
+  const subs = Array.from(document.querySelectorAll<HTMLElement>('.sub'))
+  const chapters = Array.from(document.querySelectorAll<HTMLElement>('.chapter'))
+  const count = document.getElementById('count')!
+  const none = document.getElementById('none')!
+  const hideVip = document.getElementById('hide-vip') as HTMLInputElement
+  const q = document.getElementById('q') as HTMLInputElement
+  let bandSel = 'all'
+  const apply = () => {
+    const text = q.value.trim().toLowerCase()
+    let shown = 0
+    for (const li of items) {
+      const ok =
+        (bandSel === 'all' || li.dataset.band === bandSel) &&
+        !(hideVip.checked && li.dataset.vip === '1') &&
+        (!text || li.dataset.q!.includes(text))
+      li.hidden = !ok
+      if (ok) shown++
+    }
+    for (const s of subs) s.hidden = !s.querySelector('li:not([hidden])')
+    for (const c of chapters) c.hidden = !c.querySelector('.sub:not([hidden])')
+    count.textContent = `${shown} shown`
+    none.hidden = shown > 0
+    document.querySelectorAll<HTMLButtonElement>('.fbtn[data-band]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.dataset.band === bandSel))
+    })
+  }
+  document.querySelector('.filters')?.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLButtonElement>('.fbtn[data-band]')
+    if (!b) return
+    bandSel = b.dataset.band || 'all'
+    apply()
+  })
+  hideVip.addEventListener('change', apply)
+  q.addEventListener('input', apply)
+
+  // Rail: highlight the chapter in view
+  const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-rail]'))
+  if (links.length) {
+    const onScroll = () => {
+      const line = window.innerHeight * 0.3
+      let current = chapters[0]?.id
+      for (const c of chapters) if (!c.hidden && c.getBoundingClientRect().top <= line) current = c.id
+      links.forEach((a) => a.classList.toggle('active', a.dataset.rail === current))
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+  }
+</script>
+
+<style>
+  [hidden] {
+    display: none !important;
+  }
+  .crumb {
+    display: inline-block;
+    margin-top: 0.5rem;
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+  }
+  .crumb:hover {
+    color: hsl(var(--primary));
+  }
+  .page-intro {
+    margin-bottom: 1.5rem;
+    padding-top: 1.5rem;
+  }
+  .eyebrow .main {
+    color: hsl(var(--primary));
+  }
+  .lede {
+    white-space: pre-line;
+  }
+  .deps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 2rem;
+    margin-top: 1rem;
+    font-size: 0.78rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .deps a {
+    color: hsl(var(--foreground));
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--scarf) / 0.6);
+    text-underline-offset: 3px;
+  }
+  .deps .todo {
+    color: hsl(var(--faint));
+  }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.4fr);
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
+    background: hsl(var(--card));
+    margin-bottom: 2rem;
+  }
+  .summary > div {
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.7rem 1rem;
+    border-left: var(--hair) solid hsl(var(--border));
+  }
+  .summary > div:first-child {
+    border-left: 0;
+  }
+  .summary .k {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+  }
+  .summary b {
+    font-size: 1.5rem;
+    line-height: 1.15;
+  }
+  .spark {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 26px;
+  }
+  .spark i {
+    display: block;
+    width: 8px;
+    background: hsl(var(--foreground));
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 9rem minmax(0, 1fr);
+    gap: 2.5rem;
+  }
+  .rail {
+    position: sticky;
+    top: 4.5rem;
+    align-self: start;
+    max-height: calc(100svh - 6rem);
+    overflow-y: auto;
+  }
+  .rail ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+  .rail a {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: hsl(var(--faint));
+    text-decoration: none;
+  }
+  .rail .n {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+  }
+  .rail .t {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .rail a:hover,
+  .rail a.active {
+    color: hsl(var(--foreground));
+  }
+  .rail a.active .n {
+    color: hsl(var(--primary));
+  }
+  .main-col {
+    min-width: 0;
+    grid-column: 2;
+  }
+  .layout:not(:has(.rail)) .main-col {
+    grid-column: 1 / -1;
+  }
+  .filters {
+    position: sticky;
+    top: 3.5rem;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 0;
+    margin-bottom: 0.5rem;
+    background: hsl(var(--background) / 0.92);
+    backdrop-filter: blur(6px);
+    border-bottom: var(--hair) solid hsl(var(--border));
+  }
+  .fbtn {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground));
+    background: transparent;
+    border: var(--hair) solid hsl(var(--foreground) / 0.5);
+    border-radius: var(--radius);
+    padding: 0.15rem 0.45rem;
+    cursor: pointer;
+  }
+  .fbtn[aria-pressed='true'] {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border-color: hsl(var(--foreground));
+  }
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .check input {
+    accent-color: hsl(var(--scarf));
+  }
+  .q {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    width: 9rem;
+    padding: 0.18rem 0.5rem;
+    border: var(--hair) solid hsl(var(--foreground) / 0.5);
+    border-radius: var(--radius);
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    outline: none;
+  }
+  .q:focus {
+    border-color: hsl(var(--scarf));
+  }
+  .count {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  .chapter {
+    scroll-margin-top: 7rem;
+  }
+  .chapter h2 {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin: 2.25rem 0 0.6rem;
+    font-size: 1.4rem;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  .chapter h2 .num {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: hsl(var(--faint));
+  }
+  .chapter h2 .num::after {
+    content: '';
+    flex: 1;
+    height: var(--hair);
+    background: hsl(var(--border));
+  }
+  .sub h3 {
+    margin: 1.4rem 0 0.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .desc {
+    margin: 0 0 0.6rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: hsl(var(--muted-foreground));
+    white-space: pre-line;
+  }
+  .plist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: var(--hair) solid hsl(var(--border));
+  }
+  .prow {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr) 3.5rem 7rem;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.5rem 0.25rem;
+    border-bottom: var(--hair) solid hsl(var(--border));
+    color: inherit;
+    text-decoration: none;
+    font-size: 0.92rem;
+  }
+  .prow:hover {
+    background: hsl(var(--band));
+    color: inherit;
+  }
+  .prow:hover .ptitle {
+    color: hsl(var(--primary));
+  }
+  .pid {
+    font-size: 0.75rem;
+    color: hsl(var(--faint));
+  }
+  .ptitle {
+    min-width: 0;
+  }
+  .pdesc {
+    display: block;
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .vip {
+    margin-left: 0.5rem;
+    font-size: 0.58rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+    border: var(--hair) dashed hsl(var(--s2));
+    border-radius: var(--radius);
+    padding: 0 0.3rem;
+    vertical-align: 0.1em;
+  }
+  .score {
+    text-align: right;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .diff {
+    display: inline-block;
+    width: 1.2rem;
+    text-align: center;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius);
+    font-size: 0.65rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .d-hard {
+    color: hsl(var(--negative));
+  }
+  .d-easy {
+    color: hsl(var(--positive));
+  }
+  .rbar {
+    height: 4px;
+    background: hsl(var(--muted));
+  }
+  .rbar i {
+    display: block;
+    height: 100%;
+    background: hsl(var(--foreground) / 0.65);
+  }
+  .none {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: hsl(var(--muted-foreground));
+    padding: 2rem 0;
+  }
+  .pn {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin-top: 3rem;
+  }
+  .pn a {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.8rem 1rem;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: var(--radius-box);
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    text-decoration: none;
+  }
+  .pn a:hover {
+    border-color: hsl(var(--scarf) / 0.6);
+  }
+  .pn .mono {
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  .pn .next {
+    grid-column: 2;
+    text-align: right;
+  }
+  @media (max-width: 1000px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .rail {
+      display: none;
+    }
+    .main-col {
+      grid-column: 1;
+    }
+    .summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .summary > div:nth-child(odd) {
+      border-left: 0;
+    }
+    .summary > div:nth-child(n + 3) {
+      border-top: var(--hair) solid hsl(var(--border));
+    }
+    .summary .mini {
+      grid-column: 1 / -1;
+    }
+  }
+  @media (max-width: 600px) {
+    .prow {
+      grid-template-columns: 3.5rem minmax(0, 1fr) 3rem;
+    }
+    .rbar {
+      display: none;
+    }
+    .count {
+      margin-left: 0;
+    }
+  }
+</style>

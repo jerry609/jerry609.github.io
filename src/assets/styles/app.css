@@ -9,8 +9,9 @@
  *   --primary  accent text (link hover, labels); one step darker (light) / lighter (dark), ≥4.5:1
  * Layers of the stack never get colours; only the selected one turns scarf.
  *
- * Type: Geist for UI, titles and body; Source Serif 4 for article titles and theorem boxes;
- *       Pixelify Sans only for the wordmark and numeric read-outs; Geist Mono for metadata.
+ * Type: Geist for UI, titles and body; Source Serif 4 for theorem boxes; Pixelify Sans only for
+ *       the wordmark and mascot-side decoration (never for numbers: its 5 reads as S);
+ *       Geist Mono for metadata and numeric read-outs.
  * Scale: T1 17/30 (article body) · T2 16/26 · B1 15/24 · B2 14/22 · C1 12/18 · C2 10/14
  * Shape: radius 0 / 2px (controls, tags) / 6px (containers); hairline 0.5px on 2x screens.
  */
@@ -178,12 +179,12 @@ a {
   font-size: 1.0625rem;
   line-height: 1.875rem;
 }
-/* Numeric read-outs (player counters, stage numbers): the machine's voice */
+/* Numeric read-outs (counters, countdowns). Mono, not pixel: Pixelify's 5 reads as S. */
 .readout {
-  font-family: var(--font-pixel);
+  font-family: var(--font-mono);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.02em;
 }
 
 /* Section heading: English display word + Chinese label */

@@ -5,6 +5,7 @@ import katex from 'katex'
 import { getBlogCollection } from 'astro-pure/server'
 import PageLayout from '@/layouts/BaseLayout.astro'
 import { layerLabel } from '@/data/stack'
+import { MATH_ROADMAP } from '@/data/math-roadmap'
 
 const posts = (await getBlogCollection('blog')) as CollectionEntry<'blog'>[]
 const bySlug = Object.fromEntries(posts.map((p) => [p.id, p]))
@@ -57,6 +58,16 @@ const pdfs = [
   { file: 'lasso-textbook.pdf', title: 'LASSO 教材', note: '稀疏表示与凸优化', size: '384 KB', post: 'lasso-textbook' }
 ]
 
+// Study path (moved here from the algorithm roadmap)
+const pathGroups = (MATH_ROADMAP.children ?? []).flatMap((c) =>
+  c.problems?.length ? [c] : (c.children ?? []).filter((g) => g.problems?.length)
+)
+const pathCount = pathGroups.reduce((n, g) => n + (g.problems?.length ?? 0), 0)
+const shortDesc = (d?: string) => {
+  const first = (d ?? '').replace(/\u200b/g, '').split('。')[0].trim()
+  return first ? `${first}。` : ''
+}
+
 const eq = katex.renderToString(
   String.raw`P^{\star}(y \mid x) = \frac{P_{\mathrm{ref}}(y \mid x)\,\exp\!\big(R(x,y)/\beta\big)}{Z_\beta(x)}`,
   { displayMode: true, throwOnError: false }
@@ -93,6 +104,7 @@ const eq = katex.renderToString(
         </a>
       ))
     }
+    <a href='#path'>学习路线<span>{pathCount}</span></a>
     <a href='#pdfs'>讲义 PDF<span>{pdfs.length}</span></a>
   </nav>
 
@@ -121,6 +133,39 @@ const eq = katex.renderToString(
       </section>
     ))
   }
+
+  <section class='track' id='path'>
+    <div class='track-side'>
+      <p class='mono en'>Study path</p>
+      <h2>学习路线</h2>
+      <p class='desc'>
+        从“数学工具集合”整理出的主线：用 x≈Dh 串起线性代数、最小二乘、正则化、凸优化和对偶。每一项链接到讲它的文章。
+      </p>
+    </div>
+    <div class='path'>
+      {
+        pathGroups.map((g, i) => (
+          <details open={i < 2}>
+            <summary>
+              <span class='mono pc'>{String(g.problems!.length).padStart(2, '0')}</span>
+              <span class='pt'>{g.title}</span>
+            </summary>
+            {g.desc && <p class='pd'>{shortDesc(g.desc)}</p>}
+            <ol>
+              {g.problems!.map((p) => (
+                <li>
+                  <a href={p.url ?? '/blog/math-toolkit-collection'}>
+                    <span class='mono code'>{p.id}</span>
+                    <span>{p.title}</span>
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </details>
+        ))
+      }
+    </div>
+  </section>
 
   <section class='track' id='pdfs'>
     <div class='track-side'>
@@ -242,6 +287,77 @@ const eq = katex.renderToString(
   .track .rows li:last-child .row {
     border-bottom: 0;
   }
+  .path details {
+    border-top: var(--hair) solid hsl(var(--border));
+  }
+  .path details:last-child {
+    border-bottom: var(--hair) solid hsl(var(--border));
+  }
+  .path summary {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.7rem 0.25rem;
+    cursor: pointer;
+    list-style: none;
+  }
+  .path summary::-webkit-details-marker {
+    display: none;
+  }
+  .path summary::after {
+    content: '+';
+    margin-left: auto;
+    font-family: var(--font-mono);
+    color: hsl(var(--faint));
+  }
+  .path details[open] summary::after {
+    content: '−';
+  }
+  .path .pc {
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  .path .pt {
+    font-weight: 500;
+  }
+  .path .pd {
+    margin: 0 0 0.5rem 2.1rem;
+    font-size: 0.85rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .path ol {
+    list-style: none;
+    margin: 0 0 0.9rem;
+    padding: 0 0 0 2.1rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem 1.5rem;
+  }
+  .path li a {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    font-size: 0.88rem;
+    color: hsl(var(--foreground));
+    text-decoration: none;
+  }
+  .path li a:hover {
+    color: hsl(var(--primary));
+  }
+  .path .code {
+    font-size: 0.68rem;
+    color: hsl(var(--faint));
+    min-width: 2.2rem;
+  }
+  @media (max-width: 640px) {
+    .path ol {
+      grid-template-columns: minmax(0, 1fr);
+      padding-left: 0;
+    }
+    .path .pd {
+      margin-left: 0;
+    }
+  }
   .pdfs {
     list-style: none;
     margin: 0;
@@ -307,7 +423,78 @@ const eq = katex.renderToString(
       grid-template-columns: minmax(0, 1fr);
       gap: 1.25rem;
     }
-    .pdfs {
+    .path details {
+    border-top: var(--hair) solid hsl(var(--border));
+  }
+  .path details:last-child {
+    border-bottom: var(--hair) solid hsl(var(--border));
+  }
+  .path summary {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.7rem 0.25rem;
+    cursor: pointer;
+    list-style: none;
+  }
+  .path summary::-webkit-details-marker {
+    display: none;
+  }
+  .path summary::after {
+    content: '+';
+    margin-left: auto;
+    font-family: var(--font-mono);
+    color: hsl(var(--faint));
+  }
+  .path details[open] summary::after {
+    content: '−';
+  }
+  .path .pc {
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  .path .pt {
+    font-weight: 500;
+  }
+  .path .pd {
+    margin: 0 0 0.5rem 2.1rem;
+    font-size: 0.85rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .path ol {
+    list-style: none;
+    margin: 0 0 0.9rem;
+    padding: 0 0 0 2.1rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem 1.5rem;
+  }
+  .path li a {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    font-size: 0.88rem;
+    color: hsl(var(--foreground));
+    text-decoration: none;
+  }
+  .path li a:hover {
+    color: hsl(var(--primary));
+  }
+  .path .code {
+    font-size: 0.68rem;
+    color: hsl(var(--faint));
+    min-width: 2.2rem;
+  }
+  @media (max-width: 640px) {
+    .path ol {
+      grid-template-columns: minmax(0, 1fr);
+      padding-left: 0;
+    }
+    .path .pd {
+      margin-left: 0;
+    }
+  }
+  .pdfs {
       grid-template-columns: minmax(0, 1fr);
     }
   }

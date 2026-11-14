@@ -42,7 +42,7 @@ export const theme: ThemeUserConfig = {
     menu: [
       { title: '文章', link: '/blog' },
       { title: '数学', link: '/math-notes' },
-      { title: '路线', link: '/roadmap' },
+      { title: '算法', link: '/roadmap' },
       { title: '碎碎念', link: '/murmurs' },
       { title: '照片', link: '/photos' }
     ]
