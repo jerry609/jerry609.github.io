@@ -9,7 +9,7 @@ import NowPlaying from '@/components/home/NowPlaying.astro'
 import Publications from '@/components/home/Publications.astro'
 import StackTrace from '@/components/home/StackTrace.astro'
 import WritingIndex from '@/components/home/WritingIndex.astro'
-import { layerLabel, PROJECTS, SERIES } from '@/data/stack'
+import { layerLabel, SERIES } from '@/data/stack'
 
 const allPosts = (await getBlogCollection('blog')) as CollectionEntry<'blog'>[]
 const byDate = [...allPosts].sort(
@@ -147,51 +147,6 @@ const series = SERIES.map((s) => {
         <span class='sec-note mono'>L6 Agent → L1 Math</span>
       </div>
       <StackTrace posts={allPosts} />
-    </section>
-
-    {/* Projects */}
-    <section>
-      <div class='sec-head'>
-        <h2 class='sec-title'>Selected Projects<span class='zh'>项目</span></h2>
-      </div>
-      <ul class='projects'>
-        {
-          PROJECTS.map((p) => (
-            <li class='proj'>
-              <div class='proj-head'>
-                <a
-                  class='proj-name'
-                  href={p.href}
-                  {...(p.href.startsWith('http') ? { target: '_blank', rel: 'noopener' } : {})}
-                >
-                  {p.name}
-                </a>
-                <span class='mono proj-meta'>
-                  {p.layers.map((l) => layerLabel(l)).join(' · ')}
-                  {p.stars ? ` · ★ ${p.stars}` : ''}
-                  {p.note ? ` · ${p.note}` : ''}
-                </span>
-              </div>
-              <p class='proj-sum'>{p.summary}</p>
-              {p.pipeline && (
-                <p class='pipe mono'>
-                  {p.pipeline.map((step, i) => (
-                    <>
-                      {i > 0 && <span class='arr'>→</span>}
-                      <span>{step}</span>
-                    </>
-                  ))}
-                </p>
-              )}
-              <p class='proj-stack'>
-                {p.stack.map((t) => (
-                  <span class='chip'>{t}</span>
-                ))}
-              </p>
-            </li>
-          ))
-        }
-      </ul>
     </section>
 
     {/* Series */}
@@ -409,64 +364,6 @@ const series = SERIES.map((s) => {
     color: hsl(var(--primary));
   }
 
-  .projects {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    border-top: var(--hair) solid hsl(var(--border));
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 3rem;
-  }
-  .proj {
-    padding: 1.125rem 0;
-    border-bottom: var(--hair) solid hsl(var(--border));
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .proj-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.25rem 0.875rem;
-  }
-  .proj-name {
-    font-family: var(--font-display);
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: hsl(var(--foreground));
-    text-decoration: none;
-  }
-  .proj-name:hover {
-    color: hsl(var(--primary));
-  }
-  .proj-meta {
-    color: hsl(var(--faint));
-  }
-  .proj-sum {
-    margin: 0;
-    color: hsl(var(--muted-foreground));
-    line-height: 1.65;
-    font-size: 0.94rem;
-  }
-  .pipe {
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem 0.4rem;
-    color: hsl(var(--foreground));
-  }
-  .pipe .arr {
-    color: hsl(var(--faint));
-  }
-  .proj-stack {
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-  }
-
   .series {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -537,8 +434,7 @@ const series = SERIES.map((s) => {
     }
   }
   @media (max-width: 800px) {
-    .two-col,
-    .projects {
+    .two-col {
       grid-template-columns: minmax(0, 1fr);
     }
     .intro {
