@@ -53,6 +53,12 @@ source:
 
 论文写进 `src/data/publications.ts` 后首页会出现 Publications 区（列表为空时不显示）。首页的截稿倒计时在构建时从 [ccfddl](https://github.com/ccfddl/ccf-deadlines) 拉取 OSDI、MLSys、NeurIPS、ICLR 的日期，部署工作流每周一自动重建一次。
 
+文章页模板（`src/layouts/BlogPost.astro`）：深色头图里是六层栈的等距视图，本文所在的层会被抬起并标成橙色，滚动时各层拉开；左侧是随阅读高亮的章节编号；每个二级标题自动编号；第一段自动放大成导语；正文里单独一行的 Markdown 图片会变成 `FIG. N` 编号的图（`src/plugins/rehype-figures.ts`）。
+
+没有配图的文章会自动生成封面（`src/utils/cover.ts`）：关键字优先取标题里出现的标签，也可以在 frontmatter 里用 `cover.label` / `cover.variant`（night | paper | mist）指定；有 `heroImage` 时用图片。
+
+MDX 文章可以用交互图组件（`src/components/figures`）：`Figure`（编号、重播、调速、说明）、`Timeline`（泳道时间线动画）、`BarDelta`（前后对比条）、`StepFlow`（流程）。完整写法见 `templates/interactive-post.mdx`，效果见 `/lab/figures`（不在导航里，数据是示例）。
+
 主题设计（颜色、字号、形状的规则）写在 `src/assets/styles/app.css` 开头的注释里。
 
 主要页面：

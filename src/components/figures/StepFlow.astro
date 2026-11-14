@@ -1,0 +1,182 @@
+---
+/**
+ * Numbered process flow with an optional loop and a result bar.
+ * Steps light up one after another when scrolled into view (and on replay).
+ *
+ *   <StepFlow loop="next loop" check="an engineer merges"
+ *     result={{ tag: 'HARNESS', text: 'What every model runs on.' }}
+ *     steps={[{ title: 'Bring in', desc: 'New models are added and checked.' }, …]} />
+ */
+interface Props {
+  steps: { title: string; desc?: string }[]
+  loop?: string
+  check?: string
+  result?: { tag: string; text: string }
+}
+
+const { steps, loop, check, result } = Astro.props
+const pad = (n: number) => String(n).padStart(2, '0')
+---
+
+<div class:list={['sf', loop && 'has-loop']} style={`--n:${steps.length}`}>
+  {loop && <span class='loop' aria-hidden='true'><span>{loop}</span></span>}
+  <ol>
+    {
+      steps.map((s, i) => (
+        <li style={`--i:${i}`}>
+          <span class='n'>{pad(i + 1)}</span>
+          <span class='t'>{s.title}</span>
+          {s.desc && <span class='d'>{s.desc}</span>}
+        </li>
+      ))
+    }
+  </ol>
+  {check && <p class='check'>✓ {check}</p>}
+  {
+    result && (
+      <p class='result'>
+        <b>{result.tag}</b>
+        <span>{result.text}</span>
+      </p>
+    )
+  }
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.sf').forEach((sf) => {
+    const fig = sf.closest<HTMLElement>('.fig-x')
+    const show = () => {
+      sf.classList.remove('in')
+      void sf.offsetWidth
+      sf.classList.add('in')
+    }
+    fig?.addEventListener('fig:replay', show)
+    const io = new IntersectionObserver(
+      (es) => {
+        if (es.some((e) => e.isIntersecting)) {
+          show()
+          io.disconnect()
+        }
+      },
+      { threshold: 0.3 }
+    )
+    io.observe(sf)
+  })
+</script>
+
+<style>
+  .sf {
+    position: relative;
+  }
+  .has-loop {
+    padding-left: 2.25rem;
+  }
+  .loop {
+    position: absolute;
+    left: 0.5rem;
+    top: 1.4rem;
+    bottom: 3.2rem;
+    width: 1.1rem;
+    border: var(--hair) solid hsl(var(--faint));
+    border-right: 0;
+  }
+  .loop span {
+    position: absolute;
+    left: -0.55rem;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: hsl(var(--faint));
+    background: hsl(var(--card));
+    padding: 0 0.3rem;
+  }
+  ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 1.35rem;
+  }
+  li {
+    position: relative;
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.7rem 0.9rem;
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: 2px;
+    background: hsl(var(--card));
+    transition:
+      border-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+  li:not(:last-child)::after {
+    content: '↓';
+    position: absolute;
+    left: 50%;
+    bottom: -1.3rem;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    color: hsl(var(--faint));
+  }
+  .in li {
+    border-color: hsl(var(--foreground) / 0.7);
+    transition-delay: calc(var(--i) * 0.35s);
+  }
+  .in li:last-child {
+    box-shadow: inset 3px 0 0 hsl(var(--scarf));
+  }
+  .n {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: hsl(var(--faint));
+  }
+  .t {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground));
+  }
+  .d {
+    font-size: 0.82rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .check {
+    margin: 1rem 0 0;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .result {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin: 0.9rem 0 0;
+    padding: 0.7rem 0.9rem;
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border-radius: 2px;
+    font-size: 0.82rem;
+  }
+  .result b {
+    font-family: var(--font-pixel);
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    li {
+      transition: none;
+    }
+    .in li {
+      transition-delay: 0s;
+    }
+  }
+</style>

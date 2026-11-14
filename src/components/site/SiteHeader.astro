@@ -85,7 +85,12 @@ const elsewhere = [
 
   class SiteHeader extends HTMLElement {
     connectedCallback() {
-      const onScroll = () => this.classList.toggle('scrolled', window.scrollY > 8)
+      // Over a dark post hero the header goes transparent with light text
+      const hero = document.querySelector<HTMLElement>('[data-dark-hero]')
+      const onScroll = () => {
+        this.classList.toggle('scrolled', window.scrollY > 8)
+        if (hero) this.classList.toggle('on-dark', hero.getBoundingClientRect().bottom > this.offsetHeight)
+      }
       onScroll()
       window.addEventListener('scroll', onScroll, { passive: true })
 
@@ -130,6 +135,29 @@ const elsewhere = [
   }
   .site-header.scrolled {
     border-bottom-color: hsl(var(--border));
+  }
+  .site-header.on-dark {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-bottom-color: transparent;
+    color: #e6e9ec;
+  }
+  .site-header.on-dark .brand,
+  .site-header.on-dark .nav a[aria-current='page'] {
+    color: #f3f5f7;
+  }
+  .site-header.on-dark .nav a {
+    color: rgb(230 233 236 / 0.72);
+  }
+  .site-header.on-dark .nav a:hover {
+    color: #fff;
+    background: rgb(255 255 255 / 0.08);
+  }
+  .site-header.on-dark .icon-btn {
+    background: rgb(255 255 255 / 0.06);
+    border-color: rgb(255 255 255 / 0.22);
+    color: #e6e9ec;
   }
   .site-header-inner {
     display: flex;

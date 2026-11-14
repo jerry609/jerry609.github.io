@@ -7,6 +7,7 @@ User-agent: Claude-Web
 
 User-agent: *
 Allow: /
+Disallow: /lab/
 
 Sitemap: ${new URL('sitemap-index.xml', import.meta.env.SITE).href}
 `.trim()

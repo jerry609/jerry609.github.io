@@ -37,6 +37,13 @@ const blog = defineCollection({
       tags: z.array(z.string()).default([]).transform(removeDupsAndLowerCase),
       // Which layer of the agent × infra stack this post sits on (see src/data/stack.ts)
       layer: z.enum(LAYER_IDS).default('notes'),
+      // Generated cover overrides (src/utils/cover.ts)
+      cover: z
+        .object({
+          label: z.string().optional(),
+          variant: z.enum(['night', 'paper', 'mist']).optional()
+        })
+        .optional(),
       // What the post is built on: a venue paper, a tech report, a postmortem, a code reading…
       source: z
         .object({

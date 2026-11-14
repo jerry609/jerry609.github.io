@@ -1,0 +1,165 @@
+---
+/**
+ * Figure shell for interactive post figures (Factory-style).
+ *
+ *   <Figure title="Programmatic tool calling" replay speed measured>
+ *     <Timeline … />
+ *     <Fragment slot="about">How the numbers were produced…</Fragment>
+ *     <Fragment slot="caption">One-line caption under the panel.</Fragment>
+ *   </Figure>
+ *
+ * Numbering ("FIG. N") is a CSS counter shared with Markdown images.
+ * Children listen for `fig:replay` and `fig:speed` events on the closest `.fig`.
+ */
+interface Props {
+  title: string
+  id?: string
+  /** Show a dashed MEASURED badge (real measurements, not an illustration) */
+  measured?: boolean
+  /** Show a SAMPLE badge for illustrative data */
+  sample?: boolean
+  replay?: boolean
+  speed?: boolean
+}
+
+const { title, id, measured = false, sample = false, replay = false, speed = false } = Astro.props
+const aboutId = `${id ?? 'fig'}-${Math.random().toString(36).slice(2, 8)}-about`
+const hasAbout = Astro.slots.has('about')
+const hasCaption = Astro.slots.has('caption')
+---
+
+<figure class='fig fig-x not-prose' id={id} data-speed='1'>
+  <div class='fig-head'>
+    <span class='fig-title'>{title}</span>
+    <div class='fig-tools'>
+      {measured && <span class='fig-badge'>Measured</span>}
+      {sample && <span class='fig-badge'>Sample data</span>}
+      {
+        speed && (
+          <button type='button' class='fig-tool' data-act='speed' aria-label='播放速度 1×' title='播放速度'>
+            1×
+          </button>
+        )
+      }
+      {
+        replay && (
+          <button type='button' class='fig-tool' data-act='replay' aria-label='重播' title='重播'>
+            <svg viewBox='0 0 16 16' width='13' height='13' aria-hidden='true'>
+              <path d='M3 8a5 5 0 1 0 1.6-3.7' fill='none' stroke='currentColor' stroke-width='1.5' />
+              <path d='M2.5 2.5v3h3' fill='none' stroke='currentColor' stroke-width='1.5' />
+            </svg>
+          </button>
+        )
+      }
+      {
+        hasAbout && (
+          <button
+            type='button'
+            class='fig-tool'
+            data-act='about'
+            aria-expanded='false'
+            aria-controls={aboutId}
+            aria-label='关于这张图'
+            title='关于这张图'
+          >
+            <svg viewBox='0 0 16 16' width='13' height='13' aria-hidden='true'>
+              <circle cx='8' cy='8' r='6.25' fill='none' stroke='currentColor' stroke-width='1.3' />
+              <path d='M8 7v4.5M8 4.6v.1' stroke='currentColor' stroke-width='1.5' />
+            </svg>
+          </button>
+        )
+      }
+    </div>
+  </div>
+  {
+    hasAbout && (
+      <div class='fig-about' id={aboutId} hidden>
+        <slot name='about' />
+      </div>
+    )
+  }
+  <div class='fig-panel'>
+    <slot />
+  </div>
+  {
+    hasCaption && (
+      <p class='fig-cap'>
+        <slot name='caption' />
+      </p>
+    )
+  }
+</figure>
+
+<script>
+  document.addEventListener('click', (e) => {
+    const btn = (e.target as Element).closest<HTMLButtonElement>('.fig-x .fig-tool')
+    if (!btn) return
+    const fig = btn.closest<HTMLElement>('.fig-x')!
+    const act = btn.dataset.act
+    if (act === 'replay') fig.dispatchEvent(new CustomEvent('fig:replay'))
+    if (act === 'speed') {
+      const next = { '1': '2', '2': '4', '4': '1' }[fig.dataset.speed || '1'] || '1'
+      fig.dataset.speed = next
+      btn.textContent = `${next}×`
+      btn.setAttribute('aria-label', `播放速度 ${next}×`)
+      fig.dispatchEvent(new CustomEvent('fig:speed', { detail: Number(next) }))
+    }
+    if (act === 'about') {
+      const box = document.getElementById(btn.getAttribute('aria-controls') || '')
+      if (!box) return
+      box.hidden = !box.hidden
+      btn.setAttribute('aria-expanded', String(!box.hidden))
+    }
+  })
+</script>
+
+<style>
+  .fig-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .fig-badge {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+    border: 1px dashed hsl(var(--s2));
+    border-radius: 2px;
+    padding: 0.1rem 0.4rem;
+  }
+  .fig-tool {
+    display: grid;
+    place-items: center;
+    min-width: 1.9rem;
+    height: 1.9rem;
+    padding: 0 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--card));
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .fig-tool:hover {
+    color: hsl(var(--foreground));
+    border-color: hsl(var(--faint));
+  }
+  .fig-tool[aria-expanded='true'] {
+    color: hsl(var(--primary));
+    border-color: hsl(var(--scarf));
+  }
+  .fig-about {
+    margin-bottom: 0.6rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--muted));
+    border: var(--hair) solid hsl(var(--border));
+    border-radius: 3px;
+  }
+</style>

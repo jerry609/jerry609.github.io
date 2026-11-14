@@ -1,0 +1,304 @@
+---
+/**
+ * Animated swimlane timeline, e.g. "direct tool calls vs one script".
+ * A playhead sweeps from 0 to `duration`; each span grows as the playhead passes it.
+ * Only the CSS variable --t changes per frame, so the animation is cheap.
+ *
+ *   <Timeline duration={60} unit="s" runs={[
+ *     { label: 'Direct calls', note: 'model reads every result', stats: [{ label: 'model calls', value: '6' }],
+ *       lanes: [{ name: 'model', spans: [{ start: 0, end: 8, kind: 'model', label: '#1' }] },
+ *               { name: 'tools', spans: [{ start: 8, end: 10, kind: 'tool' }] }] },
+ *     { label: 'Script', highlight: true, … }
+ *   ]} />
+ */
+type Span = { start: number; end: number; kind?: 'model' | 'tool' | 'script' | 'wait'; label?: string }
+type Run = {
+  label: string
+  note?: string
+  highlight?: boolean
+  stats?: { label: string; value: string }[]
+  lanes: { name: string; spans: Span[] }[]
+}
+interface Props {
+  runs: Run[]
+  duration: number
+  unit?: string
+  /** Seconds of real time for one full sweep at 1× */
+  playtime?: number
+  legend?: boolean
+}
+
+const { runs, duration, unit = 's', playtime = 6, legend = true } = Astro.props
+const ticks = Array.from({ length: 7 }, (_, i) => Math.round((duration * i) / 6))
+const f = (x: number) => (x / duration).toFixed(4)
+const kinds = [...new Set(runs.flatMap((r) => r.lanes.flatMap((l) => l.spans.map((s) => s.kind ?? 'model'))))]
+const KIND_LABEL: Record<string, string> = { model: 'model call', tool: 'tool call', script: 'script', wait: 'waiting' }
+---
+
+<div class='tl' data-playtime={playtime} style='--t:0'>
+  {
+    runs.map((run) => (
+      <div class:list={['run', run.highlight && 'hl']}>
+        <div class='run-head'>
+          <div>
+            <p class='run-label'>{run.label}</p>
+            {run.note && <p class='run-note'>{run.note}</p>}
+          </div>
+          {run.stats && (
+            <dl class='stats'>
+              {run.stats.map((s) => (
+                <div>
+                  <dt>{s.label}</dt>
+                  <dd>{s.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+        {run.lanes.map((lane) => (
+          <div class='lane'>
+            <span class='lane-name'>{lane.name}</span>
+            <span class='track'>
+              {lane.spans.map((s) => (
+                <span
+                  class={`span k-${s.kind ?? 'model'}`}
+                  style={`--s:${f(s.start)};--e:${f(s.end)}`}
+                  title={`${s.label ?? s.kind ?? ''} ${s.start}–${s.end}${unit}`}
+                >
+                  {s.label && <span class='span-label'>{s.label}</span>}
+                </span>
+              ))}
+              <span class='head' aria-hidden='true' />
+            </span>
+          </div>
+        ))}
+      </div>
+    ))
+  }
+  <div class='axis'>
+    <span class='lane-name'>time</span>
+    <span class='ticks'>
+      {
+        ticks.map((t) => (
+          <span style={`left:${(t / duration) * 100}%`}>
+            {t}
+            {unit}
+          </span>
+        ))
+      }
+    </span>
+  </div>
+  {
+    legend && (
+      <p class='legend'>
+        {kinds.map((k) => (
+          <span>
+            <i class={`k-${k}`} />
+            {KIND_LABEL[k] ?? k}
+          </span>
+        ))}
+      </p>
+    )
+  }
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.tl').forEach((tl) => {
+    const fig = tl.closest<HTMLElement>('.fig-x')
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const base = Number(tl.dataset.playtime || 6) * 1000
+    let speed = Number(fig?.dataset.speed || 1)
+    let t = 0
+    let raf = 0
+    let last = 0
+    const set = (v: number) => tl.style.setProperty('--t', v.toFixed(4))
+    const frame = (now: number) => {
+      if (!last) last = now
+      t = Math.min(1, t + ((now - last) * speed) / base)
+      last = now
+      set(t)
+      if (t < 1) raf = requestAnimationFrame(frame)
+    }
+    const play = () => {
+      cancelAnimationFrame(raf)
+      if (reduce) return set(1)
+      t = 0
+      last = 0
+      raf = requestAnimationFrame(frame)
+    }
+    fig?.addEventListener('fig:replay', play)
+    fig?.addEventListener('fig:speed', (e) => (speed = (e as CustomEvent<number>).detail))
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((en) => en.isIntersecting)) {
+          play()
+          io.disconnect()
+        }
+      },
+      { threshold: 0.35 }
+    )
+    io.observe(tl)
+  })
+</script>
+
+<style>
+  .tl {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .run + .run {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: var(--hair) dashed hsl(var(--border));
+  }
+  .run-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .run-label {
+    margin: 0;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground));
+  }
+  .hl .run-label::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 0.8em;
+    margin-right: 0.45rem;
+    background: hsl(var(--scarf));
+    vertical-align: -0.05em;
+  }
+  .run-note {
+    margin: 0.2rem 0 0;
+    font-family: var(--font-body);
+    font-size: 0.78rem;
+  }
+  .stats {
+    display: flex;
+    gap: 1.5rem;
+    margin: 0;
+  }
+  .stats dt {
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+  }
+  .stats dd {
+    margin: 0.1rem 0 0;
+    font-size: 1.05rem;
+    color: hsl(var(--foreground));
+    font-variant-numeric: tabular-nums;
+  }
+  .lane,
+  .axis {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 1.6rem;
+  }
+  .lane-name {
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+  }
+  .track {
+    position: relative;
+    height: 1.35rem;
+    background:
+      repeating-linear-gradient(90deg, hsl(var(--border)) 0 1px, transparent 1px calc(100% / 6)),
+      hsl(var(--muted));
+  }
+  .span {
+    position: absolute;
+    top: 0.2rem;
+    bottom: 0.2rem;
+    left: calc(var(--s) * 100%);
+    /* visible width = clamp((t - s) / (e - s), 0, 1) of the full span */
+    width: calc(clamp(0, (var(--t) - var(--s)) / (var(--e) - var(--s)), 1) * (var(--e) - var(--s)) * 100%);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .span-label {
+    position: absolute;
+    left: 0.3rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.6rem;
+  }
+  .k-model {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+  .k-tool {
+    background: hsl(var(--card));
+    box-shadow: inset 0 0 0 1px hsl(var(--foreground) / 0.6);
+    color: hsl(var(--foreground));
+  }
+  .k-script {
+    background: hsl(var(--scarf) / 0.16);
+    box-shadow: inset 0 0 0 1px hsl(var(--scarf));
+    color: hsl(var(--primary));
+  }
+  .k-wait {
+    background: repeating-linear-gradient(
+      135deg,
+      hsl(var(--faint) / 0.35) 0 2px,
+      transparent 2px 5px
+    );
+  }
+  .head {
+    position: absolute;
+    top: -0.15rem;
+    bottom: -0.15rem;
+    left: calc(var(--t) * 100%);
+    width: 1px;
+    background: hsl(var(--scarf));
+    opacity: calc(1 - var(--t) * var(--t) * var(--t));
+  }
+  .axis {
+    margin-top: 0.4rem;
+  }
+  .ticks {
+    position: relative;
+    height: 1rem;
+  }
+  .ticks span {
+    position: absolute;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    font-size: 0.6rem;
+    color: hsl(var(--faint));
+  }
+  .ticks span:first-child {
+    transform: none;
+  }
+  .ticks span:last-child {
+    transform: translateX(-100%);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.25rem;
+    margin: 1rem 0 0;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .legend i {
+    display: inline-block;
+    width: 0.8rem;
+    height: 0.55rem;
+    margin-right: 0.4rem;
+    vertical-align: -0.05em;
+  }
+</style>

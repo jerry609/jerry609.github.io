@@ -298,3 +298,118 @@ body::-webkit-scrollbar {
 .prose .callout-warn .callout-label {
   color: hsl(var(--warning));
 }
+
+/* ---------- Post template (src/layouts/BlogPost.astro) ---------- */
+.post-prose {
+  counter-reset: sec fig;
+}
+/* Lead paragraph */
+.post-prose > p:first-of-type {
+  font-size: 1.2rem;
+  line-height: 1.75;
+  color: hsl(var(--foreground));
+  margin-bottom: 1.6em;
+}
+/* Section labels: "01 ———" above every h2 */
+.post-prose h2 {
+  counter-increment: sec;
+  margin-top: 3.25em;
+  font-family: var(--font-body);
+  font-size: 1.75em;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+.post-prose h2::before {
+  content: counter(sec, decimal-leading-zero);
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 1.1rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: hsl(var(--faint));
+  background: linear-gradient(hsl(var(--border)), hsl(var(--border))) 2.4rem 50% / calc(100% - 2.4rem) 1px no-repeat;
+}
+.post-prose h3 {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin-top: 2.2em;
+}
+/* Tables: mono uppercase heads, hairlines, no zebra */
+.post-prose table {
+  font-size: 0.9em;
+  border-collapse: collapse;
+  width: 100%;
+}
+.post-prose thead th {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--faint));
+  text-align: left;
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: var(--hair) solid hsl(var(--border));
+}
+.post-prose tbody td {
+  padding: 0.75rem 0.75rem 0.75rem 0;
+  border-bottom: var(--hair) solid hsl(var(--border));
+  vertical-align: top;
+}
+.post-prose tbody td:first-child {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.post-prose tbody tr:nth-child(even) {
+  background: none;
+}
+/* Figures: "FIG. N TITLE" header, bordered panel, caption (rehype-figures + <Figure>) */
+.fig {
+  counter-increment: fig;
+  margin: 2.5rem 0;
+}
+.fig-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.6rem;
+}
+.fig-title {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--foreground));
+}
+.fig-title::before {
+  content: 'Fig. ' counter(fig) ' ';
+  color: hsl(var(--faint));
+}
+.fig-panel {
+  position: relative;
+  border: var(--hair) solid hsl(var(--border));
+  border-radius: 3px;
+  background: hsl(var(--card));
+  padding: 1.25rem;
+  overflow-x: auto;
+}
+.fig-panel img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+.fig-cap {
+  margin: 0.6rem 0 0 !important;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: hsl(var(--muted-foreground));
+}

@@ -1,0 +1,72 @@
+---
+title: '文章标题'
+description: '一句话摘要，会出现在列表、卡片和文章头图里。'
+publishDate: '2026-11-14'
+layer: agent # agent | runtime | model | training | systems | math | notes
+tags: ['harness', 'agent']
+# 可选：文章基于什么（会显示 ICML ’20 / postmortem 之类的标签）
+# source:
+#   kind: paper
+#   venue: OSDI
+#   year: 2026
+#   title: '论文标题'
+#   url: 'https://…'
+# 可选：封面关键字和底色（默认取标题里出现的标签）
+# cover:
+#   label: 'HARNESS'
+#   variant: night # night | paper | mist
+draft: true
+---
+
+import { BarDelta, Figure, StepFlow, Timeline } from '@/components/figures'
+
+第一段是导语，会自动放大。用一两句话说清楚这篇文章要回答什么。
+
+## 第一节
+
+每个二级标题会自动编号（01、02…），并出现在左侧的章节栏里。
+
+普通图片直接写 Markdown，会自动变成 `FIG. N` 编号的图：
+
+![图的标题（alt 文字）](./figure.png '可选：图下方的说明')
+
+> [!TAKEAWAY]
+> 一句话的工程结论。
+
+## 交互图
+
+<Figure title="Direct calls vs one script" replay speed measured>
+  <Timeline
+    duration={60}
+    runs={[
+      {
+        label: 'Direct calls',
+        stats: [{ label: 'model calls', value: '4' }],
+        lanes: [
+          { name: 'model', spans: [{ start: 0, end: 8, kind: 'model', label: '#1' }] },
+          { name: 'tools', spans: [{ start: 8, end: 12, kind: 'tool' }] }
+        ]
+      },
+      {
+        label: 'One script',
+        highlight: true,
+        lanes: [
+          { name: 'model', spans: [{ start: 0, end: 9, kind: 'model', label: '#1' }] },
+          { name: 'script', spans: [{ start: 9, end: 20, kind: 'script', label: 'run.py' }] }
+        ]
+      }
+    ]}
+  />
+  <Fragment slot="about">数据怎么来的：环境、模型、重复次数。</Fragment>
+  <Fragment slot="caption">图下方的一句话说明。</Fragment>
+</Figure>
+
+<Figure title="Prompt budget" replay measured>
+  <BarDelta total rows={[{ label: 'Tool definitions', before: 15798, after: 8528 }]} />
+</Figure>
+
+<Figure title="How it ships" replay>
+  <StepFlow loop="next loop" steps={[{ title: 'Evaluate', desc: '…' }, { title: 'Test', desc: '…' }]} />
+</Figure>
+
+`measured` 表示实测数据；示意数据请换成 `sample`。

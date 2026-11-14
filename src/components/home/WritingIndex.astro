@@ -2,124 +2,149 @@
 import type { CollectionEntry } from 'astro:content'
 
 import PixelMouse from '@/components/brand/PixelMouse.astro'
-import { ALL_LAYERS, layerLabel, sourceLabel } from '@/data/stack'
+import { ALL_LAYERS, SERIES, sourceLabel } from '@/data/stack'
 
 interface Props {
   posts: CollectionEntry<'blog'>[]
-  /** Rows shown before "show all"; 0 shows everything. */
+  /** Rows per page; "View more" reveals the next page. 0 shows everything. */
   limit?: number
   id?: string
 }
 
 const { posts, limit = 0, id = 'writing-index' } = Astro.props
-const day = (d: Date) => d.toISOString().slice(0, 10)
 const counts = Object.fromEntries(
   ALL_LAYERS.map((l) => [l.id, posts.filter((p) => p.data.layer === l.id).length])
 )
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+const stamp = (d: Date) =>
+  `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+const seriesOf = (pid: string) =>
+  SERIES.find((s) => (s.slugs as readonly string[]).includes(pid))?.title
+const shortLayer = (l: string) => {
+  const L = ALL_LAYERS.find((x) => x.id === l)
+  return L && L.code ? L.name.toUpperCase() : 'NOTES'
+}
 ---
 
 <div class='windex' id={id} data-limit={limit}>
   <div class='filters'>
-    <div class='pills' role='group' aria-label='按栈层筛选'>
-      <button class='pill' type='button' data-layer='all' aria-pressed='true'
-        >全部<span class='c'>{posts.length}</span></button
-      >
-      {
-        ALL_LAYERS.filter((l) => counts[l.id] > 0).map((l) => (
-          <button class='pill' type='button' data-layer={l.id} aria-pressed='false'>
-            {layerLabel(l.id)}
-            <span class='c'>{counts[l.id]}</span>
-          </button>
-        ))
-      }
-    </div>
-    <label class='filter-box'>
-      <span class='sr-only'>按标题或摘要过滤</span>
+    <button class='search-toggle' type='button' aria-label='搜索标题和摘要' aria-expanded='false'>
       <svg viewBox='0 0 24 24' width='14' height='14' aria-hidden='true'
         ><circle cx='11' cy='11' r='7' fill='none' stroke='currentColor' stroke-width='2'
         ></circle><path d='M20 20l-3.5-3.5' stroke='currentColor' stroke-width='2' fill='none'
         ></path></svg
       >
-      <input type='search' placeholder='按标题或摘要过滤' autocomplete='off' id={`${id}-q`} />
+    </button>
+    <label class='search' hidden>
+      <span class='sr-only'>按标题或摘要过滤</span>
+      <input type='search' placeholder='FILTER…' autocomplete='off' id={`${id}-q`} />
     </label>
+    <div class='chips' role='group' aria-label='按栈层筛选'>
+      <button class='chip-btn' type='button' data-layer='all' aria-pressed='true'>All</button>
+      {
+        ALL_LAYERS.filter((l) => counts[l.id] > 0).map((l) => (
+          <button class='chip-btn' type='button' data-layer={l.id} aria-pressed='false'>
+            {l.code ? `${l.code} ${l.name}` : 'Notes'}
+          </button>
+        ))
+      }
+    </div>
   </div>
 
-  <ul class='rows'>
+  <ul class='table'>
     {
-      posts.map((p) => (
-        <li
-          data-layer={p.data.layer}
-          data-q={`${p.data.title} ${p.data.description} ${p.data.tags.join(' ')} ${sourceLabel(p.data.source)}`.toLowerCase()}
-        >
-          <a class='row' href={`/blog/${p.id}`}>
-            <span class='row-d mono'>{day(p.data.publishDate)}</span>
-            <span>
-              <span class='row-t'>{p.data.title}</span>
-              {p.data.source && <span class='src mono'>{sourceLabel(p.data.source)}</span>}
-              <span class='row-x'>{p.data.description}</span>
-            </span>
-            <span class='row-l mono'>{layerLabel(p.data.layer)}</span>
-          </a>
-        </li>
-      ))
+      posts.map((p) => {
+        const right = seriesOf(p.id) ?? sourceLabel(p.data.source)
+        return (
+          <li
+            data-layer={p.data.layer}
+            data-q={`${p.data.title} ${p.data.description} ${p.data.tags.join(' ')} ${sourceLabel(p.data.source)}`.toLowerCase()}
+          >
+            <a class='trow' href={`/blog/${p.id}`}>
+              <span class='when mono'>
+                {stamp(p.data.publishDate)}
+                <span class='dot'>·</span>
+                {shortLayer(p.data.layer)}
+              </span>
+              <span class='ttl'>
+                <span class='t'>{p.data.title}</span>
+                <span class='x'>{p.data.description}</span>
+              </span>
+              <span class='who mono'>{right}</span>
+            </a>
+          </li>
+        )
+      })
     }
     <li class='empty' hidden>
       <PixelMouse variant='puzzled' px={2} label='' />
-      <span>没有匹配的文章。换个关键词，或者点“全部”清除筛选。</span>
+      <span>没有匹配的文章。换个关键词，或者点 ALL 清除筛选。</span>
     </li>
   </ul>
 
-  <div class='list-foot'>
-    <span class='mono shown'>共 {posts.length} 篇</span>
-    <button class='btn more' type='button' hidden>显示全部</button>
+  <div class='foot'>
+    <button class='more mono' type='button' hidden>View more</button>
+    <span class='shown mono'>{posts.length} posts</span>
   </div>
 </div>
 
 <script>
   document.querySelectorAll<HTMLElement>('.windex').forEach((root) => {
-    const limit = Number(root.dataset.limit || 0)
+    const step = Number(root.dataset.limit || 0)
     const rows = Array.from(root.querySelectorAll<HTMLLIElement>('li[data-layer]'))
     const empty = root.querySelector<HTMLLIElement>('li.empty')!
     const shown = root.querySelector<HTMLElement>('.shown')!
     const more = root.querySelector<HTMLButtonElement>('.more')!
-    const input = root.querySelector<HTMLInputElement>('input[type=search]')!
+    const toggle = root.querySelector<HTMLButtonElement>('.search-toggle')!
+    const search = root.querySelector<HTMLLabelElement>('.search')!
+    const input = search.querySelector('input')!
     let layer = 'all'
     let q = ''
-    let expanded = false
+    let cap = step || Infinity
 
     const render = () => {
       const match = rows.filter(
         (r) => (layer === 'all' || r.dataset.layer === layer) && (!q || r.dataset.q!.includes(q))
       )
-      const cap = limit && !expanded ? limit : Infinity
       rows.forEach((r) => (r.hidden = true))
       match.forEach((r, i) => (r.hidden = i >= cap))
       empty.hidden = match.length > 0
       const visible = Math.min(match.length, cap)
       shown.textContent =
-        visible === match.length ? `共 ${match.length} 篇` : `显示 ${visible} / ${match.length} 篇`
-      more.hidden = !limit || match.length <= limit
-      more.textContent = expanded ? '收起' : `显示全部 ${match.length} 篇`
-      root.querySelectorAll<HTMLButtonElement>('.pill').forEach((b) => {
+        visible === match.length ? `${match.length} posts` : `${visible} / ${match.length}`
+      more.hidden = visible >= match.length
+      root.querySelectorAll<HTMLButtonElement>('.chip-btn').forEach((b) => {
         b.setAttribute('aria-pressed', String(b.dataset.layer === layer))
       })
     }
 
-    root.querySelector('.pills')?.addEventListener('click', (e) => {
-      const b = (e.target as Element).closest<HTMLButtonElement>('.pill')
+    root.querySelector('.chips')?.addEventListener('click', (e) => {
+      const b = (e.target as Element).closest<HTMLButtonElement>('.chip-btn')
       if (b) document.dispatchEvent(new CustomEvent('stack:change', { detail: b.dataset.layer }))
     })
     document.addEventListener('stack:change', (e) => {
       layer = (e as CustomEvent<string>).detail || 'all'
-      expanded = false
+      cap = step || Infinity
       render()
+    })
+    toggle.addEventListener('click', () => {
+      const open = search.hidden
+      search.hidden = !open
+      toggle.setAttribute('aria-expanded', String(open))
+      if (open) input.focus()
+      else if (q) {
+        input.value = ''
+        q = ''
+        render()
+      }
     })
     input.addEventListener('input', () => {
       q = input.value.trim().toLowerCase()
+      cap = step || Infinity
       render()
     })
     more.addEventListener('click', () => {
-      expanded = !expanded
+      cap += step || Infinity
       render()
     })
 
@@ -131,54 +156,124 @@ const counts = Object.fromEntries(
 </script>
 
 <style>
+  .windex [hidden] {
+    display: none !important;
+  }
   .filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.625rem 1rem;
     align-items: center;
-    margin-bottom: 0.875rem;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
   }
-  .pills {
+  .search-toggle,
+  .chip-btn,
+  .more {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground));
+    background: transparent;
+    border: var(--hair) solid hsl(var(--foreground) / 0.55);
+    border-radius: var(--radius);
+    padding: 0.15rem 0.45rem;
+    cursor: pointer;
+    line-height: 1.4;
+  }
+  .search-toggle {
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    padding: 0;
+  }
+  .chips {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
   }
-  .filter-box {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    border: var(--hair) solid hsl(var(--border));
+  .chip-btn:hover,
+  .search-toggle:hover,
+  .more:hover {
+    border-color: hsl(var(--foreground));
+  }
+  .chip-btn[aria-pressed='true'] {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border-color: hsl(var(--foreground));
+  }
+  .search input {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    width: 12rem;
+    max-width: 60vw;
+    border: var(--hair) solid hsl(var(--foreground) / 0.55);
+    border-radius: var(--radius);
     background: hsl(var(--card));
-    border-radius: var(--radius);
-    padding: 0.25rem 0.625rem;
-    color: hsl(var(--faint));
-    min-width: 0;
-  }
-  .filter-box:focus-within {
-    border-color: hsl(var(--primary));
-  }
-  .filter-box input {
-    font: inherit;
-    font-size: 0.875rem;
-    border: 0;
-    background: transparent;
     color: hsl(var(--foreground));
+    padding: 0.2rem 0.5rem;
     outline: none;
-    width: 13rem;
+  }
+  .search input:focus {
+    border-color: hsl(var(--scarf));
+  }
+  .table {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: var(--hair) solid hsl(var(--border));
+  }
+  .trow {
+    display: grid;
+    grid-template-columns: 12.5rem minmax(0, 1fr) 12rem;
+    gap: 1.5rem;
+    align-items: baseline;
+    padding: 0.8rem 0.25rem;
+    border-bottom: var(--hair) solid hsl(var(--border));
+    color: inherit;
+    text-decoration: none;
+  }
+  .trow:hover {
+    background: hsl(var(--band));
+    color: inherit;
+  }
+  .trow:hover .t {
+    color: hsl(var(--primary));
+  }
+  .when,
+  .who {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+    white-space: nowrap;
+  }
+  .when .dot {
+    margin: 0 0.4rem;
+  }
+  .who {
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ttl {
     min-width: 0;
   }
-  .src {
-    display: inline-block;
-    margin-left: 0.5rem;
-    padding: 0 0.35rem;
-    font-size: 0.68rem;
-    line-height: 1.35rem;
+  .t {
+    color: hsl(var(--foreground));
+    font-weight: 500;
+    transition: color 0.15s ease;
+  }
+  .x {
+    display: block;
+    font-size: 0.82rem;
     color: hsl(var(--muted-foreground));
-    border: var(--hair) solid hsl(var(--border));
-    border-radius: var(--radius);
-    vertical-align: 0.1em;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0.1rem;
   }
   .empty {
     display: flex;
@@ -188,22 +283,34 @@ const counts = Object.fromEntries(
     color: hsl(var(--muted-foreground));
     border-bottom: var(--hair) solid hsl(var(--border));
   }
-  .list-foot {
+  .foot {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.625rem;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
-    margin-top: 0.875rem;
-    color: hsl(var(--muted-foreground));
+    gap: 0.5rem;
+    margin-top: 1.25rem;
   }
-  @media (max-width: 640px) {
-    .filter-box {
-      margin-left: 0;
-      width: 100%;
+  .more {
+    padding: 0.4rem 0.9rem;
+    font-size: 0.75rem;
+  }
+  .shown {
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+  }
+  @media (max-width: 860px) {
+    .trow {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.2rem;
     }
-    .filter-box input {
-      width: 100%;
+    .who {
+      display: none;
+    }
+    .x {
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
     }
   }
 </style>

@@ -1,119 +1,188 @@
 ---
 import type { CollectionEntry } from 'astro:content'
 
-import { getBlogCollection, getUniqueTags } from 'astro-pure/server'
+import { getBlogCollection } from 'astro-pure/server'
 import PageLayout from '@/layouts/BaseLayout.astro'
+import PostCover from '@/components/blog/PostCover.astro'
 import WritingIndex from '@/components/home/WritingIndex.astro'
-import { layerLabel, SERIES } from '@/data/stack'
+import { ALL_LAYERS } from '@/data/stack'
+import { buildCovers } from '@/utils/cover'
 
 export const prerender = true
 
 const posts = ((await getBlogCollection('blog')) as CollectionEntry<'blog'>[]).sort(
-  (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
+  (a, b) =>
+    b.data.pinned - a.data.pinned || b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
 )
-const tags = getUniqueTags(posts)
-const bySlug = Object.fromEntries(posts.map((p) => [p.id, p]))
-const series = SERIES.map((s) => ({
-  ...s,
-  posts: s.slugs.map((x) => bySlug[x]).filter(Boolean)
-}))
-const years = [...new Set(posts.map((p) => p.data.publishDate.getFullYear()))]
+const byDate = [...posts].sort((a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf())
+const covers = buildCovers(posts)
+const [featured, ...rest] = posts
+const cards = rest.slice(0, 6)
+
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+const stamp = (d: Date) =>
+  `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+const layerName = (l: string) => {
+  const L = ALL_LAYERS.find((x) => x.id === l)
+  return L && L.code ? `${L.code} ${L.name}` : 'Notes'
+}
 ---
 
 <PageLayout meta={{ title: '文章', description: '按 Agent × Infra 栈分层的全部文章' }}>
-  <header class='page-intro'>
-    <p class='eyebrow mono'><span>Writing</span><span>{posts.length} posts</span><span>{years[years.length - 1]} – {years[0]}</span></p>
-    <h1>Writing <small>文章</small></h1>
-    <p class='lede'>
-      源码拆解、故障复盘和公式推导。每篇文章挂在它所在的那一层栈上，可以按层筛选，也可以直接搜标题和摘要。
-    </p>
-  </header>
+  <h1 class='sr-only'>文章</h1>
+  <div class='bar mono'>
+    <span>Writing</span>
+    <span>{posts.length} posts</span>
+    <a href='/rss.xml'>RSS</a>
+    <a href='/archives'>Archive</a>
+  </div>
 
-  <section class='series-strip' aria-label='连载'>
-    {
-      series.map((s) => (
-        <a href={`/blog/${s.posts[0].id}`}>
-          <span class='mono'>{layerLabel(s.layer)} · 连载</span>
-          <strong>{s.title}</strong>
-          <span class='mono n'>
-            {'planned' in s && s.planned ? `${s.posts.length} / ${s.planned} ${s.unit}` : `${s.posts.length} 篇`}
-          </span>
-        </a>
-      ))
-    }
-  </section>
-
-  <WritingIndex posts={posts} id='blog-writing' />
-
-  <section class='tags'>
-    <div class='sec-head'>
-      <h2 class='sec-title'>Tags<span class='zh'>标签</span></h2>
-      <a class='sec-note mono' href='/archives'>按年份归档 →</a>
-    </div>
-    <p>
+  <section class='grid' aria-label='最新文章'>
+    <article class='feat'>
+      <a href={`/blog/${featured.id}`} class='card-link'>
+        <PostCover post={featured} cover={covers.get(featured.id)!} size='lg' eager />
+        <h2 class='feat-t'>{featured.data.title}</h2>
+        <p class='meta mono'>
+          {stamp(featured.data.publishDate)} · {layerName(featured.data.layer)}
+        </p>
+        <p class='ex mono'>{featured.data.description}</p>
+        <span class='go mono'>Read →</span>
+      </a>
+    </article>
+    <div class='cards'>
       {
-        tags.map((t) => (
-          <a class='chip' href={`/tags/${t}`}>
-            {t}
-          </a>
+        cards.map((p) => (
+          <article class='card'>
+            <a href={`/blog/${p.id}`} class='card-link'>
+              <PostCover post={p} cover={covers.get(p.id)!} />
+              <h3 class='card-t'>{p.data.title}</h3>
+              <p class='meta mono'>
+                {stamp(p.data.publishDate)} · {layerName(p.data.layer)}
+              </p>
+              <p class='ex mono'>{p.data.description}</p>
+              <span class='go mono'>Read →</span>
+            </a>
+          </article>
         ))
       }
-    </p>
+    </div>
+  </section>
+
+  <section class='all' aria-label='全部文章'>
+    <WritingIndex posts={byDate} limit={15} id='blog-writing' />
   </section>
 </PageLayout>
 
 <style>
-  .series-strip {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
-    margin-bottom: 2.5rem;
-  }
-  .series-strip a {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    padding-top: 0.75rem;
-    border-top: 2px solid hsl(var(--foreground));
-    text-decoration: none;
-    color: inherit;
-    min-width: 0;
-  }
-  .series-strip .mono {
-    color: hsl(var(--faint));
-  }
-  .series-strip strong {
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: 1.05rem;
-    line-height: 1.35;
-  }
-  .series-strip a:hover strong {
-    color: hsl(var(--primary));
-  }
-  .series-strip .n {
-    color: hsl(var(--muted-foreground));
-  }
-  .tags {
-    margin-top: 3.5rem;
-  }
-  .tags p {
+  .bar {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
-    margin: 0;
+    gap: 0.25rem 1.25rem;
+    padding: 0.5rem 0 0.9rem;
+    margin-bottom: 1.75rem;
+    border-bottom: var(--hair) solid hsl(var(--border));
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
   }
-  .tags .chip {
+  .bar span:first-child {
+    color: hsl(var(--foreground));
+  }
+  .bar a {
+    color: hsl(var(--faint));
     text-decoration: none;
-    font-size: 0.75rem;
   }
-  .tags .chip:hover {
+  .bar a:hover {
     color: hsl(var(--primary));
-    border-color: hsl(var(--primary) / 0.5);
   }
-  @media (max-width: 860px) {
-    .series-strip {
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 3fr);
+    gap: 2.5rem;
+    margin-bottom: 4rem;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2.75rem 1.75rem;
+  }
+  .card-link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    color: inherit;
+    text-decoration: none;
+  }
+  .card-link:hover {
+    color: inherit;
+  }
+  .card-link:hover .feat-t,
+  .card-link:hover .card-t {
+    color: hsl(var(--primary));
+  }
+  .card-link:hover .go {
+    color: hsl(var(--primary));
+  }
+  .feat-t {
+    font-size: clamp(1.6rem, 2.6vw, 2.15rem);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    margin: 0.75rem 0 0;
+    text-wrap: pretty;
+    transition: color 0.15s ease;
+  }
+  .card-t {
+    font-size: 0.98rem;
+    font-weight: 500;
+    line-height: 1.4;
+    margin: 0.6rem 0 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: color 0.15s ease;
+  }
+  .meta {
+    margin: 0;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+  }
+  .ex {
+    margin: 0.4rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: hsl(var(--muted-foreground));
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .go {
+    margin-top: 0.4rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground));
+    transition: color 0.15s ease;
+  }
+  @media (max-width: 1080px) {
+    .grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 760px) {
+    .cards {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 2rem 1rem;
+    }
+  }
+  @media (max-width: 480px) {
+    .cards {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>

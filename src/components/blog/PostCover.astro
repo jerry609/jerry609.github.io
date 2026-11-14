@@ -1,0 +1,178 @@
+---
+import { Image } from 'astro:assets'
+import type { CollectionEntry } from 'astro:content'
+
+import { LAYERS } from '@/data/stack'
+import type { Cover } from '@/utils/cover'
+
+interface Props {
+  post: CollectionEntry<'blog'>
+  cover: Cover
+  size?: 'lg' | 'md'
+  /** Eager-load the hero image when the cover is above the fold */
+  eager?: boolean
+}
+
+const { post, cover, size = 'md', eager = false } = Astro.props
+const { heroImage, layer, title } = post.data
+const L = LAYERS.find((l) => l.id === layer)
+const lit = LAYERS.findIndex((l) => l.id === layer)
+
+// Pixel texture: a 14×6 field of cells switched on by the seed
+const cells: { x: number; y: number }[] = []
+let s = cover.seed || 1
+for (let y = 0; y < 6; y++)
+  for (let x = 0; x < 14; x++) {
+    s = (s * 1103515245 + 12345) >>> 0
+    if ((s >>> 16) % 7 === 0) cells.push({ x, y })
+  }
+const len = [...cover.label].length
+const fit = len <= 6 ? 'xl' : len <= 10 ? 'l' : len <= 14 ? 'm' : 's'
+---
+
+<div class:list={['cover', `cover-${cover.variant}`, `cover-${size}`]} aria-hidden='true'>
+  {
+    heroImage ? (
+      <Image
+        src={heroImage.src}
+        alt={heroImage.alt || title}
+        class='cover-img'
+        loading={eager ? 'eager' : 'lazy'}
+        widths={[480, 960]}
+        sizes='(max-width: 800px) 100vw, 480px'
+      />
+    ) : (
+      <>
+        <svg class='tex' viewBox='0 0 14 6' preserveAspectRatio='none' shape-rendering='crispEdges'>
+          {cells.map((c) => (
+            <rect x={c.x} y={c.y} width='1' height='1' />
+          ))}
+        </svg>
+        <span class='top mono'>
+          <span>jerry609</span>
+          <span>{L ? `${L.code} ${L.name}` : '随笔'}</span>
+        </span>
+        <span class='stack'>
+          {LAYERS.map((_, i) => (
+            <i class={i === lit ? 'on' : ''} />
+          ))}
+        </span>
+        <span class:list={['label', `fit-${fit}`]}>{cover.label}</span>
+      </>
+    )
+  }
+</div>
+
+<style>
+  .cover {
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 10;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    border-radius: 2px;
+    container-type: inline-size;
+    isolation: isolate;
+  }
+  .cover-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* Covers are artwork: fixed colours in both themes */
+  .cover-night {
+    --c-bg: #0f1215;
+    --c-fg: #e6e9ec;
+    --c-dim: #7d8792;
+    --c-line: rgb(255 255 255 / 0.07);
+    --c-tex: rgb(255 255 255 / 0.06);
+  }
+  .cover-paper {
+    --c-bg: #f3f5f7;
+    --c-fg: #12161b;
+    --c-dim: #66707c;
+    --c-line: rgb(18 22 27 / 0.06);
+    --c-tex: rgb(18 22 27 / 0.06);
+    box-shadow: inset 0 0 0 1px #dfe3e8;
+  }
+  .cover-mist {
+    --c-bg: #dfe3e8;
+    --c-fg: #12161b;
+    --c-dim: #525c68;
+    --c-line: rgb(18 22 27 / 0.07);
+    --c-tex: rgb(18 22 27 / 0.08);
+  }
+  .cover {
+    background:
+      linear-gradient(var(--c-line) 1px, transparent 1px) 0 0 / 100% 12.5%,
+      linear-gradient(90deg, var(--c-line) 1px, transparent 1px) 0 0 / 8.333% 100%,
+      var(--c-bg);
+    color: var(--c-fg);
+  }
+  .tex {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 58%;
+    height: 34%;
+    fill: var(--c-tex);
+    z-index: -1;
+  }
+  .top {
+    position: absolute;
+    top: 5.5cqw;
+    left: 5.5cqw;
+    right: 22cqw;
+    display: flex;
+    gap: 2.5cqw;
+    font-size: max(9px, 2.6cqw);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--c-dim);
+    white-space: nowrap;
+  }
+  .stack {
+    position: absolute;
+    top: 5.5cqw;
+    right: 5.5cqw;
+    display: grid;
+    gap: 1.1cqw;
+    width: 11cqw;
+  }
+  .stack i {
+    display: block;
+    height: 1.1cqw;
+    min-height: 2px;
+    background: var(--c-dim);
+    opacity: 0.45;
+  }
+  .stack i.on {
+    background: #d4652a;
+    opacity: 1;
+    transform: translateX(-2cqw);
+  }
+  .label {
+    position: absolute;
+    left: 5.5cqw;
+    right: 5.5cqw;
+    bottom: 5cqw;
+    font-family: var(--font-body);
+    font-weight: 700;
+    letter-spacing: -0.045em;
+    line-height: 0.92;
+    overflow-wrap: anywhere;
+  }
+  .fit-xl {
+    font-size: 17cqw;
+  }
+  .fit-l {
+    font-size: 12.5cqw;
+  }
+  .fit-m {
+    font-size: 9.5cqw;
+  }
+  .fit-s {
+    font-size: 7.5cqw;
+  }
+</style>

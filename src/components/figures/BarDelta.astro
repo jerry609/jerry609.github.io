@@ -1,0 +1,188 @@
+---
+/**
+ * Before → after bars with the relative change, e.g. a prompt budget.
+ *
+ *   <BarDelta before="v0.170" after="v0.250" total rows={[
+ *     { label: 'Tool definitions', before: 15798, after: 8528 },
+ *     { label: 'System prompt', before: 1618, after: 2155 }
+ *   ]} />
+ *
+ * Bars grow when the figure scrolls into view and again on replay.
+ */
+type Row = { label: string; before: number; after: number }
+interface Props {
+  rows: Row[]
+  before?: string
+  after?: string
+  /** Append a total row */
+  total?: boolean
+  unit?: string
+}
+
+const { rows, before = 'before', after = 'after', total = false, unit = '' } = Astro.props
+const all = total
+  ? [
+      ...rows,
+      {
+        label: 'Total',
+        before: rows.reduce((n, r) => n + r.before, 0),
+        after: rows.reduce((n, r) => n + r.after, 0),
+        isTotal: true
+      }
+    ]
+  : rows
+const max = Math.max(...all.flatMap((r) => [r.before, r.after]), 1)
+const fmt = (n: number) => n.toLocaleString('en-US')
+const delta = (r: Row) => {
+  if (!r.before) return '—'
+  const d = Math.round(((r.after - r.before) / r.before) * 100)
+  return `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)}%`
+}
+---
+
+<div class='bd'>
+  {
+    all.map((r) => (
+      <div class:list={['row', 'isTotal' in r && 'total']}>
+        <span class='label'>{r.label}</span>
+        <span class='bars'>
+          <i class='b-before' style={`--w:${(r.before / max).toFixed(4)}`} />
+          <i class='b-after' style={`--w:${(r.after / max).toFixed(4)}`} />
+        </span>
+        <span class='nums'>
+          {fmt(r.before)} → <b>{fmt(r.after)}</b>
+          {unit}
+        </span>
+        <span class:list={['delta', r.after < r.before ? 'down' : r.after > r.before ? 'up' : '']}>
+          {delta(r)}
+        </span>
+      </div>
+    ))
+  }
+  <p class='legend'>
+    <span><i class='b-before' />{before}</span>
+    <span><i class='b-after' />{after}</span>
+  </p>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.bd').forEach((bd) => {
+    const fig = bd.closest<HTMLElement>('.fig-x')
+    const show = () => {
+      bd.classList.remove('in')
+      void bd.offsetWidth
+      bd.classList.add('in')
+    }
+    fig?.addEventListener('fig:replay', show)
+    const io = new IntersectionObserver(
+      (es) => {
+        if (es.some((e) => e.isIntersecting)) {
+          show()
+          io.disconnect()
+        }
+      },
+      { threshold: 0.4 }
+    )
+    io.observe(bd)
+  })
+</script>
+
+<style>
+  .bd {
+    font-size: 0.82rem;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 9rem minmax(0, 1fr) 9.5rem 3.5rem;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.45rem 0;
+  }
+  .row.total {
+    margin-top: 0.4rem;
+    padding-top: 0.75rem;
+    border-top: var(--hair) solid hsl(var(--border));
+    font-weight: 600;
+  }
+  .label {
+    color: hsl(var(--foreground));
+  }
+  .bars {
+    position: relative;
+    height: 0.6rem;
+    background: hsl(var(--muted));
+  }
+  .bars i {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    transition: width 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .b-before {
+    background: repeating-linear-gradient(90deg, hsl(var(--s2)) 0 2px, transparent 2px 4px);
+  }
+  .b-after {
+    background: hsl(var(--scarf));
+    transition-delay: 0.25s !important;
+  }
+  .in .bars i {
+    width: calc(var(--w) * 100%);
+  }
+  .nums {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-align: right;
+    color: hsl(var(--muted-foreground));
+    font-variant-numeric: tabular-nums;
+  }
+  .nums b {
+    color: hsl(var(--foreground));
+    font-weight: 600;
+  }
+  .delta {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-align: right;
+    color: hsl(var(--muted-foreground));
+  }
+  .delta.down {
+    color: hsl(var(--primary));
+  }
+  .legend {
+    display: flex;
+    gap: 1.25rem;
+    margin: 0.9rem 0 0;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+  }
+  .legend i {
+    display: inline-block;
+    width: 0.8rem;
+    height: 0.5rem;
+    margin-right: 0.4rem;
+    vertical-align: -0.02em;
+  }
+  @media (max-width: 640px) {
+    .row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.35rem 0.75rem;
+    }
+    .bars {
+      grid-column: 1 / -1;
+      order: 3;
+    }
+    .delta {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bars i {
+      transition: none;
+    }
+  }
+</style>

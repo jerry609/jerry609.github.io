@@ -9,6 +9,7 @@ import remarkMath from 'remark-math'
 // Local rehype & remark plugins
 import rehypeAutolinkHeadings from './src/plugins/rehype-auto-link-headings.ts'
 import rehypeCallouts from './src/plugins/rehype-callouts.ts'
+import rehypeFigures from './src/plugins/rehype-figures.ts'
 // Shiki
 import {
   addCopyButton,
@@ -72,6 +73,7 @@ export default defineConfig({
     remarkPlugins: [remarkMath],
     rehypePlugins: [
       rehypeCallouts,
+      rehypeFigures,
       [rehypeKatex, {}],
       rehypeHeadingIds,
       [

@@ -8,11 +8,15 @@ import 'katex/dist/katex.min.css'
 import config from 'virtual:config'
 
 import { MediumZoom } from 'astro-pure/advanced'
-import { ArticleBottom, Copyright, TOC } from 'astro-pure/components/pages'
-import PageLayout from '@/layouts/ContentLayout.astro'
-import PostHeader from '@/components/blog/PostHeader.astro'
+import { Copyright } from 'astro-pure/components/pages'
+import { cn } from 'astro-pure/utils'
+import BaseLayout from '@/layouts/BaseLayout.astro'
+import PostCover from '@/components/blog/PostCover.astro'
+import PostHero from '@/components/blog/PostHero.astro'
 import SeriesNav from '@/components/blog/SeriesNav.astro'
-import { Comment, PageInfo } from '@/components/waline'
+import { Comment } from '@/components/waline'
+import { layerLabel } from '@/data/stack'
+import { buildCovers } from '@/utils/cover'
 
 interface Props {
   post: CollectionEntry<'blog'>
@@ -21,19 +25,15 @@ interface Props {
   remarkPluginFrontmatter: Record<string, unknown>
 }
 
-const {
-  post: { id, data },
-  posts,
-  headings,
-  remarkPluginFrontmatter
-} = Astro.props
-
+const { post, posts, headings, remarkPluginFrontmatter } = Astro.props
+const { data } = post
 const {
   description,
   heroImage,
   publishDate,
   title,
   updatedDate,
+  tags,
   draft: isDraft,
   comment: enableComment
 } = data
@@ -44,34 +44,294 @@ const socialImage = heroImage
     : heroImage.src.src
   : config.socialCard
 const articleDate = updatedDate?.toISOString() ?? publishDate.toISOString()
+
+const covers = buildCovers(posts)
+const sections = headings.filter((h) => h.depth === 2)
+const pad = (n: number) => String(n).padStart(2, '0')
+
+// Read next: the neighbours in time
+const byDate = [...posts].sort((a, b) => a.data.publishDate.valueOf() - b.data.publishDate.valueOf())
+const at = byDate.findIndex((p) => p.id === post.id)
+const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEntry<'blog'>[]
 ---
 
-<PageLayout
-  meta={{ articleDate, description, ogImage: socialImage, title }}
-  back='/blog'
-  backLabel='全部文章'
-  searchable={!isDraft}
->
-  {!!headings.length && <TOC {headings} slot='sidebar' />}
+<BaseLayout meta={{ articleDate, description, ogImage: socialImage, title }}>
+  <PostHero {post} cover={covers.get(post.id)!} minutesRead={remarkPluginFrontmatter.minutesRead} />
 
-  <Fragment slot='header'>
-    <PostHeader post={Astro.props.post} minutesRead={remarkPluginFrontmatter.minutesRead} />
-    {!isDraft && enableComment && <PageInfo comment class='mt-2' />}
-  </Fragment>
+  <div class:list={['post', sections.length < 2 && 'no-rail']}>
+    {
+      sections.length >= 2 && (
+        <nav class='rail' aria-label='章节'>
+          <ol>
+            {sections.map((h, i) => (
+              <li>
+                <a href={`#${h.slug}`} data-rail={h.slug}>
+                  <span class='n'>{pad(i + 1)}</span>
+                  <span class='t'>{h.text}</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )
+    }
 
-  <slot />
+    <article class='body' data-pagefind-body={isDraft ? undefined : ''}>
+      {
+        sections.length >= 2 && (
+          <details class='toc-m'>
+            <summary class='mono'>
+              目录 · {sections.length} 节
+            </summary>
+            <ol>
+              {sections.map((h, i) => (
+                <li>
+                  <a href={`#${h.slug}`}>
+                    <span class='mono'>{pad(i + 1)}</span> {h.text}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </details>
+        )
+      }
 
-  <Fragment slot='bottom'>
-    <SeriesNav post={Astro.props.post} {posts} />
-    {/* Copyright */}
-    <Copyright {data} />
-    {/* Article recommend */}
-    <ArticleBottom collections={posts} {id} class='mt-3 sm:mt-6' />
-    {/* Comment */}
-    {!isDraft && enableComment && <Comment class='mt-3 sm:mt-6' />}
-  </Fragment>
+      <div id='content' class={cn('post-prose max-w-none', config.integ.typography.class)}>
+        <slot />
+      </div>
 
-  <slot name='bottom-sidebar' slot='bottom-sidebar' />
-</PageLayout>
+      {
+        tags.length > 0 && (
+          <p class='tags'>
+            {tags.map((t) => (
+              <a class='chip' href={`/tags/${t}`} data-pagefind-filter='tag'>
+                {t}
+              </a>
+            ))}
+          </p>
+        )
+      }
+
+      <SeriesNav {post} {posts} />
+
+      {
+        nextUp.length > 0 && (
+          <section class='next' aria-label='继续读'>
+            <p class='next-h mono'>Read next</p>
+            <div class='next-grid'>
+              {nextUp.map((p) => (
+                <a class='next-card' href={`/blog/${p.id}`}>
+                  <PostCover post={p} cover={covers.get(p.id)!} />
+                  <span class='mono nm'>{layerLabel(p.data.layer)}</span>
+                  <span class='nt'>{p.data.title}</span>
+                </a>
+              ))}
+            </div>
+          </section>
+        )
+      }
+
+      <Copyright {data} class='copyright' />
+      {!isDraft && enableComment && <Comment class='mt-6' />}
+    </article>
+  </div>
+</BaseLayout>
 
 {config.integ.mediumZoom.enable && <MediumZoom />}
+
+<script>
+  // Highlight the section being read in the left rail
+  const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-rail]'))
+  if (links.length) {
+    const targets = links
+      .map((a) => document.getElementById(a.dataset.rail || ''))
+      .filter(Boolean) as HTMLElement[]
+    const setActive = (id: string) =>
+      links.forEach((a) => a.classList.toggle('active', a.dataset.rail === id))
+    const onScroll = () => {
+      const line = window.innerHeight * 0.3
+      let current = targets[0]?.id
+      for (const t of targets) if (t.getBoundingClientRect().top <= line) current = t.id
+      if (current) setActive(current)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+  }
+</script>
+
+<style>
+  .post {
+    display: grid;
+    grid-template-columns: 9rem minmax(0, 46rem) minmax(0, 1fr);
+    gap: 3rem;
+    margin-top: 3.5rem;
+  }
+  .post.no-rail {
+    grid-template-columns: 9rem minmax(0, 46rem) minmax(0, 1fr);
+  }
+  .rail {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    margin-top: -3.5rem;
+    display: flex;
+    align-items: center;
+    align-self: start;
+  }
+  .rail ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.35rem;
+  }
+  .rail a {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: hsl(var(--faint));
+    text-decoration: none;
+  }
+  .rail .t {
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    opacity: 0;
+    transition:
+      max-width 0.25s ease,
+      opacity 0.2s ease;
+  }
+  .rail a:hover .t,
+  .rail a:focus-visible .t,
+  .rail a.active .t {
+    max-width: 7.5rem;
+    opacity: 1;
+  }
+  .rail a:hover,
+  .rail a.active {
+    color: hsl(var(--foreground));
+  }
+  .rail a.active .n {
+    color: hsl(var(--primary));
+  }
+  .body {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .toc-m {
+    display: none;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin: 2.5rem 0 0;
+  }
+  .tags .chip {
+    text-decoration: none;
+  }
+  .tags .chip:hover {
+    color: hsl(var(--primary));
+    border-color: hsl(var(--scarf) / 0.6);
+  }
+  .next {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: var(--hair) solid hsl(var(--border));
+  }
+  .next-h {
+    margin: 0 0 1rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+  }
+  .next-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+  .next-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    color: inherit;
+    text-decoration: none;
+  }
+  .next-card:hover {
+    color: inherit;
+  }
+  .next-card:hover .nt {
+    color: hsl(var(--primary));
+  }
+  .nm {
+    margin-top: 0.4rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: hsl(var(--faint));
+  }
+  .nt {
+    font-weight: 500;
+    line-height: 1.45;
+  }
+  .body :global(.copyright) {
+    margin-top: 3rem;
+    border-radius: var(--radius-box);
+  }
+  @media (max-width: 1100px) {
+    .post,
+    .post.no-rail {
+      grid-template-columns: minmax(0, 46rem);
+      justify-content: center;
+      gap: 0;
+    }
+    .rail {
+      display: none;
+    }
+    .body {
+      grid-column: 1;
+    }
+    .toc-m {
+      display: block;
+      margin-bottom: 2rem;
+      border: var(--hair) solid hsl(var(--border));
+      border-radius: var(--radius);
+      background: hsl(var(--card));
+    }
+    .toc-m summary {
+      cursor: pointer;
+      padding: 0.6rem 0.9rem;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      color: hsl(var(--muted-foreground));
+    }
+    .toc-m ol {
+      list-style: none;
+      margin: 0;
+      padding: 0 0.9rem 0.75rem;
+      display: grid;
+      gap: 0.35rem;
+      font-size: 0.9rem;
+    }
+    .toc-m a {
+      color: hsl(var(--foreground));
+      text-decoration: none;
+    }
+    .toc-m .mono {
+      color: hsl(var(--faint));
+      margin-right: 0.4rem;
+    }
+  }
+  @media (max-width: 560px) {
+    .next-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

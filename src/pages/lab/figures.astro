@@ -1,0 +1,131 @@
+---
+/**
+ * Live reference for the interactive figure kit (src/components/figures).
+ * Not linked from the site; excluded in robots.txt. All numbers here are sample data.
+ */
+import PageLayout from '@/layouts/BaseLayout.astro'
+import { BarDelta, Figure, StepFlow, Timeline } from '@/components/figures'
+
+const direct = {
+  label: 'Direct calls',
+  note: '模型每读完一批工具结果，再发起下一次请求。',
+  stats: [
+    { label: 'model calls', value: '4' },
+    { label: 'tool calls', value: '8' },
+    { label: 'elapsed', value: '52 s' }
+  ],
+  lanes: [
+    {
+      name: 'model',
+      spans: [
+        { start: 0, end: 8, kind: 'model', label: '#1' },
+        { start: 13, end: 21, kind: 'model', label: '#2' },
+        { start: 26, end: 34, kind: 'model', label: '#3' },
+        { start: 40, end: 48, kind: 'model', label: '#4' }
+      ]
+    },
+    {
+      name: 'tools',
+      spans: [
+        { start: 8, end: 13, kind: 'tool' },
+        { start: 21, end: 26, kind: 'tool' },
+        { start: 34, end: 40, kind: 'tool' },
+        { start: 48, end: 52, kind: 'tool' }
+      ]
+    }
+  ]
+} as const
+const script = {
+  label: 'One script',
+  highlight: true,
+  note: '模型写一段程序，程序自己调用工具，只把结果摘要交回上下文。',
+  stats: [
+    { label: 'model calls', value: '2' },
+    { label: 'tool calls', value: '8' },
+    { label: 'elapsed', value: '27 s' }
+  ],
+  lanes: [
+    {
+      name: 'model',
+      spans: [
+        { start: 0, end: 9, kind: 'model', label: '#1' },
+        { start: 19, end: 27, kind: 'model', label: '#2' }
+      ]
+    },
+    { name: 'script', spans: [{ start: 9, end: 19, kind: 'script', label: 'run.py' }] },
+    {
+      name: 'tools',
+      spans: [
+        { start: 10, end: 12, kind: 'tool' },
+        { start: 12, end: 14, kind: 'tool' },
+        { start: 14, end: 17, kind: 'tool' },
+        { start: 17, end: 19, kind: 'tool' }
+      ]
+    }
+  ]
+} as const
+---
+
+<PageLayout meta={{ title: 'Figure kit', description: '交互图组件示例（示例数据）' }}>
+  <header class='page-intro'>
+    <p class='eyebrow mono'><span>Lab</span><span>Figure kit</span><span>sample data</span></p>
+    <h1>Figure kit <small>交互图组件</small></h1>
+    <p class='lede'>
+      文章里可以直接用的交互图：Figure 外框、时间线、前后对比条和流程图。这一页的数字都是示例数据，用来展示组件，不代表任何实测结果。写法见
+      <code>templates/interactive-post.mdx</code>。
+    </p>
+  </header>
+
+  <div class='post-prose prose prose-t1 max-w-none demo'>
+    <p>正文第一段会被放大成导语。下面三张图依次演示三个组件；点右上角的按钮可以重播、调速度、展开说明。</p>
+
+    <h2 id='timeline'>Timeline：两种调用方式</h2>
+    <Figure title='Direct calls vs one script' replay speed sample>
+      <Timeline duration={52} runs={[direct, script] as any} />
+      <Fragment slot='about'>
+        每条泳道是一类执行单元：model 是模型请求，tools 是工具调用，script 是模型写出的程序。播放头扫过时，片段按时间展开。
+      </Fragment>
+      <Fragment slot='caption'>示例：同样 8 次工具调用，脚本模式把模型请求从 4 次减到 2 次。</Fragment>
+    </Figure>
+
+    <h2 id='bars'>BarDelta：前后对比</h2>
+    <Figure title='Prompt budget' replay sample>
+      <BarDelta
+        before='before'
+        after='after'
+        total
+        rows={[
+          { label: 'Tool definitions', before: 15800, after: 8500 },
+          { label: 'Startup context', before: 3460, after: 2360 },
+          { label: 'System prompt', before: 1620, after: 2150 }
+        ]}
+      />
+      <Fragment slot='caption'>示例：工具定义压缩后总量下降，系统提示词略有增加。</Fragment>
+    </Figure>
+
+    <h2 id='steps'>StepFlow：流程</h2>
+    <Figure title='How a harness change ships' replay>
+      <StepFlow
+        loop='next loop'
+        check='合入主干'
+        result={{ tag: 'HARNESS', text: '每个模型都跑在同一套 harness 上。' }}
+        steps={[
+          { title: 'Bring in', desc: '新模型接入，先跑通基础检查。' },
+          { title: 'Evaluate', desc: '所有模型跑同一组任务。' },
+          { title: 'Read traces', desc: '看失败的轨迹共同卡在哪里。' },
+          { title: 'Propose', desc: '写一个带假设的改动。' },
+          { title: 'Test', desc: '在受影响的模型上做对照实验。' }
+        ]}
+      />
+    </Figure>
+  </div>
+</PageLayout>
+
+<style>
+  .demo {
+    max-width: 46rem;
+  }
+  .page-intro code {
+    font-size: 0.9em;
+  }
+</style>
