@@ -191,13 +191,13 @@ E2B 使用 `pnpm` 管理的 monorepo 架构，核心包如下：
 
 ```mermaid
 graph TD
-        A[Start] -->|Sandbox.create()| B(Running)
-        B -->|sandbox.commands.run() / files.*()| B
-        B -->|sandbox.kill()| D[Destroyed]
+        A[Start] -->|"Sandbox.create()"| B(Running)
+        B -->|"sandbox.commands.run() / files.*()"| B
+        B -->|"sandbox.kill()"| D[Destroyed]
         B -->|Timeout / 回收策略| D
-        B -->|sandbox.betaPause()| C[Paused]
-        C -->|Sandbox.connect()| B
-        B -->|Sandbox.connect() from other client| B
+        B -->|"sandbox.betaPause()"| C[Paused]
+        C -->|"Sandbox.connect()"| B
+        B -->|"Sandbox.connect() from other client"| B
 ```
 
 > 这个设计在资源和灵活性之间做了一个比较务实的平衡：

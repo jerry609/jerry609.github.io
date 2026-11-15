@@ -1,5 +1,6 @@
 /**
- * Wraps standalone Markdown images in a numbered figure:
+ * Wraps standalone Markdown images in a numbered figure, and wide tables in a scroll box.
+ *
  *
  *   ![Alt text becomes the figure title](image.png "Optional caption")
  *
@@ -25,6 +26,16 @@ function soleImage(p: Element): Element | undefined {
 function walk(node: Root | Element) {
   node.children.forEach((child, i) => {
     if (child.type !== 'element') return
+    // Wide tables scroll inside their own box instead of widening the page
+    if (child.tagName === 'table') {
+      ;(node.children as ElementContent[])[i] = {
+        type: 'element',
+        tagName: 'div',
+        properties: { className: ['table-wrap'] },
+        children: [child]
+      }
+      return
+    }
     if (child.tagName === 'p') {
       const media = soleImage(child)
       if (media) {

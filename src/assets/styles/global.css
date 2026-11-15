@@ -33,8 +33,9 @@
 
 /* Katex */
 span.katex-display {
-  overflow-y: scroll;
-  padding: 0.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.35rem 0.25rem;
 }
 .katex-html {
   overflow: auto hidden;
@@ -52,10 +53,13 @@ span.katex-display {
 
 /* Shiki */
 .astro-code {
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
-  border-radius: 0.5rem;
-  background-color: hsl(var(--muted) / var(--un-bg-opacity, 1)) !important;
+  margin-top: 1.4rem;
+  margin-bottom: 1.4rem;
+  border-radius: 3px;
+  border: var(--hair) solid hsl(var(--border));
+  background-color: hsl(var(--card)) !important;
+  font-size: 0.84em;
+  line-height: 1.7;
 
   /* Code container */
   & pre {
@@ -64,7 +68,8 @@ span.katex-display {
     padding-bottom: 0.85rem;
     padding-inline: 0;
     background: none;
-    overflow-x: scroll;
+    overflow-x: auto;
+    scrollbar-width: thin;
 
     & code {
       display: block;
@@ -81,7 +86,8 @@ span.katex-display {
         bottom: 0;
         content: '';
         display: block;
-        background-color: hsl(var(--muted) / var(--un-bg-opacity, 1));
+        background-color: hsl(var(--card));
+        border-right: var(--hair) solid hsl(var(--border));
         z-index: 1;
       }
       & .line {
@@ -90,8 +96,9 @@ span.katex-display {
           position: sticky;
           content: counter(step);
           counter-increment: step;
-          color: hsl(var(--muted-foreground) / 0.6);
-          background-color: hsl(var(--muted) / var(--un-bg-opacity, 1));
+          color: hsl(var(--faint) / 0.7);
+          background-color: hsl(var(--card));
+          font-size: 0.85em;
           inset-inline-start: 0;
           justify-content: end;
           display: inline-flex;
@@ -127,16 +134,24 @@ span.katex-display {
   & .language {
     transition: opacity 0.3s;
     position: absolute;
-    top: 0.75rem;
-    right: 0;
+    top: 0.55rem;
+    right: 0.25rem;
+    background: transparent !important;
+    font-family: var(--font-mono);
+    font-size: 0.65rem !important;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--faint)) !important;
   }
   & button.copy {
     transition: opacity 0.3s;
     opacity: 0;
     position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
+    top: 0.45rem;
+    right: 0.5rem;
     user-select: none;
+    border-radius: 3px;
+    background: hsl(var(--card)) !important;
 
     & .success::before {
       content: 'Copied!';
@@ -412,4 +427,180 @@ body::-webkit-scrollbar {
   font-size: 0.85rem;
   line-height: 1.65;
   color: hsl(var(--muted-foreground));
+}
+
+/* ---------- Article typography (all .prose, posts and murmurs) ---------- */
+.prose {
+  /* Progressive CJK refinements: Latin/CJK spacing, punctuation trimming */
+  text-autospace: ideograph-alpha ideograph-numeric;
+  text-spacing-trim: trim-start;
+  hanging-punctuation: allow-end;
+  line-break: strict;
+  overflow-wrap: break-word;
+}
+.prose p {
+  margin: 0 0 1.15em;
+}
+.prose strong {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+/* CJK has no italics: emphasis becomes a soft scarf highlight in both scripts */
+.prose em {
+  font-style: normal;
+  color: hsl(var(--foreground));
+  background: linear-gradient(transparent 62%, hsl(var(--scarf) / 0.2) 62%);
+}
+.prose a {
+  color: hsl(var(--foreground));
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--scarf) / 0.5);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+.prose a:hover {
+  color: hsl(var(--primary));
+  text-decoration-color: hsl(var(--scarf));
+}
+.prose a.anchor {
+  text-decoration: none;
+  color: hsl(var(--faint));
+}
+/* Inline code: quiet chip, no backticks */
+.prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  font-weight: 500;
+  padding: 0.12em 0.38em;
+  border-radius: 3px;
+  border: 0;
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  white-space: break-spaces;
+}
+.prose :not(pre) > code::before,
+.prose :not(pre) > code::after {
+  content: none;
+}
+/* Blockquote: a rule and a quieter voice, no card, no decorative quotes */
+.prose blockquote:not(.callout) {
+  margin: 1.5em 0;
+  padding: 0.1em 0 0.1em 1.1em;
+  border: 0;
+  border-left: 2px solid hsl(var(--foreground) / 0.18);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: hsl(var(--muted-foreground));
+  font-style: normal;
+  quotes: none;
+}
+.prose blockquote:not(.callout)::before,
+.prose blockquote:not(.callout)::after,
+.prose blockquote:not(.callout) p::before,
+.prose blockquote:not(.callout) p::after {
+  content: none !important;
+  display: none !important;
+}
+.prose blockquote:not(.callout) p {
+  margin: 0.4em 0;
+}
+/* Lists */
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+  margin: 0.4em 0 1.15em;
+}
+.prose li {
+  margin: 0.3em 0;
+  padding-left: 0.2em;
+}
+.prose ul > li::marker {
+  content: '■  ';
+  font-size: 0.55em;
+  color: hsl(var(--faint) / 0.8);
+}
+.prose ol > li::marker {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  color: hsl(var(--faint));
+}
+.prose li > ul,
+.prose li > ol {
+  margin: 0.2em 0 0.4em;
+}
+/* Task lists: the checkbox replaces the bullet */
+.prose li:has(> input[type='checkbox']) {
+  list-style: none;
+  margin-left: -1.3em;
+}
+.prose li:has(> input[type='checkbox'])::marker {
+  content: none;
+}
+.prose li > input[type='checkbox'] {
+  accent-color: hsl(var(--scarf));
+  margin: 0 0.5em 0 0;
+  vertical-align: -0.1em;
+}
+/* Dividers: an hr right before a numbered h2 is redundant; others become a short mark */
+.prose hr:has(+ h2) {
+  display: none;
+}
+.prose hr {
+  margin: 2.5em auto;
+  width: 4rem;
+  border: 0;
+  border-top: var(--hair) solid hsl(var(--s2));
+}
+.prose h4 {
+  font-size: 1em;
+  font-weight: 600;
+  letter-spacing: 0;
+  margin: 1.8em 0 0.5em;
+}
+/* Wide tables scroll inside their own box (wrapper from rehype-figures) */
+.prose .table-wrap {
+  overflow-x: auto;
+  margin: 1.5em 0;
+}
+.prose .table-wrap > table {
+  margin: 0;
+}
+.prose iframe {
+  width: 100%;
+  border: var(--hair) solid hsl(var(--border)) !important;
+  border-radius: 3px !important;
+  background: hsl(var(--card));
+}
+.prose .footnotes {
+  margin-top: 3em;
+  padding-top: 1em;
+  border-top: var(--hair) solid hsl(var(--border));
+  font-size: 0.85em;
+  color: hsl(var(--muted-foreground));
+}
+.prose .katex {
+  color: hsl(var(--foreground));
+}
+/* Mermaid diagrams rendered in the browser (BlogPost.astro) */
+.prose .mermaid-fig {
+  margin: 1.5em 0;
+  padding: 1rem;
+  border: var(--hair) solid hsl(var(--border));
+  border-radius: 3px;
+  background: hsl(var(--card));
+  overflow-x: auto;
+  text-align: center;
+}
+.prose .mermaid-fig svg {
+  max-width: 100%;
+  height: auto;
+}
+/* Give the language label its own strip so it never covers the first line of code */
+.astro-code:has(> .language) > pre {
+  padding-top: 1.9rem;
+}
+.astro-code:has(> .language) > pre code::before {
+  top: 0;
 }

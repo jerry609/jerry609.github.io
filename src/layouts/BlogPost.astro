@@ -140,6 +140,50 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
 {config.integ.mediumZoom.enable && <MediumZoom />}
 
 <script>
+  // Mermaid fences: render as diagrams, loading the library only when a page has one
+  const mermaidBlocks = Array.from(document.querySelectorAll<HTMLElement>('.astro-code[data-language="mermaid"]'))
+  if (mermaidBlocks.length) {
+    // Pre-bundled ESM build: keeps Vite from re-bundling mermaid's ~1k source modules
+    import('mermaid/dist/mermaid.esm.min.mjs').then(async ({ default: mermaid }) => {
+      const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim()
+      const hsl = (v: string) => `hsl(${css(v)})`
+      const dark = document.documentElement.classList.contains('dark')
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'base',
+        fontFamily: 'Geist Variable, PingFang SC, sans-serif',
+        themeVariables: {
+          darkMode: dark,
+          background: hsl('--card'),
+          primaryColor: hsl('--card'),
+          primaryBorderColor: hsl('--foreground'),
+          primaryTextColor: hsl('--foreground'),
+          secondaryColor: hsl('--muted'),
+          tertiaryColor: hsl('--muted'),
+          lineColor: hsl('--faint'),
+          textColor: hsl('--foreground'),
+          edgeLabelBackground: hsl('--card'),
+          fontSize: '14px'
+        }
+      })
+      for (const [i, block] of mermaidBlocks.entries()) {
+        const src = Array.from(block.querySelectorAll('.line'))
+          .map((l) => l.textContent ?? '')
+          .join('\n')
+        try {
+          const { svg } = await mermaid.render(`mermaid-${i}`, src)
+          const fig = document.createElement('figure')
+          fig.className = 'mermaid-fig'
+          fig.innerHTML = svg
+          block.replaceWith(fig)
+        } catch {
+          // Leave the source visible if the diagram can't be parsed
+        }
+      }
+    })
+  }
+
   // Highlight the section being read in the left rail
   const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-rail]'))
   if (links.length) {

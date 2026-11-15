@@ -21,6 +21,7 @@ import {
   updateStyle
 } from './src/plugins/shiki-transformers.ts'
 import config from './src/site.config.ts'
+import { jerryDark, jerryLight } from './src/plugins/shiki-theme.ts'
 
 // https://astro.build/config
 export default defineConfig({
@@ -88,8 +89,8 @@ export default defineConfig({
     // https://docs.astro.build/en/guides/syntax-highlighting/
     shikiConfig: {
       themes: {
-        light: 'github-light',
-        dark: 'github-dark'
+        light: jerryLight,
+        dark: jerryDark
       },
       transformers: [
         transformerNotationDiff(),
