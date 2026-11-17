@@ -10,11 +10,11 @@ draft: false
 
 排 Go 性能问题最容易卡在一句话上：
 
-> **"为啥 trace 里 P utilization 很低，但 runnable goroutine 却很多 / sched wait 很大？"**
+> **“为啥 trace 里 P utilization 很低，但 runnable goroutine 却很多 / sched wait 很大？”**
 
 **方法**：
 
-- 先用 **G-M-P 的硬约束（invariants）** 把"合理/不合理"边界划清
+- 先用 **G-M-P 的硬约束（invariants）** 把“合理/不合理”边界划清
 - 再用 **trace 里的阻塞事件 + sched wait + P utilization** 做一条证据链
 - 最后用 **pprof（CPU/heap/mutex/block）** 把锅甩到具体函数/锁/chan/系统调用上
 
@@ -26,7 +26,7 @@ draft: false
 
 | 概念 | 说明 |
 | :--- | :--- |
-| **P（processor）** | Go runtime 里的 _P_，数量约等于 `GOMAXPROCS`，代表"并行执行 Go 代码的槽位" |
+| **P（processor）** | Go runtime 里的 _P_，数量约等于 `GOMAXPROCS`，代表“并行执行 Go 代码的槽位” |
 | **CPU（核）** | 操作系统的 CPU 资源 |
 
 > trace 里的 **P utilization**，指的是这些 **P 在跑 Go 代码** 的比例，不是进程总 CPU 使用率。
@@ -35,7 +35,7 @@ draft: false
 
 ## 2. GMP 的几个硬约束
 
-这些约束能推导出大部分"异常组合"为何异常：
+这些约束能推导出大部分“异常组合”为何异常：
 
 ### 约束 A：Running 的 goroutine 并行上限 = P 的数量
 
@@ -51,13 +51,13 @@ P 是执行令牌，没有 P 就不能跑 Go 代码。
 
 > **P utilization 低** 意味着：很多 P 没在执行 Go 代码（可能空闲、可能被 runtime 阶段性行为影响）。
 
-### 约束 C：Runnable 不是"在等"，而是"能跑但没跑上"
+### 约束 C：Runnable 不是“在等”，而是“能跑但没跑上”
 
 Runnable 表示 goroutine 已准备好运行，只是没拿到 P/CPU。
 
 `Sched wait` 基本就是 **Runnable → Running 的排队时间总和**。
 
-### 约束 D：长期出现 "P 空闲" 且 "Runnable 很多" 是反直觉组合
+### 约束 D：长期出现 “P 空闲” 且 “Runnable 很多” 是反直觉组合
 
 正常情况下，调度器目标是：**有活就尽量让 P 不闲**。
 
@@ -73,7 +73,7 @@ Runnable 表示 goroutine 已准备好运行，只是没拿到 P/CPU。
 
 ---
 
-## 3. syscall / cgo 会"占用 P"吗？——通常占的是 M，不是 P
+## 3. syscall / cgo 会“占用 P”吗？——通常占的是 M，不是 P
 
 **关键点**：
 
@@ -84,7 +84,7 @@ Runnable 表示 goroutine 已准备好运行，只是没拿到 P/CPU。
 - 阻塞 syscall/cgo **主要占 M（线程）**
 - trace 的 P utilization 可能因此下降（因为 Go 代码在 P 上跑得少了）
 
-那为什么会出现 "P 低但 runnable G 还很多"？两条常见路径：
+那为什么会出现 “P 低但 runnable G 还很多”？两条常见路径：
 
 ### 路径 A：大量线程卡 syscall/cgo + runtime 不能/来不及补足可用线程
 
@@ -98,7 +98,7 @@ Runnable 表示 goroutine 已准备好运行，只是没拿到 P/CPU。
 - 线程数受限（容器/ulimit/runtime）
 - 某些模式导致线程难复用（LockOSThread、cgo callback 等）
 
-### 路径 B：cgo 在 C 里"烧 CPU"，Go P 看起来低但系统 CPU 很高
+### 路径 B：cgo 在 C 里“烧 CPU”，Go P 看起来低但系统 CPU 很高
 
 **现象**：
 - 进程 CPU 很高（被 cgo 线程吃掉）
@@ -107,7 +107,7 @@ Runnable 表示 goroutine 已准备好运行，只是没拿到 P/CPU。
 
 ---
 
-## 4. 一张"组合推导表"：用 3 个观测量快速定位大方向
+## 4. 一张“组合推导表”：用 3 个观测量快速定位大方向
 
 在同一时间窗口下，关注三个量：
 
@@ -138,11 +138,11 @@ Runnable 表示 goroutine 已准备好运行，只是没拿到 P/CPU。
 
 ### 组合 4：`P_busy 中等`，`G_runq 波动大`
 
-常见于 **成批唤醒**（锁/cond/channel），表现为抖动式排队，需要结合 `GoBlockSync/GoBlockSend` 看"等待不可重叠/下游瓶颈"。
+常见于 **成批唤醒**（锁/cond/channel），表现为抖动式排队，需要结合 `GoBlockSync/GoBlockSend` 看“等待不可重叠/下游瓶颈”。
 
 ---
 
-## 5. 这些"异常"在真实输出里长什么样？（示例）
+## 5. 这些“异常”在真实输出里长什么样？（示例）
 
 > 下面示例是模拟的，结构尽量贴近真实 trace/pprof 的呈现。
 
@@ -207,7 +207,7 @@ P3 █████████████████████████�
 
 ---
 
-### 例子 3：看起来"runnable 很多"，但 goroutine dump 大多在 waiting（口径不一致）
+### 例子 3：看起来“runnable 很多”，但 goroutine dump 大多在 waiting（口径不一致）
 
 **dump（瞬时快照）**
 
@@ -219,13 +219,13 @@ goroutine 1211 [semacquire]:
 
 **trace（窗口累计）**
 
-- Goroutine analysis 里 sched wait 很大只能说明窗口里"曾经排队过"，并不代表 dump 那一刻仍是 runnable。
+- Goroutine analysis 里 sched wait 很大只能说明窗口里“曾经排队过”，并不代表 dump 那一刻仍是 runnable。
 
-> **结论：别拿"窗口累计"去对齐"瞬时快照"。**
+> **结论：别拿“窗口累计”去对齐“瞬时快照”。**
 
 ---
 
-### 例子 4：抖动式排队（成批唤醒导致"等待不可重叠"）
+### 例子 4：抖动式排队（成批唤醒导致“等待不可重叠”）
 
 ```
 (repeats every ~50ms)
@@ -247,7 +247,7 @@ runtime.chanrecv     3.8s
 
 ---
 
-## 6. 实战排查顺序（最省力的"自检流程"）
+## 6. 实战排查顺序（最省力的“自检流程”）
 
 1. **对齐时间窗口**：trace / cpu.pprof / dump 必须是同一段问题区间
 2. **看 P utilization**：跑满 vs 空洞
@@ -262,9 +262,9 @@ runtime.chanrecv     3.8s
 
 ## 7. 结论
 
-看到 "P 低但 runnable 多" 时，不要凭感觉猜是 IO 还是 CPU：
+看到 “P 低但 runnable 多” 时，不要凭感觉猜是 IO 还是 CPU：
 
-用 GMP 约束先判断"是否合理"，再用 trace 的三件武器盖章：
+用 GMP 约束先判断“是否合理”，再用 trace 的三件武器盖章：
 
 - **P lanes 是否空洞**
 - **Sched wait 是否巨大**

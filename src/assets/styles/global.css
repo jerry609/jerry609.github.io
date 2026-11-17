@@ -325,6 +325,13 @@ body::-webkit-scrollbar {
   color: hsl(var(--foreground));
   margin-bottom: 1.6em;
 }
+/* Posts that number their own sections keep the rule but drop the "01" label */
+.post-prose h2.h2-own::before {
+  content: '';
+  min-height: 1px;
+  background-position: 0 50%;
+  background-size: 100% 1px;
+}
 /* Section labels: "01 ———" above every h2 */
 .post-prose h2 {
   counter-increment: sec;

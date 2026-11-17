@@ -280,7 +280,7 @@ Google 自己在博客里把 ADK 与 Genkit 对比：([Google Developers Blog][7
 
 ### 5.1 Claude Agent SDK (Python)
 
-Claude 这边的心智模型是：「**工具 = MCP server 里的一个 tool**」。Python 通过 `@tool` + `create_sdk_mcp_server` 把本地函数暴露为 MCP 工具，然后通过 `ClaudeAgentOptions.mcp_servers` 和 `allowed_tools` 授权使用。
+Claude 这边的心智模型是：“**工具 = MCP server 里的一个 tool**”。Python 通过 `@tool` + `create_sdk_mcp_server` 把本地函数暴露为 MCP 工具，然后通过 `ClaudeAgentOptions.mcp_servers` 和 `allowed_tools` 授权使用。
 
 ```python
 # claude_weather_agent.py
@@ -437,7 +437,7 @@ if __name__ == "__main__":
 
 ### 5.3 Vercel AI SDK (Node / TS)
 
-Vercel AI SDK 没有“agent 类”，而是通过 **`streamText` 的配置对象 + `tools` 字段** 表达一整个 agent 的行为。工具本质上是「一个带 Zod schema + execute 函数的配置」。
+Vercel AI SDK 没有“agent 类”，而是通过 **`streamText` 的配置对象 + `tools` 字段** 表达一整个 agent 的行为。工具本质上是“一个带 Zod schema + execute 函数的配置”。
 
 下面是一个 Next.js Route Handler 示例（只展示服务端逻辑）：
 
@@ -493,13 +493,13 @@ export async function POST(req: Request) {
 
 **Vercel AI SDK 的节奏：**
 
-* **没有“agent 类”**，而是「一次 `streamText` 调用 = 一轮 agent 推理（含工具调用）」。
+* **没有“agent 类”**，而是“一次 `streamText` 调用 = 一轮 agent 推理（含工具调用）」。
 * 工具在 `tools` 配置中声明：`{ description, inputSchema (Zod), execute }`。
 * 对比另外几个 SDK，更偏“前后端一体的流式聊天框架”。
 
 ### 5.4 Google ADK (Python)
 
-Google ADK 这边和 OpenAI Agents 一样，也是「**普通 Python 函数 + 类型注解 + docstring = 工具**」，然后通过 `Agent(tools=[...])` 挂上，再用 `AdkApp`/CLI 跑起来。
+Google ADK 这边和 OpenAI Agents 一样，也是“**普通 Python 函数 + 类型注解 + docstring = 工具**”，然后通过 `Agent(tools=[...])` 挂上，再用 `AdkApp`/CLI 跑起来。
 
 ```python
 # google_adk_weather.py
@@ -571,7 +571,7 @@ if __name__ == "__main__":
 
 * 工具 = 普通函数 + docstring，ADK 会自动提取说明和参数信息，让 LLM 决定是否调用该函数。
 * `Agent` 负责描述“会用哪个 Gemini 模型 + 有哪些工具 + 基本 instruction”。
-* `AdkApp` 则是一个「可部署 / 可调试的 agent app 包装器」，支持本地 stream 调用、会话管理、之后一键部署到 Vertex AI Agent Engine。
+* `AdkApp` 则是一个“可部署 / 可调试的 agent app 包装器”，支持本地 stream 调用、会话管理、之后一键部署到 Vertex AI Agent Engine。
 
 ---
 

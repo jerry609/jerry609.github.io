@@ -12,8 +12,8 @@ draft: false
 在完成 [Claude Agent SDK 的源码分析](/blog/claude-agent-sdk-1/) 后，一个自然的问题浮现出来：Google 的 Agent 开发方案是什么样的？
 
 两者代表了当前 Agent 开发的两种截然不同的设计哲学：
-- **Claude Agent SDK**：一个精巧的"遥控器"，操控已有的强力 CLI
-- **Google ADK**：一套完整的"乐高积木"，让你从零搭建 Agent
+- **Claude Agent SDK**：一个精巧的“遥控器”，操控已有的强力 CLI
+- **Google ADK**：一套完整的“乐高积木”，让你从零搭建 Agent
 
 本文将从源码层面，对比 `claude-agent-sdk-python` 和 `adk-python` 在**通信架构**与**代码执行沙箱**上的核心差异。
 
@@ -26,7 +26,7 @@ draft: false
 
 这是两者架构上最本质的区别。
 
-### Claude Agent SDK: 子进程 + IPC 的"套娃"模式
+### Claude Agent SDK: 子进程 + IPC 的“套娃”模式
 
 Claude Agent SDK 的源码，Python SDK 不发送 HTTP 请求。
 
@@ -68,7 +68,7 @@ SDK 的工作流程是这样的：
 └─────────────────┘      stdout (JSON)     └──────────────────┘
 ```
 
-这种设计初看"绕远路"，但细想很巧妙：
+这种设计初看“绕远路”，但细想很巧妙：
 - **能力复用**：Claude Code CLI 本身已是一个功能完整的 Agent（有权限管理、MCP 支持、工具分发），SDK 无需重复实现
 - **版本一致**：用户升级 CLI 后，SDK 自动获得新能力，无需等待 SDK 更新
 - **进程隔离**：出问题时可以单独调试 CLI 或 SDK
@@ -82,7 +82,7 @@ raise CLINotFoundError(
 )
 ```
 
-### Google ADK: 纯库调用的"直连"模式
+### Google ADK: 纯库调用的“直连”模式
 
 Google ADK 走的是传统 SDK 路线——**直接发起 API 调用**。
 
@@ -138,7 +138,7 @@ except ClientError as ce:
 | **可调试性** | 较难（CLI 是黑盒） | 容易（全流程可追踪） |
 | **扩展性** | 受限于 CLI 能力 | 可自由替换模型层 |
 
-为了把这种差异再具象一点，可以用一个极简的「Hello World」来对比两边的调用形态（伪代码，仅展示结构）：
+为了把这种差异再具象一点，可以用一个极简的“Hello World”来对比两边的调用形态（伪代码，仅展示结构）：
 
 ```python
 # Claude Agent SDK：像是在“遥控”一个已经长大的 Agent
@@ -174,7 +174,7 @@ print(result.output)
 
 ## 2. 代码执行与沙箱：Shell 环境 vs 容器化策略
 
-Agent 的杀手级能力是"执行代码"。这也是安全风险最高的地方。两者的处理方式体现了不同的安全哲学。
+Agent 的杀手级能力是“执行代码”。这也是安全风险最高的地方。两者的处理方式体现了不同的安全哲学。
 
 ### Claude Agent SDK: Bash 就是沙箱
 
@@ -198,7 +198,7 @@ options = ClaudeAgentOptions(
 - **通用性强**：不仅能跑 Python，还能跑 `git commit`、`grep`、`curl`
 - **风险也高**：安全边界依赖 CLI 内部的黑名单/白名单实现
 
-某种程度上，Claude SDK 把"代码沙箱"问题甩给了 CLI 去解决。这符合它"遥控器"的定位——SDK 只负责传递指令，执行环境由 CLI 负责管理。
+某种程度上，Claude SDK 把“代码沙箱”问题甩给了 CLI 去解决。这符合它“遥控器”的定位——SDK 只负责传递指令，执行环境由 CLI 负责管理。
 
 ### Google ADK: 分层的 Executor 抽象
 
@@ -280,13 +280,13 @@ class UnsafeLocalCodeExecutor(BaseCodeExecutor):
 | **执行能力** | 通用 (任意 Shell 命令) | 特定语言 (默认 Python) |
 | **配置复杂度** | 低 (黑白名单) | 中高 (需要 Docker 环境或 GCP) |
 
-从这张表可以看出，Claude 更像是在给你一台「可控的远程 Shell」，而 ADK 则是在帮你搭好几种不同级别的「执行场地」（本地、容器、云端），这也自然引出了下一节里两者在设计哲学上的分野。
+从这张表可以看出，Claude 更像是在给你一台“可控的远程 Shell”，而 ADK 则是在帮你搭好几种不同级别的“执行场地”（本地、容器、云端），这也自然引出了下一节里两者在设计哲学上的分野。
 
 ## 3. 设计哲学：产品思维 vs 框架思维
 
 分析完技术细节，两者背后的设计哲学。
 
-### Claude: "把复杂留给我们"
+### Claude: “把复杂留给我们”
 
 Claude Agent SDK 的设计目标是让你**最快地获得 Claude Code 的能力**。
 
@@ -307,11 +307,11 @@ def _build_command(self) -> list[str]:
     # ... 大量参数透传
 ```
 
-SDK 本质上是 CLI 参数的 Python 封装。复杂的能力（MCP 协议支持、多 Agent 编排、上下文管理）全部由 CLI 实现，SDK 只负责"传话"。
+SDK 本质上是 CLI 参数的 Python 封装。复杂的能力（MCP 协议支持、多 Agent 编排、上下文管理）全部由 CLI 实现，SDK 只负责“传话”。
 
 这种设计的**核心假设**是：用户想要的是 Claude Code 的能力，而非构建自己的 Agent 框架。
 
-### ADK: "把选择权给你"
+### ADK: “把选择权给你”
 
 ADK 的设计目标是让你**构建自己的 Agent**。
 
@@ -349,8 +349,8 @@ agent = Agent(
 
 这两个 SDK 代表了 Agent 开发的两条路径：
 
-- **Claude Agent SDK** 是"站在巨人肩膀上"——利用已有的强力 CLI，快速获得能力
-- **Google ADK** 是"自己成为巨人"——提供积木，让你搭建自己的 Agent 帝国
+- **Claude Agent SDK** 是“站在巨人肩膀上”——利用已有的强力 CLI，快速获得能力
+- **Google ADK** 是“自己成为巨人”——提供积木，让你搭建自己的 Agent 帝国
 
 两者没有绝对的优劣，只有场景的适配。
 

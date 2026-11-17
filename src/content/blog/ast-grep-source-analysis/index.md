@@ -233,7 +233,7 @@ rule:
 function_declaration > identifier
 ```
 
-表示"直接子节点是 identifier 的 function_declaration"。
+表示“直接子节点是 identifier 的 function_declaration”。
 
 实现在 `crates/config/src/rule/selector.rs`，自己写了个 lexer + parser，没用第三方库。支持的组合子：
 - `A B`：后代
@@ -580,7 +580,7 @@ impl SgRoot {
 
 2. **性能优化到位**：`CombinedScan` 避免重复 parse，`WalkParallel` 并行遍历，这些细节拉开了和其他工具的差距。
 
-3. **Expando Char**：虽然有点 hacky，但优雅地解决了"模式串语法不合法"的问题，比魔改 parser 简单多了。
+3. **Expando Char**：虽然有点 hacky，但优雅地解决了“模式串语法不合法”的问题，比魔改 parser 简单多了。
 
 4. **泛型抽象合理**：`Doc` trait 抽象编码，`Language` trait 抽象语言，`Matcher` trait 抽象匹配器，各司其职。
 

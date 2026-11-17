@@ -17,6 +17,7 @@ import SeriesNav from '@/components/blog/SeriesNav.astro'
 import { Comment } from '@/components/waline'
 import { layerLabel } from '@/data/stack'
 import { buildCovers } from '@/utils/cover'
+import { sectionLabels, stripOwnNumber } from '@/utils/sections'
 
 interface Props {
   post: CollectionEntry<'blog'>
@@ -47,7 +48,8 @@ const articleDate = updatedDate?.toISOString() ?? publishDate.toISOString()
 
 const covers = buildCovers(posts)
 const sections = headings.filter((h) => h.depth === 2)
-const pad = (n: number) => String(n).padStart(2, '0')
+// Rail labels follow the post's own numbering when it has one
+const { labels: railLabels } = sectionLabels(sections.map((h) => h.text))
 
 // Read next: the neighbours in time
 const byDate = [...posts].sort((a, b) => a.data.publishDate.valueOf() - b.data.publishDate.valueOf())
@@ -66,8 +68,8 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
             {sections.map((h, i) => (
               <li>
                 <a href={`#${h.slug}`} data-rail={h.slug}>
-                  <span class='n'>{pad(i + 1)}</span>
-                  <span class='t'>{h.text}</span>
+                  <span class='n'>{railLabels[i]}</span>
+                  <span class='t'>{stripOwnNumber(h.text)}</span>
                 </a>
               </li>
             ))}
@@ -87,7 +89,7 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
               {sections.map((h, i) => (
                 <li>
                   <a href={`#${h.slug}`}>
-                    <span class='mono'>{pad(i + 1)}</span> {h.text}
+                    <span class='mono'>{railLabels[i]}</span> {stripOwnNumber(h.text)}
                   </a>
                 </li>
               ))}

@@ -90,7 +90,7 @@ tags: ['system-design', 'architecture', 'engineering']
    (Never leak these as external API promises unless you intend to freeze them.)
 ```
 
-读图：同步提交点在「契约层（API）→ SoT」；其余靠控制回路异步收敛。
+读图：同步提交点在“契约层（API）→ SoT”；其余靠控制回路异步收敛。
 
 ---
 

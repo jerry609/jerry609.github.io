@@ -117,11 +117,11 @@ draft: false
 
 ## 一、精确计算盲区
 
-LLM 通过 token 预测生成文本，本质上是概率采样器而非计算器。它不擅长数数、排序、精确算术——这些任务对人类来说"简单"，对 LLM 来说恰恰最不可靠。
+LLM 通过 token 预测生成文本，本质上是概率采样器而非计算器。它不擅长数数、排序、精确算术——这些任务对人类来说“简单”，对 LLM 来说恰恰最不可靠。
 
 ### 典型案例：代码编辑中的行号问题
 
-一个经典的反面设计是让 Agent 输出行号——"替换第 142-156 行"。Agent 经常数错行号，导致修改错位甚至破坏代码。
+一个经典的反面设计是让 Agent 输出行号——“替换第 142-156 行”。Agent 经常数错行号，导致修改错位甚至破坏代码。
 
 <div class="agent-demo">
   <div class="agent-demo-title">交互演示：行号替换 vs SEARCH_AND_REPLACE</div>
@@ -151,7 +151,7 @@ LLM 通过 token 预测生成文本，本质上是概率采样器而非计算器
 | **AST 级替换** | Agent 指定 `函数名.参数名` 等语义锚点，底层用 AST parser 定位 | 结构化语言（Python/Go/Rego） |
 | **Patch 文件** | Agent 生成标准 unified diff，底层用 `patch` 命令应用 | Git 工作流 |
 
-Anthropic 的 [Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) 明确指出：**选择 LLM 能自然书写的输出格式**。写 diff 需要在生成新代码之前就算好 chunk header 的行数——LLM 做不到这种"先算后写"；写 JSON 需要转义换行和引号——增加了不必要的出错机会。SEARCH_AND_REPLACE 之所以胜出，因为 Agent 只需要"复制原文 + 写新代码"，这是训练数据中最常见的模式。
+Anthropic 的 [Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) 明确指出：**选择 LLM 能自然书写的输出格式**。写 diff 需要在生成新代码之前就算好 chunk header 的行数——LLM 做不到这种“先算后写”；写 JSON 需要转义换行和引号——增加了不必要的出错机会。SEARCH_AND_REPLACE 之所以胜出，因为 Agent 只需要“复制原文 + 写新代码”，这是训练数据中最常见的模式。
 
 ### 代码实现：SEARCH_AND_REPLACE 工具
 
@@ -211,10 +211,10 @@ def search_and_replace(file_path: str, old_text: str, new_text: str) -> dict:
 |:-------------|:---------|:-----|
 | 算术 | Python 解释器 / calculator tool | `2^32 - 1 = ?` |
 | 排序 | `sort` 命令 / 数据库 `ORDER BY` | 按日期排序文件 |
-| 字符串计数 | `len()` / `wc` | "这段代码有多少行" |
+| 字符串计数 | `len()` / `wc` | “这段代码有多少行” |
 | 正则匹配 | `grep` / `ripgrep` | 查找所有 TODO 注释 |
 | 行号定位 | SEARCH_AND_REPLACE / AST | 修改第 142 行 |
-| Token 计算 | `tiktoken` / tokenizer | "这段文本有多少 token" |
+| Token 计算 | `tiktoken` / tokenizer | “这段文本有多少 token” |
 
 设计原则：**LLM 负责决策**（用什么工具、传什么参数），**工具负责执行**（精确计算）。这就是 ReAct 模式的核心——Reasoning 归 LLM，Acting 归 Tool。
 
@@ -222,7 +222,7 @@ def search_and_replace(file_path: str, old_text: str, new_text: str) -> dict:
 
 ## 二、幻觉（Hallucination）
 
-LLM 的优化目标是"下一个 token 的似然概率最高"，而非"事实正确"。这导致它会自信地编造不存在的 API、不存在的参数、不存在的事实。
+LLM 的优化目标是“下一个 token 的似然概率最高”，而非“事实正确”。这导致它会自信地编造不存在的 API、不存在的参数、不存在的事实。
 
 ### 分层防御体系
 
@@ -235,7 +235,7 @@ LLM 的优化目标是"下一个 token 的似然概率最高"，而非"事实正
 
 每一层的实现细节：
 
-**Layer 1: Schema 约束** — Function calling 使用严格 JSON Schema，只允许调用预定义的工具列表。Agent 无法"发明"新工具。
+**Layer 1: Schema 约束** — Function calling 使用严格 JSON Schema，只允许调用预定义的工具列表。Agent 无法“发明”新工具。
 
 ```python
 # 工具定义的 JSON Schema —— Agent 只能在这个范围内操作
@@ -268,7 +268,7 @@ tools = [
 ]
 ```
 
-**Layer 2: 参数校验 + Agent-friendly Error** — Anthropic 在 [Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) 中强调：**错误信息应该告诉 Agent 怎么修复，而不只是说"失败了"**。
+**Layer 2: 参数校验 + Agent-friendly Error** — Anthropic 在 [Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) 中强调：**错误信息应该告诉 Agent 怎么修复，而不只是说“失败了”**。
 
 ```python
 def validate_and_execute(tool_name: str, params: dict) -> dict:
@@ -299,7 +299,7 @@ def validate_and_execute(tool_name: str, params: dict) -> dict:
 
 **Layer 3: 运行时沙箱** — 代码执行在沙箱中（Docker/gVisor/E2B），即使幻觉也无法造成破坏。
 
-**Layer 4: 输出验证** — 不是"Agent 说成功了"就算成功，要验证**环境状态**。
+**Layer 4: 输出验证** — 不是“Agent 说成功了”就算成功，要验证**环境状态**。
 
 ```python
 def verify_outcome(agent_claim: str, actual_state: dict) -> bool:
@@ -451,7 +451,7 @@ Claude Code 就是这样做的：启动时加载 `CLAUDE.md`，然后用 `glob` 
 
 ## 四、Harness Engineering
 
-> **"当 Agent 失败时，不要调 prompt——调 harness。"** — OpenAI Harness 团队
+> **“当 Agent 失败时，不要调 prompt——调 harness。”** — OpenAI Harness 团队
 
 这是近半年 Agent 工程领域最重要的认知转变。OpenAI 的 Harness 团队在 5 个月内让 Agent 生成了约 100 万行代码、~1500 个 PR，**零手写代码**。瓶颈从来不是 Agent 写代码的能力，而是**缺少结构、工具和反馈机制**。
 
@@ -466,9 +466,9 @@ Claude Code 就是这样做的：启动时加载 `CLAUDE.md`，然后用 `glob` 
 
 #### 原则 1：机械化执行 > 文档约束
 
-告诉 Agent "不要做 X"是**建议**；让 X 触发构建失败是**规则**。
+告诉 Agent “不要做 X”是**建议**；让 X 触发构建失败是**规则**。
 
-OpenAI 最精妙的创新：**linter 错误信息兼做修复指令**。当 Agent 违反架构约束时，错误消息直接告诉它怎么修复——工具在工作的同时"教"Agent：
+OpenAI 最精妙的创新：**linter 错误信息兼做修复指令**。当 Agent 违反架构约束时，错误消息直接告诉它怎么修复——工具在工作的同时“教”Agent：
 
 ```python
 # 自定义 linter 规则：强制分层架构
@@ -705,15 +705,15 @@ Codex API 会重排 prompt 组件的顺序以最大化缓存命中率：
 
 ## 六、规划能力不稳定
 
-Agent 执行多步任务时，经常"跑偏"或忘记原始目标。这不是 prompt 写得不好，而是 LLM 在长程推理中的固有弱点。
+Agent 执行多步任务时，经常“跑偏”或忘记原始目标。这不是 prompt 写得不好，而是 LLM 在长程推理中的固有弱点。
 
 ### 外部计划 + 逐步验证
 
 OpenAI Codex 团队在生产中总结的四个关键机制：
 
-1. **外部计划文件** — Agent 不靠"记住计划"，而是每步都重读 `exec-plan`
+1. **外部计划文件** — Agent 不靠“记住计划”，而是每步都重读 `exec-plan`
 2. **逐步验证** — 每完成一个 work slice，运行测试/lint/boundary check。不通过 = 立即修复，不继续下一步
-3. **Done-when routine** — Agent 不自行判断"做完了"，由外部 grader/checklist 判断
+3. **Done-when routine** — Agent 不自行判断“做完了”，由外部 grader/checklist 判断
 4. **强制 shutdown** — 到了 context budget 阈值就必须停，更新 progress → 提交 → 新会话接手
 
 ### Plan-Act-Reflect 循环
@@ -804,7 +804,7 @@ class PreCompletionChecklistMiddleware:
 
 ### 确认偏误
 
-在同一个 context window 内，Agent 对自己生成的代码有**确认偏误**——它"记得"自己为什么这样写，所以倾向于认为是对的。就像作者校对自己刚写的稿子，总是看不到错误。
+在同一个 context window 内，Agent 对自己生成的代码有**确认偏误**——它“记得”自己为什么这样写，所以倾向于认为是对的。就像作者校对自己刚写的稿子，总是看不到错误。
 
 ### Writer/Reviewer 分离
 
@@ -870,7 +870,7 @@ Anthropic 在 [Writing Tools for Agents](https://www.anthropic.com/engineering/w
 1. **命名清晰**：工具名 = 动作 + 对象（`search_files`、`create_user`）
 2. **参数最小化**：必填参数越少越好，可选参数有合理默认值
 3. **输出结构化**：返回 JSON，不返回自由文本
-4. **错误即指令**：报错信息告诉 Agent 怎么修，不只是说"失败了"
+4. **错误即指令**：报错信息告诉 Agent 怎么修，不只是说“失败了”
 5. **幂等安全**：同一个调用执行多次结果一样（Agent 可能重试）
 6. **不暴露内部状态**：工具是黑盒，Agent 不需要理解实现
 7. **Token 效率**：默认截断长响应，返回续取指令（Claude Code 限制工具响应 25,000 tokens）
@@ -989,13 +989,13 @@ async def plan_then_execute(task: str):
 2. **能力饱和** — 增加 Agent 数量的收益在某个阈值后急剧递减
 3. **通信开销非线性增长** — Agent 间通信成本随数量指数级上升
 
-子 Agent 的正确用法不是"角色扮演"（前端工程师 + 后端工程师），而是**上下文隔离**：父 Agent 只看到子 Agent 的 prompt 和最终结果，中间的工具调用、工具输出都不会污染父 Agent 的 context window。
+子 Agent 的正确用法不是“角色扮演”（前端工程师 + 后端工程师），而是**上下文隔离**：父 Agent 只看到子 Agent 的 prompt 和最终结果，中间的工具调用、工具输出都不会污染父 Agent 的 context window。
 
 ---
 
 ## 十、评估与可观测性
 
-Agent 系统的评估不能只看最终输出对不对。一个"碰巧正确"的结果和一个"稳定正确"的过程，价值完全不同。
+Agent 系统的评估不能只看最终输出对不对。一个“碰巧正确”的结果和一个“稳定正确”的过程，价值完全不同。
 
 ### 五层评估体系
 
@@ -1007,7 +1007,7 @@ Agent 系统的评估不能只看最终输出对不对。一个"碰巧正确"的
 | **鲁棒性** | 多次 trial | 同一任务多次运行的一致性 |
 | **安全性** | 边界检测 | 权限越界、危险操作拦截率 |
 
-核心观点：**Agent 的 narration（"我完成了"）不能作为验证依据。** 必须检查环境状态——Anthropic 称之为 **"outcome beats narration"**。
+核心观点：**Agent 的 narration（“我完成了”）不能作为验证依据。** 必须检查环境状态——Anthropic 称之为 **"outcome beats narration"**。
 
 ### Trace-based Debugging
 
@@ -1086,7 +1086,7 @@ claude "Write code to make all tests pass.
        DO NOT modify any test files."
 ```
 
-TDD 在 Agent 场景下比人类场景更强大，因为它提供了**机械化的验证循环**——Agent 不需要主观判断"写完了没有"，测试结果会客观地告诉它。
+TDD 在 Agent 场景下比人类场景更强大，因为它提供了**机械化的验证循环**——Agent 不需要主观判断“写完了没有”，测试结果会客观地告诉它。
 
 ---
 

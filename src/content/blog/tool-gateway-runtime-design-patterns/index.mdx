@@ -205,7 +205,7 @@ class GeminiPassthroughAdapter(IdentityAdapter):
 
 ## 四、Strategy：行为在运行时按 route 或 key 选择
 
-除了统一接口之外，系统还需要在运行时决定"具体采用哪一种行为"。这部分更适合用 `Strategy` 来描述。
+除了统一接口之外，系统还需要在运行时决定“具体采用哪一种行为”。这部分更适合用 `Strategy` 来描述。
 
 ### 4.1 adapter 选择
 
@@ -320,7 +320,7 @@ class NormalizedToolCall:
 - 调用标识：`call_id`
 - 原始输入：`raw_envelope`
 
-从结构上看，它可以被理解为一个"待执行命令"的载体。
+从结构上看，它可以被理解为一个“待执行命令”的载体。
 
 ### 6.2 调度器
 
@@ -344,7 +344,7 @@ output = handler(**normalized.arguments)
 
 ## 七、Null Object / Identity：透传也被建模成显式策略
 
-这份代码没有把"无转换"当作一个漏掉的特殊分支，而是显式建模成 `IdentityAdapter`：
+这份代码没有把“无转换”当作一个漏掉的特殊分支，而是显式建模成 `IdentityAdapter`：
 
 ```python title="dispatch_envelope_demo.py"
 class IdentityAdapter:
@@ -369,7 +369,7 @@ class GeminiPassthroughAdapter(IdentityAdapter):
 
 核心点不在术语，而在设计选择本身：
 
-> **"不做转换"也是一个需要被明确表达的策略。**
+> **“不做转换”也是一个需要被明确表达的策略。**
 
 ---
 
@@ -494,7 +494,7 @@ next_request = append_tool_results_to_provider_messages(...)
 - local dispatch
 - append back
 
-因此，这里更适合用"编排器"或"流水线"来描述。
+因此，这里更适合用“编排器”或“流水线”来描述。
 
 <div class="dp-demo">
   <div class="dp-demo-title">交互演示：dispatch_tool_call() 流水线</div>
@@ -721,7 +721,7 @@ self._record_trace(
 
 如果把问题表述为：
 
-> "这份代码中涉及哪些设计模式和架构模式？"
+> “这份代码中涉及哪些设计模式和架构模式？”
 
 那么一个较准确的回答是：
 

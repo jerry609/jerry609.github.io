@@ -59,6 +59,10 @@ source:
 
 MDX 文章可以用交互图组件（`src/components/figures`）：`Figure`（编号、重播、调速、说明）、`Timeline`（泳道时间线动画）、`BarDelta`（前后对比条）、`StepFlow`（流程）。完整写法见 `templates/interactive-post.mdx`，效果见 `/lab/figures`（不在导航里，数据是示例）。
 
+新文章写完可以跑一遍 `python3 scripts/normalize-typography.py`（默认只预览，加 `--apply` 才写入）：把中文句子里的英文直引号换成全角引号、统一一篇文章里混用的 “” / 「」、修正中文句中的半角标点，并删掉模板已经提供的手写目录和连载导航。代码、公式、链接、HTML 和 frontmatter 不会被改动。
+
+二级标题如果自己带编号（`1.` / `一、` / `第一章`），模板就不再加 `01` 标签，左侧章节栏也改用文章自己的编号（`src/utils/sections.ts`）。
+
 主题设计（颜色、字号、形状的规则）写在 `src/assets/styles/app.css` 开头的注释里。
 
 主要页面：

@@ -561,7 +561,7 @@ def bash_execute(command: str, timeout: int = 30) -> dict:
 
 通过 ADK 复现 Claude Code 的工具系统，我们可以清晰地看到两种框架的差异：
 
-- **Claude Code**：工具作为"内置能力"，SDK 只是遥控器
+- **Claude Code**：工具作为「内置能力」，SDK 只是遥控器
 - **Google ADK**：工具完全由你定义，框架只负责编排
 
 ADK 的优势在于**完全可控**——你可以选择底层实现（ripgrep vs 纯 Python）、定制权限逻辑、添加审计日志等。

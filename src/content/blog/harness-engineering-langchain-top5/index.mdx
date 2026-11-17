@@ -85,7 +85,7 @@ draft: false
   :root.dark .hw-metric-neutral { background: #1e3a5f; color: #93c5fd; }
 `}</style>
 
-> **"如果 2025 年是 AI Agent 证明自己能写代码的一年，那 2026 年就是我们意识到 Agent 不是难点——Harness 才是。"** — LangChain
+> **“如果 2025 年是 AI Agent 证明自己能写代码的一年，那 2026 年就是我们意识到 Agent 不是难点——Harness 才是。”** — LangChain
 
 LangChain 的 coding agent **deepagents-cli** 在 Terminal Bench 2.0 上的成绩从 <span class="hw-metric hw-metric-down">52.8%</span> 飙升到 <span class="hw-metric hw-metric-up">66.5%</span>，从排行榜 30 名开外直接跻身 **Top 5**。
 
@@ -161,7 +161,7 @@ LangChain 用 **LangSmith traces** 作为主要调试工具，对每轮 benchmar
 
 ### 失败模式 1：过早自我批准
 
-Agent 写完代码后，重读自己的代码，觉得"看起来不错"，然后**直接宣布完成**，没有实际运行测试。LangChain 的描述："almost comically human — just vibes"（像人类一样，纯靠感觉）。
+Agent 写完代码后，重读自己的代码，觉得“看起来不错”，然后**直接宣布完成**，没有实际运行测试。LangChain 的描述：“almost comically human — just vibes”（像人类一样，纯靠感觉）。
 
 这是最常见的失败模式。Agent 对自己生成的第一个看似合理的方案有强烈的偏向性。
 
@@ -181,15 +181,15 @@ Agent 浪费大量时间和 token 去探索自己的工作环境——目录结�
 
 ### 失败模式 4：评估理解偏差（Slop Buildup）
 
-Agent 不自然地理解"代码会被程序化测试评估"这件事。它写的代码在 happy path 上看起来正确，但 edge case 全挂。小错误随时间累积——LangChain 称之为 **"slop buildup"**（渣滓堆积）。
+Agent 不自然地理解“代码会被程序化测试评估”这件事。它写的代码在 happy path 上看起来正确，但 edge case 全挂。小错误随时间累积——LangChain 称之为 **"slop buildup"**（渣滓堆积）。
 
-**修复**：系统提示中明确告知"你的代码会被程序化测试评估"，强调按任务 spec 中的路径精确操作，压力测试 edge case。
+**修复**：系统提示中明确告知“你的代码会被程序化测试评估”，强调按任务 spec 中的路径精确操作，压力测试 edge case。
 
 ### 失败模式 5：时间管理失败
 
 Terminal Bench 有严格的超时限制。Agent **不擅长估算时间**，会无限迭代而不收敛。
 
-**修复**：注入时间预算警告，在时间快到时引导 Agent 从"迭代"切换到"验证并提交"。
+**修复**：注入时间预算警告，在时间快到时引导 Agent 从“迭代”切换到“验证并提交”。
 
 ---
 
@@ -391,7 +391,7 @@ class ReasoningSandwichMiddleware(AgentMiddleware):
         return "implementation"      # 在写代码
 ```
 
-**与自适应推理的对比**：Claude 和 Gemini 使用模型内部的"自适应推理"，由模型自己决定花多少计算。LangChain 的方案是**从 harness 外部控制**推理预算。在多模型架构中，这可以表现为规划用大模型、执行用小模型。
+**与自适应推理的对比**：Claude 和 Gemini 使用模型内部的“自适应推理”，由模型自己决定花多少计算。LangChain 的方案是**从 harness 外部控制**推理预算。在多模型架构中，这可以表现为规划用大模型、执行用小模型。
 
 ### 4.4 PreCompletionChecklistMiddleware
 
@@ -436,13 +436,13 @@ class PreCompletionChecklistMiddleware(AgentMiddleware):
         return None  # Agent 被强制进入下一轮
 ```
 
-**为什么有效**：模型对自己的第一个方案有偏向性（confirmation bias）。没有这个中间件，Agent 会写代码、扫一眼、觉得没问题、结束。检查清单**强制真正的验证步骤**——不是"看起来对不对"，而是"测试通不通过"。
+**为什么有效**：模型对自己的第一个方案有偏向性（confirmation bias）。没有这个中间件，Agent 会写代码、扫一眼、觉得没问题、结束。检查清单**强制真正的验证步骤**——不是“看起来对不对”，而是“测试通不通过”。
 
 ---
 
 ## 五、系统提示工程
 
-LangChain 的系统提示被描述为"detailed and example-heavy, modeled on Claude Code's approach"。
+LangChain 的系统提示被描述为“detailed and example-heavy, modeled on Claude Code's approach”。
 
 ### Build-Verify 四步循环
 
@@ -492,7 +492,7 @@ LangChain 的 harness 优化方法论：
   → Top 5 ✓
 ```
 
-这个方法的精妙之处在于它**像 Boosting 一样聚焦于失败案例**。每一轮不是泛泛地"改进 prompt"，而是从 trace 中识别最高频的失败模式，然后针对性地添加一层中间件来修复。
+这个方法的精妙之处在于它**像 Boosting 一样聚焦于失败案例**。每一轮不是泛泛地“改进 prompt”，而是从 trace 中识别最高频的失败模式，然后针对性地添加一层中间件来修复。
 
 ---
 
@@ -522,7 +522,7 @@ OpenAI 的 Harness 团队在独立的实验中得出了惊人相似的结论。
 
 ### Linter 错误信息 = Agent 教学工具
 
-OpenAI 最精妙的创新：自定义 linter 不只检测违规，还**在错误信息中写入修复指令**——工具在工作的同时"教"Agent：
+OpenAI 最精妙的创新：自定义 linter 不只检测违规，还**在错误信息中写入修复指令**——工具在工作的同时“教”Agent：
 
 ```python
 # OpenAI 的做法：强制分层架构
@@ -558,7 +558,7 @@ def check_import(importing_file: str, imported_module: str) -> str | None:
 3. **给出了具体修复选项**（移到 types 层 / 用 Provider / 看文档）
 4. **指向了更多信息**（docs/architecture/layering.md）
 
-Agent 读到这条错误，不需要查任何文档就知道怎么修。这就是 OpenAI 说的 **"机械化执行 > 文档约束"**。
+Agent 读到这条错误，不需要查任何文档就知道怎么修。这就是 OpenAI 说的 **“机械化执行 > 文档约束”**。
 
 ### AGENTS.md ≠ 百科全书
 
@@ -741,7 +741,7 @@ LangChain 的一个重要发现：**不同模型需要不同的 harness。**
 
 Claude Opus 4.6 得分低于 GPT-5.2 不是因为模型差，而是因为 **harness 没有针对 Opus 跑过同样的优化迭代**。如果对 Opus 做同样的 trace 分析 + 中间件迭代，预期得分会显著提升。
 
-这印证了核心论点：**Harness 是针对特定模型的调优产物。** 通用的"好 harness"不存在，只有针对特定模型 + 特定任务优化的 harness。
+这印证了核心论点：**Harness 是针对特定模型的调优产物。** 通用的“好 harness”不存在，只有针对特定模型 + 特定任务优化的 harness。
 
 ---
 
@@ -768,7 +768,7 @@ Build harnesses to be "rippable." 随着模型越来越强，今天 harness 中�
 | Harness-only 提升 | 52.8% → 66.5% | 模型没变，只改环境 |
 | 全程最大推理反而更差 | xhigh=53.9% < high=63.6% | 更多思考 ≠ 更好结果 |
 | 推理三明治是最优策略 | 66.5% > 63.6% | 把预算花在刀刃上 |
-| 最常见失败：过早自我批准 | — | Agent 的"vibes check"不可靠 |
+| 最常见失败：过早自我批准 | — | Agent 的“vibes check”不可靠 |
 | 不同模型需要不同 harness | Opus 59.6% vs Codex 66.5% | Harness 是模型特异性的 |
 | 上下文 40% 拐点 | OpenAI 发现 | 更大窗口 ≠ 更好性能 |
 | 零手写代码 | ~100 万行 / 5 个月 | 工程师的工作 = 设计环境 |

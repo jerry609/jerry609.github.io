@@ -149,7 +149,7 @@ draft: false
   }
 `}</style>
 
-> **把不同格式的工具调用请求，统一成一种内部格式，执行本地函数，再把结果包装回去。再往上一层，把不同 provider 的 request / response 整包转换、路由和回填串起来。** 这就是这份 demo 的完整使命。本文按"先跑通最小骨架，再一层层加能力"的方式，从零拆解这个模块的设计与实现——包括为什么要 normalize、怎么分层、为什么还要有 adapter/route/gateway loop。
+> **把不同格式的工具调用请求，统一成一种内部格式，执行本地函数，再把结果包装回去。再往上一层，把不同 provider 的 request / response 整包转换、路由和回填串起来。** 这就是这份 demo 的完整使命。本文按“先跑通最小骨架，再一层层加能力”的方式，从零拆解这个模块的设计与实现——包括为什么要 normalize、怎么分层、为什么还要有 adapter/route/gateway loop。
 >
 > 它其实有两条链路：
 >
@@ -243,7 +243,7 @@ class AdapterRoute:
 
 ### 2.3 再写标准化后的数据结构
 
-你最终想把所有不同格式的 envelope 变成统一格式，所以先定义那个"统一格式"：
+你最终想把所有不同格式的 envelope 变成统一格式，所以先定义那个“统一格式”：
 
 ```python
 @dataclass
@@ -291,8 +291,8 @@ TOOL_REGISTRY: Dict[str, Handler] = {
 
 理解方式：
 
-- Schema 里定义"工具名字"
-- Registry 决定"这个名字对应哪个 Python 函数"
+- Schema 里定义“工具名字”
+- Registry 决定“这个名字对应哪个 Python 函数”
 
 也就是说，**真正把协议名绑定到本地执行逻辑的地方，就是这个表**。
 
@@ -366,7 +366,7 @@ def _parse_arguments(value: Any) -> Dict[str, Any]:
   <div id="fmt-info" class="td-step-info"></div>
 </div>
 
-按"识别来源格式"的顺序来写。每一段遵循相同模式：**先判断是不是这种格式 → 再校验关键字段 → 再提取统一字段 → 最后返回 `NormalizedToolCall`**。
+按“识别来源格式”的顺序来写。每一段遵循相同模式：**先判断是不是这种格式 → 再校验关键字段 → 再提取统一字段 → 最后返回 `NormalizedToolCall`**。
 
 ### 5.1 Codex 风格
 
@@ -496,8 +496,8 @@ raise EnvelopeDispatchError("unrecognized tool call envelope shape")
 
 这个函数做的是 normalize 的反方向：
 
-- normalize 是"外部格式 → 内部格式"
-- build_tool_result_envelope 是"内部结果 → 外部格式"
+- normalize 是“外部格式 → 内部格式”
+- build_tool_result_envelope 是“内部结果 → 外部格式”
 
 根据 `source_format` 和必要时的 `source_variant` 分支返回不同字典：
 
@@ -585,7 +585,7 @@ def append_tool_interaction_to_context(
 - 宿主运行时必须自己维护上下文
 - 下一轮要把这些记录再喂回去
 
-本质上，这个函数就是"更新对话状态"。不过要注意，它记录的是**通用审计上下文**，不是 provider-native 的下一轮请求历史。真正要把工具结果按 Claude / OpenAI / Gemini 的原生格式喂回去，还需要后面的 `append_tool_results_to_provider_messages()`。
+本质上，这个函数就是“更新对话状态”。不过要注意，它记录的是**通用审计上下文**，不是 provider-native 的下一轮请求历史。真正要把工具结果按 Claude / OpenAI / Gemini 的原生格式喂回去，还需要后面的 `append_tool_results_to_provider_messages()`。
 
 ---
 
@@ -804,7 +804,7 @@ for turn_index in range(max_turns):
 
 ## 九、设计哲学：为什么要 normalize
 
-normalize 的目的不只是"让下游都接收统一参数"。更准确地说，**normalize 是为了把"协议差异"挡在系统边界之外。**
+normalize 的目的不只是“让下游都接收统一参数”。更准确地说，**normalize 是为了把“协议差异”挡在系统边界之外。**
 
 <div class="td-demo">
   <div class="td-demo-title">交互演示：边界隔离架构</div>
@@ -819,11 +819,11 @@ normalize 的目的不只是"让下游都接收统一参数"。更准确地说�
 
 如果不做 normalize，协议差异会一路渗透到整个系统：dispatch 判断一次、日志判断一次、回包判断一次、context 更新又判断一次。以后加新 provider 还要全系统改。
 
-> **把不稳定、异构、供应商相关的复杂性，收口在系统入口。** 这就是"边界吸收复杂度"。
+> **把不稳定、异构、供应商相关的复杂性，收口在系统入口。** 这就是“边界吸收复杂度”。
 
 ### 9.2 先统一语义，再执行逻辑
 
-normalize 不是在做业务执行，它是在做**语义提纯**。三种信封虽然字段名不同，但语义一样——都在表达"调用哪个工具，参数是什么"。
+normalize 不是在做业务执行，它是在做**语义提纯**。三种信封虽然字段名不同，但语义一样——都在表达“调用哪个工具，参数是什么”。
 
 ```python
 # 这三个底层表达的都是同一件事：
@@ -853,9 +853,9 @@ Provider 格式是高变化点。今天支持 OpenAI、Claude、Codex，明天�
 
 ### 9.4 内部先定义自己的世界观
 
-`NormalizedToolCall` 在说：**"我这个运行时不想用厂商的世界观组织代码，我要先定义自己的世界观。"**
+`NormalizedToolCall` 在说：**“我这个运行时不想用厂商的世界观组织代码，我要先定义自己的世界观。”**
 
-你不是"围着 OpenAI 的 schema 写代码"，而是"先定义自己的内部抽象，再把 OpenAI 映射进来"。
+你不是“围着 OpenAI 的 schema 写代码”，而是“先定义自己的内部抽象，再把 OpenAI 映射进来”。
 
 - 外部协议只是输入材料
 - 内部模型才是系统真正依赖的抽象
@@ -900,7 +900,7 @@ normalize 让错误更早暴露。如果不在 normalize 里拦住格式错误�
 
 ### 10.1 为什么结果回包也不直接返回 dict
 
-handler 返回的只是"内部结果"，不是"协议结果"。比如 handler 可能只返回 `{"ok": True, "snapshot_path": "..."}`——这只是业务数据。但模型侧真正期待的，还包括：这是哪次调用的结果、对应哪个工具、字段名要符合哪个 provider 的协议。
+handler 返回的只是“内部结果”，不是“协议结果”。比如 handler 可能只返回 `{"ok": True, "snapshot_path": "..."}`——这只是业务数据。但模型侧真正期待的，还包括：这是哪次调用的结果、对应哪个工具、字段名要符合哪个 provider 的协议。
 
 **业务结果本身差不多，但协议包装不同。** 所以这里的哲学和 normalize 完全对称：
 
@@ -949,7 +949,7 @@ handler 返回的只是"内部结果"，不是"协议结果"。比如 handler �
 
 ### 10.6 source_format 的克制设计
 
-内部虽然不该被 provider 细节污染，但 runtime 仍然需要知道"最后要翻译成哪种外部格式"。所以 `source_format` / `source_variant` 的设计很有意思：
+内部虽然不该被 provider 细节污染，但 runtime 仍然需要知道“最后要翻译成哪种外部格式”。所以 `source_format` / `source_variant` 的设计很有意思：
 
 - 它不是给业务 handler 用的
 - 它是给本地 envelope 适配层用的
@@ -978,7 +978,7 @@ normalize 和 result envelope 两层一起实现的，就是：**让协议变化
 | gateway adapter | 给一份下游 request / 上游 response，看 route 是否选对、transform 是否正确 |
 | gateway loop | 给一个会要工具的 responder，看是否能完成 extract → dispatch → append back 的闭环 |
 
-系统被切成了几个可独立验证的部件。这不仅是"架构优雅"，还有非常实际的收益：更好测、更好扩展、更好 debug、更好替换 provider。
+系统被切成了几个可独立验证的部件。这不仅是“架构优雅”，还有非常实际的收益：更好测、更好扩展、更好 debug、更好替换 provider。
 
 ---
 
@@ -1118,7 +1118,7 @@ TOOL_REGISTRY: Dict[str, Handler] = {
 }
 ```
 
-这张表把"协议里的工具名"和"真正要执行的 Python 函数"解耦了。
+这张表把“协议里的工具名”和“真正要执行的 Python 函数”解耦了。
 
 而 gateway 层那张 registry 的作用则是：把“上下游四元组 route”与“对应的转换策略 adapter”解耦。两张表解决的是不同层次的问题，但设计手法完全一致。
 
@@ -1151,7 +1151,7 @@ def dispatch_tool_call(
 
 ### 更深一层：Late Binding 是一种依赖反转
 
-dispatch 不再依赖具体的 handler 实现，而是依赖 registry 接口。handler 通过注册自己来"插入"系统。这就是 IoC 容器的最小实现。
+dispatch 不再依赖具体的 handler 实现，而是依赖 registry 接口。handler 通过注册自己来“插入”系统。这就是 IoC 容器的最小实现。
 
 ---
 
@@ -1170,7 +1170,7 @@ tool_result_envelope = build_tool_result_envelope(normalized, output)
 
 ### 对调试的意义
 
-dict 可以直接 `json.dumps`，可以加字段、可以嵌套。字符串做不到这些。dict 是 JSON 世界里最自然的"业务结果容器"。
+dict 可以直接 `json.dumps`，可以加字段、可以嵌套。字符串做不到这些。dict 是 JSON 世界里最自然的“业务结果容器”。
 
 ### 对 handler 的约束
 
@@ -1193,7 +1193,7 @@ if not isinstance(output, dict):
 
 ### 1）职责清晰
 
-dispatch 负责"执行"，append 负责"记录"。这两个关注点不同——执行可能失败，但已经成功的调用仍然需要记录。
+dispatch 负责“执行”，append 负责“记录”。这两个关注点不同——执行可能失败，但已经成功的调用仍然需要记录。
 
 ### 2）可独立调用
 
@@ -1209,7 +1209,7 @@ dispatch 负责"执行"，append 负责"记录"。这两个关注点不同——
 
 ## 十五、dispatch_tool_call 为什么是编排器
 
-`dispatch_tool_call` 自己几乎不做任何"实质工作"。它做的是：
+`dispatch_tool_call` 自己几乎不做任何“实质工作”。它做的是：
 
 1. 调用 `normalize_tool_call`
 2. 查 registry
@@ -1269,7 +1269,7 @@ if not isinstance(fn, dict):
 
 normalize 不仅提取字段，还校验结构。这意味着**过了 normalize 之后的代码，可以安全地假设数据是合法的**。
 
-这就是"在边界做验证，在内部做信任"的设计。
+这就是“在边界做验证，在内部做信任”的设计。
 
 ### 类型约束：用运行时检查弥补动态语言的缺陷
 
@@ -3246,7 +3246,7 @@ if __name__ == "__main__":
 |:-----|:-----|
 | **输入多态，内部单态** | 外部允许多种格式，内部只认一种 |
 | **边界吸收复杂度** | tool envelope 差异收口在 `normalize_tool_call`，provider 整包差异收口在 adapter 层 |
-| **围着语义转，不围着表示转** | 提取"调用谁+参数"的统一语义 |
+| **围着语义转，不围着表示转** | 提取“调用谁+参数”的统一语义 |
 | **变化点集中** | 新增 envelope 变体改 normalize / build_result，新增 route 改 adapter registry |
 | **尽早失败** | normalize 阶段就拦住格式错误 |
 | **抽象但不失真** | NormalizedToolCall 保留 raw_envelope |

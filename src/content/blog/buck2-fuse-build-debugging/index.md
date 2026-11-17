@@ -17,55 +17,6 @@ draft: false
 # 深度复盘：Buck2 在 Antares/Dicfuse 挂载上的构建问题调试全记录
 
 
-## 目录
-
-* 1. [问题概述](#1-问题概述)
-  * 1.1 [问题现象](#11-问题现象)
-  * 1.2 [问题影响](#12-问题影响)
-  * 1.3 [系统架构背景](#13-系统架构背景)
-* 2. [问题发现过程（时间序列）](#2-问题发现过程时间序列)
-  * 2.1 [阶段一：初始尝试与 Buck2 root 权限问题](#21-阶段一初始尝试与-buck2-root-权限问题)
-  * 2.2 [阶段二：SQLite xShmMap I/O Error](#22-阶段二sqlite-xshmmap-io-error)
-  * 2.3 [阶段三：文件操作 "Function not implemented"](#23-阶段三文件操作-function-not-implemented)
-  * 2.4 [阶段四：定位到 OverlayFS Layer 路由问题](#24-阶段四定位到-overlayfs-layer-路由问题)
-* 3. [根因分析](#3-根因分析)
-  * 3.1 [问题 1：libfuse-fs API 版本不匹配](#31-问题-1libfuse-fs-api-版本不匹配)
-  * 3.2 [问题 2：Layer trait 方法签名变更](#32-问题-2layer-trait-方法签名变更)
-  * 3.3 [问题 3：OverlayFS 路由机制理解偏差](#33-问题-3overlayfs-路由机制理解偏差)
-* 4. [解决方案](#4-解决方案)
-  * 4.1 [方案 A：升级 libfuse-fs 到 0.1.9（采用）](#41-方案-a升级-libfuse-fs-到-019采用)
-  * 4.2 [方案 B：实现 getattr_with_mapping 方法（采用）](#42-方案-b实现-getattr_with_mapping-方法采用)
-  * 4.3 [方案 C：添加 _mapping 参数（采用）](#43-方案-c添加-_mapping-参数采用)
-* 5. [调试方法论总结](#5-调试方法论总结)
-  * 5.1 [分层调试：从高层到低层](#51-分层调试从高层到低层)
-  * 5.2 [假设-验证循环](#52-假设-验证循环)
-  * 5.3 [日志追踪策略](#53-日志追踪策略)
-* 6. [遇到的坑和陷阱](#6-遇到的坑和陷阱)
-  * 6.1 [坑 1：混淆 Layer trait 的不同版本 API](#61-坑-1混淆-layer-trait-的不同版本-api)
-  * 6.2 [坑 2：OverlayFS 使用 BoxedLayer 而非直接 Filesystem](#62-坑-2overlayfs-使用-boxedlayer-而非直接-filesystem)
-  * 6.3 [坑 3：误以为 PassthroughFS 的 Filesystem trait 会被调用](#63-坑-3误以为-passthroughfs-的-filesystem-trait-会被调用)
-  * 6.4 [坑 4：SQLite shm 问题掩盖了真正的 FUSE 实现问题](#64-坑-4sqlite-shm-问题掩盖了真正的-fuse-实现问题)
-* 7. [解决方案的 Trade-off 分析](#7-解决方案的-trade-off-分析)
-  * 7.1 [libfuse-fs 版本选择](#71-libfuse-fs-版本选择)
-  * 7.2 [Layer trait 方法实现策略](#72-layer-trait-方法实现策略)
-* 8. [验证修复](#8-验证修复)
-  * 8.1 [测试命令](#81-测试命令)
-  * 8.2 [成功输出](#82-成功输出)
-* 9. [经验教训与最佳实践](#9-经验教训与最佳实践)
-  * 9.1 [关键技术教训](#91-关键技术教训)
-  * 9.2 [FUSE OverlayFS 开发最佳实践](#92-fuse-overlayfs-开发最佳实践)
-  * 9.3 [调试技巧](#93-调试技巧)
-* 10. [深入探索：版本差异导致 Buck2 构建问题的完整复盘](#10-深入探索版本差异导致-buck2-构建问题的完整复盘)
-  * 10.1 [背景与问题表现](#101-背景与问题表现)
-  * 10.2 [版本差异导致的根本原因](#102-版本差异导致的根本原因)
-  * 10.3 [版本升级后的解决方案](#103-版本升级后的解决方案)
-  * 10.4 [问题复现与验证](#104-问题复现与验证)
-  * 10.5 [经验教训](#105-经验教训)
-  * 10.6 [总结](#106-总结)
-* 11. [总结](#11-总结)
-
----
-
 ## 1. 问题概述
 
 ### 1.1 问题现象
@@ -888,7 +839,7 @@ antares_test on /tmp/antares_test_*/mnt type fuse.antares_test (rw,nosuid,nodev,
 **教训**：
 - 深入理解库的内部实现，不要仅凭表面 API 推断行为
 - 阅读源码是理解复杂系统的最佳方式
-- 区分 "接口"（trait）和 "实现"（具体类型）的调用路径
+- 区分 “接口”（trait）和 “实现”（具体类型）的调用路径
 
 ### 6.3 坑 3：误以为 PassthroughFS 的 Filesystem trait 会被调用
 
@@ -1394,7 +1345,7 @@ async fn copy_node_up(&self, ...) -> Result<()> {
 
 #### 10.2.3 错误传播路径
 
-**为什么 Buck2 报 SQLite xShmMap 错误，而不是 "Function not implemented"？**
+**为什么 Buck2 报 SQLite xShmMap 错误，而不是 “Function not implemented”？**
 
 1. **Buck2 的初始化流程**：
    ```
@@ -1416,7 +1367,7 @@ async fn copy_node_up(&self, ...) -> Result<()> {
 2. **错误信息的误导性**：
    - 表面错误：`Error code 5386: I/O error within the xShmMap method`
    - 实际根因：OverlayFS Copy-up 失败，导致文件创建失败
-   - SQLite 只是"受害者"，不是问题的根源
+   - SQLite 只是“受害者”，不是问题的根源
 
 3. **为什么迁移 Buck2 状态目录到 /tmp 仍然失败？**
    - Buck2 在初始化时，**仍然会在工作区根目录创建某些状态文件**
@@ -1652,7 +1603,7 @@ cargo doc --open
 **关键洞察**：
 
 - 问题不在 SQLite 或 Buck2，而在 FUSE Layer 实现不完整
-- 版本升级不仅是"新功能"，更是"修复关键 bug"
+- 版本升级不仅是“新功能”，更是“修复关键 bug”
 - 深入理解 OverlayFS 的内部机制，才能快速定位问题
 
 ---
