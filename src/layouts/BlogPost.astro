@@ -47,9 +47,21 @@ const socialImage = heroImage
 const articleDate = updatedDate?.toISOString() ?? publishDate.toISOString()
 
 const covers = buildCovers(posts)
-const sections = headings.filter((h) => h.depth === 2)
-// Rail labels follow the post's own numbering when it has one
-const { labels: railLabels } = sectionLabels(sections.map((h) => h.text))
+const tocHeadings = headings.filter((h) => h.depth === 2 || h.depth === 3)
+const h2Headings = headings.filter((h) => h.depth === 2)
+const { labels: h2Labels } = sectionLabels(h2Headings.map((h) => h.text))
+let h2Idx = -1
+let h3Idx = 0
+const tocItems = tocHeadings.map((h) => {
+  if (h.depth === 2) {
+    h2Idx++
+    h3Idx = 0
+    return { ...h, label: h2Labels[h2Idx] ?? String(h2Idx + 1).padStart(2, '0'), sub: false }
+  }
+  h3Idx++
+  const prefix = h2Idx >= 0 ? `${h2Idx + 1}.${h3Idx}` : `·`
+  return { ...h, label: prefix, sub: true }
+})
 
 // Read next: the neighbours in time
 const byDate = [...posts].sort((a, b) => a.data.publishDate.valueOf() - b.data.publishDate.valueOf())
@@ -60,36 +72,44 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
 <BaseLayout meta={{ articleDate, description, ogImage: socialImage, title }}>
   <PostHero {post} cover={covers.get(post.id)!} minutesRead={remarkPluginFrontmatter.minutesRead} />
 
-  <div class:list={['post', sections.length < 2 && 'no-rail']}>
+  <div class:list={['post', tocItems.length < 2 && 'no-rail']}>
     {
-      sections.length >= 2 && (
-        <nav class='rail' aria-label='章节'>
+      tocItems.length >= 2 && (
+        <aside class='rail' aria-label='文章大纲与阅读进度'>
+          <div class='rail-head mono'>OUTLINE · H2 + H3</div>
           <ol>
-            {sections.map((h, i) => (
-              <li>
+            {tocItems.map((h) => (
+              <li class:list={[h.sub && 'is-sub']}>
                 <a href={`#${h.slug}`} data-rail={h.slug}>
-                  <span class='n'>{railLabels[i]}</span>
+                  <span class='n'>{h.label}</span>
                   <span class='t'>{stripOwnNumber(h.text)}</span>
                 </a>
               </li>
             ))}
           </ol>
-        </nav>
+          <div class='mem-progress mono' aria-hidden='true'>
+            <div class='mem-head'>MEMORY HIERARCHY</div>
+            <div class='mem-tiers' id='memTiers'>
+              <div class='mem-tier lit'><span>REG</span><i></i><span>25%</span></div>
+              <div class='mem-tier'><span>SRAM</span><i></i><span>50%</span></div>
+              <div class='mem-tier'><span>HBM3</span><i></i><span>75%</span></div>
+              <div class='mem-tier'><span>NVME</span><i></i><span>END</span></div>
+            </div>
+          </div>
+        </aside>
       )
     }
 
     <article class='body' data-pagefind-body={isDraft ? undefined : ''}>
       {
-        sections.length >= 2 && (
+        tocItems.length >= 2 && (
           <details class='toc-m'>
-            <summary class='mono'>
-              目录 · {sections.length} 节
-            </summary>
+            <summary class='mono'>目录 · {tocItems.length} 节</summary>
             <ol>
-              {sections.map((h, i) => (
-                <li>
+              {tocItems.map((h) => (
+                <li class:list={[h.sub && 'is-sub']}>
                   <a href={`#${h.slug}`}>
-                    <span class='mono'>{railLabels[i]}</span> {stripOwnNumber(h.text)}
+                    <span class='mono'>{h.label}</span> {stripOwnNumber(h.text)}
                   </a>
                 </li>
               ))}
@@ -186,19 +206,30 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
     })
   }
 
-  // Highlight the section being read in the left rail
+  // Highlight the section being read in the left rail + update Memory-Hierarchy progress
   const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-rail]'))
-  if (links.length) {
+  const memTiers = Array.from(document.querySelectorAll<HTMLElement>('#memTiers .mem-tier'))
+  const articleEl = document.querySelector<HTMLElement>('#content')
+  if (links.length || memTiers.length) {
     const targets = links
       .map((a) => document.getElementById(a.dataset.rail || ''))
       .filter(Boolean) as HTMLElement[]
     const setActive = (id: string) =>
       links.forEach((a) => a.classList.toggle('active', a.dataset.rail === id))
     const onScroll = () => {
-      const line = window.innerHeight * 0.3
-      let current = targets[0]?.id
-      for (const t of targets) if (t.getBoundingClientRect().top <= line) current = t.id
-      if (current) setActive(current)
+      if (targets.length) {
+        const line = window.innerHeight * 0.28
+        let current = targets[0]?.id
+        for (const t of targets) if (t.getBoundingClientRect().top <= line) current = t.id
+        if (current) setActive(current)
+      }
+      if (memTiers.length && articleEl) {
+        const rect = articleEl.getBoundingClientRect()
+        const total = Math.max(1, rect.height - window.innerHeight * 0.5)
+        const pct = Math.max(0, Math.min(1, (-rect.top + window.innerHeight * 0.25) / total))
+        const litCount = pct < 0.25 ? 1 : pct < 0.55 ? 2 : pct < 0.85 ? 3 : 4
+        memTiers.forEach((el, idx) => el.classList.toggle('lit', idx < litCount))
+      }
     }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -208,67 +239,108 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
 <style>
   .post {
     display: grid;
-    grid-template-columns: 9rem minmax(0, 46rem) minmax(0, 1fr);
-    gap: 3rem;
-    margin-top: 3.5rem;
+    grid-template-columns: 14.5rem minmax(0, 46rem) minmax(0, 1fr);
+    gap: 2.75rem;
+    margin-top: 2.5rem;
   }
   .post.no-rail {
-    grid-template-columns: 9rem minmax(0, 46rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 46rem);
+    justify-content: center;
   }
   .rail {
     position: sticky;
-    top: 0;
-    height: 100svh;
-    margin-top: -3.5rem;
-    display: flex;
-    align-items: center;
+    top: 4.75rem;
     align-self: start;
+    max-height: calc(100svh - 6rem);
+    overflow-y: auto;
+    padding-right: 1rem;
+    border-right: 1px solid hsl(var(--border));
+    scrollbar-width: thin;
+  }
+  .rail-head {
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    color: hsl(var(--faint));
+    margin-bottom: 0.75rem;
   }
   .rail ol {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 0.35rem;
+    gap: 0.42rem;
+  }
+  .rail li.is-sub {
+    padding-left: 0.85rem;
   }
   .rail a {
-    position: relative;
     display: flex;
     align-items: baseline;
-    gap: 0.6rem;
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    color: hsl(var(--faint));
+    gap: 0.5rem;
+    font-size: 0.76rem;
+    line-height: 1.4;
+    color: hsl(var(--muted-foreground));
     text-decoration: none;
   }
-  .rail .t {
-    max-width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    font-family: var(--font-body);
-    font-size: 0.75rem;
-    opacity: 0;
-    transition:
-      max-width 0.25s ease,
-      opacity 0.2s ease;
+  .rail li.is-sub a {
+    font-size: 0.72rem;
+    color: hsl(var(--faint));
   }
-  .rail a:hover .t,
-  .rail a:focus-visible .t,
-  .rail a.active .t {
-    max-width: 7.5rem;
-    opacity: 1;
+  .rail .n {
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    color: var(--c-l6, #fa6d01);
+    flex-shrink: 0;
+  }
+  .rail .t {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
   .rail a:hover,
   .rail a.active {
     color: hsl(var(--foreground));
+    font-weight: 500;
   }
-  .rail a.active .n {
-    color: hsl(var(--primary));
+  .mem-progress {
+    margin-top: 1.35rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid hsl(var(--border));
+    font-size: 0.58rem;
+    color: hsl(var(--faint));
+  }
+  .mem-head {
+    letter-spacing: 0.08em;
+    margin-bottom: 0.5rem;
+  }
+  .mem-tiers {
+    display: grid;
+    gap: 5px;
+  }
+  .mem-tier {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .mem-tier i {
+    flex: 1;
+    height: 3px;
+    background: hsl(var(--muted));
+    display: block;
+  }
+  .mem-tier.lit {
+    color: hsl(var(--foreground));
+  }
+  .mem-tier.lit i {
+    background: var(--c-l6, #fa6d01);
   }
   .body {
     grid-column: 2;
     min-width: 0;
+  }
+  .post.no-rail .body {
+    grid-column: 1;
   }
   .toc-m {
     display: none;

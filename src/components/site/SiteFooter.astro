@@ -63,59 +63,73 @@ const groups = [
     }
   </div>
   <div class='site-wrap footer-base mono'>
-    <span>© {year} Jerry Zhang</span>
-    <span>Built with Astro</span>
+    <span>© {year} Jerry Zhang · Built with Astro</span>
+    <span>
+      Craft inspired by
+      <a href='https://x.com/ayushsoni_io' target='_blank' rel='noopener'>@ayushsoni_io</a>
+      &amp;
+      <a href='https://github.com/elvarofficial/teardown' target='_blank' rel='noopener'>teardown</a>
+    </span>
   </div>
 </footer>
 
 <style>
   .site-footer {
     margin-top: 5rem;
-    border-top: var(--hair) solid hsl(var(--border));
+    background: #1d1d1d;
+    color: #f0f0ef;
+    border-top: 5px solid var(--c-l6, #fa6d01);
   }
   .footer-inner {
     display: grid;
     grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
     gap: 2rem;
-    padding-block: 2.5rem 2rem;
+    padding-block: 2.75rem 2.25rem;
   }
   .footer-brand {
     display: inline-flex;
     align-items: center;
     gap: 0.625rem;
-    font-family: var(--font-pixel);
-    font-weight: 600;
-    font-size: 1.35rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 1rem;
     text-decoration: none;
-    color: hsl(var(--foreground));
+    color: #ffffff;
   }
   .footer-id p {
-    margin: 0.5rem 0 0;
-    color: hsl(var(--muted-foreground));
-    font-size: 0.9rem;
+    margin: 0.6rem 0 0;
+    color: #a3a3a0;
+    font-size: 0.88rem;
+    line-height: 1.6;
   }
   .footer-id .motto {
-    color: hsl(var(--faint));
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    color: var(--c-l6, #fa6d01);
   }
   .footer-group h2 {
     margin: 0 0 0.75rem;
+    font-size: 0.68rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
     font-weight: 500;
-    color: hsl(var(--faint));
+    color: #7c7c78;
   }
   .footer-group ul {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
-    gap: 0.4rem;
+    gap: 0.45rem;
   }
   .footer-group a {
     text-decoration: none;
-    color: hsl(var(--muted-foreground));
-    font-size: 0.9rem;
+    color: #a3a3a0;
+    font-size: 0.88rem;
   }
   .footer-group a:hover {
-    color: hsl(var(--primary));
+    color: #ffffff;
   }
   .footer-base {
     display: flex;
@@ -123,8 +137,17 @@ const groups = [
     justify-content: space-between;
     gap: 0.5rem 1rem;
     padding-block: 1rem 2rem;
-    border-top: var(--hair) solid hsl(var(--border));
-    color: hsl(var(--faint));
+    border-top: 1px solid #30302e;
+    font-size: 0.72rem;
+    color: #7c7c78;
+  }
+  .footer-base a {
+    color: #b4b4b0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .footer-base a:hover {
+    color: #ffffff;
   }
   @media (max-width: 760px) {
     .footer-inner {

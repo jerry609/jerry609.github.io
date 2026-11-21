@@ -4,15 +4,22 @@
  * Order is top (closest to the agent) to bottom (closest to the math).
  */
 export const LAYERS = [
-  { id: 'agent', code: 'L6', name: 'Agent', zh: 'Harness · 上下文 · 工具调用' },
-  { id: 'runtime', code: 'L5', name: 'Runtime', zh: '沙箱 · 网关 · 隔离执行' },
-  { id: 'model', code: 'L4', name: 'Model', zh: 'Attention · KV Cache · 可解释性' },
-  { id: 'training', code: 'L3', name: 'Training', zh: 'RL · GRPO · KL 投影' },
-  { id: 'systems', code: 'L2', name: 'Systems', zh: 'FUSE · 构建 · 性能剖析' },
-  { id: 'math', code: 'L1', name: 'Math', zh: '概率 · 优化 · 线性模型' }
+  { id: 'agent', code: 'L6', name: 'Agent', zh: 'Harness · 上下文 · 工具调用', color: '#FA6D01', uiColor: '#FA6D01' },
+  { id: 'runtime', code: 'L5', name: 'Runtime', zh: '沙箱 · 网关 · 隔离执行', color: '#2B5CFF', uiColor: '#2B5CFF' },
+  { id: 'model', code: 'L4', name: 'Model', zh: 'Attention · KV Cache · 可解释性', color: '#DE99FE', uiColor: '#9A4CD1' },
+  { id: 'training', code: 'L3', name: 'Training', zh: 'RL · GRPO · KL 投影', color: '#F8E600', uiColor: '#CFAF00' },
+  { id: 'systems', code: 'L2', name: 'Systems', zh: 'FUSE · 构建 · 性能剖析', color: '#00CD6E', uiColor: '#009E54' },
+  { id: 'math', code: 'L1', name: 'Math', zh: '概率 · 优化 · 线性模型', color: '#108D47', uiColor: '#108D47' }
 ] as const
 
-export const NOTES_LAYER = { id: 'notes', code: '', name: '随笔', zh: '读书、年度总结与方法论' } as const
+export const NOTES_LAYER = {
+  id: 'notes',
+  code: '',
+  name: '随笔',
+  zh: '读书、年度总结与方法论',
+  color: '#7A7A77',
+  uiColor: '#7A7A77'
+} as const
 
 export const LAYER_IDS = ['agent', 'runtime', 'model', 'training', 'systems', 'math', 'notes'] as const
 export type LayerId = (typeof LAYER_IDS)[number]
@@ -23,6 +30,12 @@ export function layerLabel(id: string) {
   const layer = ALL_LAYERS.find((l) => l.id === id)
   if (!layer) return id
   return layer.code ? `${layer.code} ${layer.name}` : layer.name
+}
+
+export function layerColor(id: string, forLightUi = false) {
+  const layer = ALL_LAYERS.find((l) => l.id === id)
+  if (!layer) return '#FA6D01'
+  return forLightUi ? layer.uiColor : layer.color
 }
 
 /** Source types a post can declare in frontmatter (`source.kind`). */

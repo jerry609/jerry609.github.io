@@ -1,0 +1,150 @@
+---
+/**
+ * Architectural AI Accelerator Systolic Array & HBM3e↔SRAM Fabric backdrop for the Hero.
+ * Flat Swiss spot-print colors, discrete hardware clock cadence, respects prefers-reduced-motion.
+ */
+---
+
+<div class='hero-fabric' aria-hidden='true'>
+  <canvas id='heroFabricCanvas'></canvas>
+  <span class='fabric-stamp mono'>SYSTOLIC FABRIC · GPU / NPU CUBE ARRAY · HBM3E ↔ SRAM</span>
+</div>
+
+<script>
+  const canvas = document.getElementById('heroFabricCanvas') as HTMLCanvasElement | null
+  if (canvas) {
+    const ctx = canvas.getContext('2d')!
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let tick = 14
+    let visible = true
+
+    const resize = () => {
+      const r = canvas.parentElement!.getBoundingClientRect()
+      if (!r.width) return
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.floor(r.width * dpr)
+      canvas.height = Math.floor(r.height * dpr)
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    const draw = (t: number) => {
+      const r = canvas.parentElement!.getBoundingClientRect()
+      if (!r.width) return
+      const W = r.width
+      const H = r.height
+      const isDark = document.documentElement.classList.contains('dark')
+      ctx.clearRect(0, 0, W, H)
+
+      const cell = 36
+      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(23,23,22,0.05)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      for (let x = 0; x <= W; x += cell) {
+        ctx.moveTo(x + 0.5, 0)
+        ctx.lineTo(x + 0.5, H)
+      }
+      for (let y = 0; y <= H; y += cell) {
+        ctx.moveTo(0, y + 0.5)
+        ctx.lineTo(W, y + 0.5)
+      }
+      ctx.stroke()
+
+      const bandH = Math.min(200, H * 0.48)
+      const baseY = H - bandH
+      const cols = Math.ceil(W / cell)
+      const rows = Math.ceil(bandH / cell)
+      const wavePos = (t * 0.14) % (cols + rows + 10)
+
+      ;[baseY + 22, baseY + 88, baseY + 152].forEach((by, idx) => {
+        if (by > H - 10) return
+        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(23,23,22,0.1)'
+        ctx.beginPath()
+        ctx.moveTo(0, by + 0.5)
+        ctx.lineTo(W, by + 0.5)
+        ctx.stroke()
+        const dir = idx % 2 === 0 ? 1 : -1
+        ctx.fillStyle = idx === 0 ? '#2B5CFF' : idx === 1 ? '#FA6D01' : '#00CD6E'
+        for (let p = 0; p < 5; p++) {
+          const raw = (((t * 1.4 * dir + p * (W / 5)) % W) + W) % W
+          ctx.fillRect(raw, by - 2, 18, 4)
+        }
+      })
+
+      const inks = ['#DE99FE', '#FA6D01', '#2B5CFF', '#00CD6E', '#F8E600']
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const edge = Math.sin(col * 0.28) * 1.3 + row * 0.9
+          if (edge < 0.65) continue
+          const x = col * cell + 5
+          const y = baseY + row * cell + 5
+          const sz = cell - 10
+          ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(23,23,22,0.09)'
+          ctx.strokeRect(x + 0.5, y + 0.5, sz, sz)
+          const d = Math.abs(col + row * 1.4 - wavePos)
+          if (d < 1.35) {
+            ctx.fillStyle = inks[(col + row) % inks.length]
+            ctx.globalAlpha = isDark ? 0.52 : 0.68
+            ctx.fillRect(x + 2, y + 2, sz - 4, sz - 4)
+            ctx.globalAlpha = 1
+          }
+        }
+      }
+    }
+
+    new IntersectionObserver((es) => {
+      visible = es[0]?.isIntersecting ?? true
+    }).observe(canvas.parentElement!)
+
+    resize()
+    new ResizeObserver(() => {
+      resize()
+      draw(tick)
+    }).observe(canvas.parentElement!)
+
+    if (reduce) {
+      draw(tick)
+    } else {
+      let last = 0
+      const loop = (ts: number) => {
+        if (visible && ts - last >= 50) {
+          last = ts
+          tick += 0.75
+          draw(tick)
+        }
+        requestAnimationFrame(loop)
+      }
+      requestAnimationFrame(loop)
+    }
+  }
+</script>
+
+<style>
+  .hero-fabric {
+    position: absolute;
+    inset: -1.5rem calc(50% - 50vw) 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  #heroFabricCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .fabric-stamp {
+    position: absolute;
+    right: max(1.25rem, calc((100vw - 72rem) / 2 + 1.75rem));
+    bottom: 6px;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    color: hsl(var(--faint));
+    background: hsl(var(--background) / 0.88);
+    padding: 2px 7px;
+    border: 1px solid hsl(var(--border));
+  }
+  @media (max-width: 720px) {
+    .fabric-stamp {
+      display: none;
+    }
+  }
+</style>

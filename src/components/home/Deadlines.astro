@@ -178,24 +178,32 @@ const fmt = (t: number) => new Date(t).toISOString().slice(5, 10)
 
 <style>
   .deadlines {
-    border: var(--hair) solid hsl(var(--border));
-    border-radius: var(--radius-box);
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 2px;
     background: hsl(var(--card));
   }
   .dl-head {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.55rem 1rem;
-    border-bottom: var(--hair) solid hsl(var(--border));
+    padding: 0.55rem 1.1rem;
+    border-bottom: 1px solid hsl(var(--border));
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
   .k {
-    color: hsl(var(--muted-foreground));
+    color: hsl(var(--foreground));
+    font-size: 0.7rem;
+    font-weight: 500;
+  }
+  .k::before {
+    content: '■ ';
+    color: var(--c-l6, #fa6d01);
   }
   .src {
     color: hsl(var(--faint));
     text-decoration: none;
-    font-size: 0.72rem;
+    font-size: 0.68rem;
   }
   .src:hover {
     color: hsl(var(--primary));
@@ -206,11 +214,31 @@ const fmt = (t: number) => new Date(t).toISOString().slice(5, 10)
   }
   .cell {
     display: grid;
-    gap: 0.15rem;
-    padding: 0.75rem 1rem 0.8rem;
+    gap: 0.2rem;
+    padding: 0.9rem 1.1rem 0.95rem;
     text-decoration: none;
     color: inherit;
-    border-left: var(--hair) solid hsl(var(--border));
+    border-left: 1px solid hsl(var(--border));
+    position: relative;
+  }
+  .cell::after {
+    content: '';
+    position: absolute;
+    top: 0.95rem;
+    right: 1rem;
+    width: 7px;
+    height: 7px;
+    background: var(--c-l2, #00cd6e);
+  }
+  .cell.open::after,
+  .cell.soon::after {
+    background: var(--c-l6, #fa6d01);
+  }
+  .cell.review::after {
+    background: var(--c-l5, #2b5cff);
+  }
+  .cell.closed::after {
+    background: #9a9a97;
   }
   .cell:first-child {
     border-left: 0;
@@ -220,18 +248,21 @@ const fmt = (t: number) => new Date(t).toISOString().slice(5, 10)
     color: inherit;
   }
   .name {
-    color: hsl(var(--foreground));
+    color: hsl(var(--muted-foreground));
+    font-size: 0.74rem;
   }
   .yr {
     color: hsl(var(--faint));
   }
   .left {
-    font-size: 1.6rem;
-    line-height: 1.1;
+    font-size: 1.9rem;
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
     color: hsl(var(--foreground));
   }
   .when {
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     color: hsl(var(--faint));
   }
   .cell.review .left,
@@ -239,10 +270,10 @@ const fmt = (t: number) => new Date(t).toISOString().slice(5, 10)
     color: hsl(var(--faint));
   }
   .cell.soon .left {
-    color: hsl(var(--primary));
+    color: var(--c-l6, #fa6d01);
   }
   .cell.soon {
-    box-shadow: inset 0 -2px 0 hsl(var(--scarf));
+    box-shadow: inset 0 -3px 0 var(--c-l6, #fa6d01);
   }
   @media (max-width: 640px) {
     .cells {
@@ -252,7 +283,7 @@ const fmt = (t: number) => new Date(t).toISOString().slice(5, 10)
       border-left: 0;
     }
     .cell:nth-child(n + 3) {
-      border-top: var(--hair) solid hsl(var(--border));
+      border-top: 1px solid hsl(var(--border));
     }
   }
 </style>

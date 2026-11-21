@@ -1,7 +1,7 @@
 ---
 import type { CollectionEntry } from 'astro:content'
 
-import { layerLabel, SERIES } from '@/data/stack'
+import { layerColor, layerLabel, SERIES } from '@/data/stack'
 
 interface Props {
   post: CollectionEntry<'blog'>
@@ -21,7 +21,7 @@ const next = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : undefined
   series && (
     <nav class='series-nav' id='series-nav' aria-label={`连载：${series.title}`}>
       <p class='mono head'>
-        <span>{layerLabel(series.layer)} · 连载</span>
+        <span class='head-layer'><i class='sq-dot' style={`background:${layerColor(series.layer, true)}`} aria-hidden='true' />{layerLabel(series.layer)} · 连载</span>
         <span>
           {items.length}
           {'planned' in series && series.planned ? ` / ${series.planned} ${series.unit}` : ' 篇'}
@@ -75,11 +75,17 @@ const next = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : undefined
     color: hsl(var(--faint));
     margin: 0;
   }
+  .head-layer {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
   h2 {
     font-family: var(--font-display);
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin: 0.375rem 0 0.75rem;
+    font-size: 1.35rem;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    margin: 0.4rem 0 0.85rem;
     color: hsl(var(--foreground));
   }
   ol {
@@ -120,17 +126,19 @@ const next = idx >= 0 && idx < items.length - 1 ? items[idx + 1] : undefined
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
-    padding: 0.75rem 0.875rem;
-    border: var(--hair) solid hsl(var(--border));
-    border-radius: var(--radius);
+    padding: 0.75rem 0.9rem;
+    border: 1.5px solid hsl(var(--foreground) / 0.24);
+    border-radius: 0;
     background: hsl(var(--card));
     text-decoration: none;
     color: hsl(var(--foreground));
     font-size: 0.9rem;
+    font-weight: 500;
     line-height: 1.5;
+    transition: border-color var(--t-fast);
   }
   .pn a:hover {
-    border-color: hsl(var(--primary) / 0.5);
+    border-color: hsl(var(--primary));
   }
   .pn .mono {
     color: hsl(var(--faint));

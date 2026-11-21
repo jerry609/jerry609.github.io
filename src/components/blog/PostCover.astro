@@ -2,7 +2,7 @@
 import { Image } from 'astro:assets'
 import type { CollectionEntry } from 'astro:content'
 
-import { LAYERS } from '@/data/stack'
+import { LAYERS, layerColor } from '@/data/stack'
 import type { Cover } from '@/utils/cover'
 
 interface Props {
@@ -17,6 +17,7 @@ const { post, cover, size = 'md', eager = false } = Astro.props
 const { heroImage, layer, title } = post.data
 const L = LAYERS.find((l) => l.id === layer)
 const lit = LAYERS.findIndex((l) => l.id === layer)
+const accent = layerColor(layer)
 
 // Pixel texture: a 14×6 field of cells switched on by the seed
 const cells: { x: number; y: number }[] = []
@@ -30,7 +31,7 @@ const len = [...cover.label].length
 const fit = len <= 6 ? 'xl' : len <= 10 ? 'l' : len <= 14 ? 'm' : 's'
 ---
 
-<div class:list={['cover', `cover-${cover.variant}`, `cover-${size}`]} aria-hidden='true'>
+<div class:list={['cover', `cover-${cover.variant}`, `cover-${size}`]} style={`--c-accent:${accent}`} aria-hidden='true'>
   {
     heroImage ? (
       <Image
@@ -80,28 +81,30 @@ const fit = len <= 6 ? 'xl' : len <= 10 ? 'l' : len <= 14 ? 'm' : 's'
     height: 100%;
     object-fit: cover;
   }
-  /* Covers are artwork: fixed colours in both themes */
+  /* Covers are artwork: fixed Swiss print colours in both themes */
   .cover-night {
-    --c-bg: #0f1215;
-    --c-fg: #e6e9ec;
-    --c-dim: #7d8792;
-    --c-line: rgb(255 255 255 / 0.07);
+    --c-bg: #1d1d1d;
+    --c-fg: #f0f0ef;
+    --c-dim: #8a8a86;
+    --c-line: rgb(255 255 255 / 0.06);
     --c-tex: rgb(255 255 255 / 0.06);
+    box-shadow: inset 0 0 0 1.5px #020100;
   }
   .cover-paper {
-    --c-bg: #f3f5f7;
-    --c-fg: #12161b;
-    --c-dim: #66707c;
-    --c-line: rgb(18 22 27 / 0.06);
-    --c-tex: rgb(18 22 27 / 0.06);
-    box-shadow: inset 0 0 0 1px #dfe3e8;
+    --c-bg: #f2f2f0;
+    --c-fg: #171716;
+    --c-dim: #6d6d6d;
+    --c-line: rgb(23 23 22 / 0.06);
+    --c-tex: rgb(23 23 22 / 0.06);
+    box-shadow: inset 0 0 0 1.5px #171716;
   }
   .cover-mist {
-    --c-bg: #dfe3e8;
-    --c-fg: #12161b;
-    --c-dim: #525c68;
-    --c-line: rgb(18 22 27 / 0.07);
-    --c-tex: rgb(18 22 27 / 0.08);
+    --c-bg: #f4f3e6;
+    --c-fg: #171716;
+    --c-dim: #50504e;
+    --c-line: rgb(23 23 22 / 0.06);
+    --c-tex: rgb(23 23 22 / 0.07);
+    box-shadow: inset 0 0 0 1.5px #171716;
   }
   .cover {
     background:
@@ -148,7 +151,7 @@ const fit = len <= 6 ? 'xl' : len <= 10 ? 'l' : len <= 14 ? 'm' : 's'
     opacity: 0.45;
   }
   .stack i.on {
-    background: #d4652a;
+    background: var(--c-accent, #fa6d01);
     opacity: 1;
     transform: translateX(-2cqw);
   }
@@ -158,9 +161,9 @@ const fit = len <= 6 ? 'xl' : len <= 10 ? 'l' : len <= 14 ? 'm' : 's'
     right: 5.5cqw;
     bottom: 5cqw;
     font-family: var(--font-body);
-    font-weight: 700;
-    letter-spacing: -0.045em;
-    line-height: 0.92;
+    font-weight: 500;
+    letter-spacing: -0.035em;
+    line-height: 0.96;
     overflow-wrap: anywhere;
   }
   .fit-xl {

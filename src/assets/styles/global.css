@@ -51,13 +51,14 @@ span.katex-display {
   padding-inline-start: 0.5rem;
 }
 
-/* Shiki */
+/* Shiki: crisp obsidian framed code blocks (Ayush Soni print-craft) */
 .astro-code {
-  margin-top: 1.4rem;
-  margin-bottom: 1.4rem;
-  border-radius: 3px;
-  border: var(--hair) solid hsl(var(--border));
-  background-color: hsl(var(--card)) !important;
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+  border-radius: 2px;
+  border: 1.5px solid var(--ink-hard, #171716);
+  background-color: #171716 !important;
+  color: #e8e8e4;
   font-size: 0.84em;
   line-height: 1.7;
 
@@ -86,18 +87,21 @@ span.katex-display {
         bottom: 0;
         content: '';
         display: block;
-        background-color: hsl(var(--card));
-        border-right: var(--hair) solid hsl(var(--border));
+        background-color: #171716;
+        border-right: 1px solid #2d2d2b;
         z-index: 1;
       }
       & .line {
         padding-inline-end: 3rem;
+        & span {
+          color: var(--shiki-dark, #e8e8e4) !important;
+        }
         &::before {
           position: sticky;
           content: counter(step);
           counter-increment: step;
-          color: hsl(var(--faint) / 0.7);
-          background-color: hsl(var(--card));
+          color: #676764;
+          background-color: #171716;
           font-size: 0.85em;
           inset-inline-start: 0;
           justify-content: end;
@@ -129,29 +133,34 @@ span.katex-display {
     position: absolute;
     top: 0;
     left: 0;
-    margin: 0.5rem;
+    margin: 0.5rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: #9a9a97;
   }
   & .language {
     transition: opacity 0.3s;
     position: absolute;
-    top: 0.55rem;
-    right: 0.25rem;
+    top: 0.5rem;
+    right: 0.65rem;
     background: transparent !important;
     font-family: var(--font-mono);
     font-size: 0.65rem !important;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: hsl(var(--faint)) !important;
+    color: #8a8a86 !important;
   }
   & button.copy {
     transition: opacity 0.3s;
     opacity: 0;
     position: absolute;
-    top: 0.45rem;
+    top: 0.42rem;
     right: 0.5rem;
     user-select: none;
-    border-radius: 3px;
-    background: hsl(var(--card)) !important;
+    border-radius: 2px;
+    background: #252524 !important;
+    border: 1px solid #3c3c39 !important;
+    color: #e8e8e4 !important;
 
     & .success::before {
       content: 'Copied!';
@@ -255,30 +264,32 @@ body::-webkit-scrollbar {
 
 /* Callouts: > [!TAKEAWAY] / > [!THEOREM] 4.5 / > [!NOTE] (src/plugins/rehype-callouts.ts) */
 .prose aside.callout {
-  margin: 1.5rem 0;
-  padding: 0.75rem 1rem 0.25rem;
-  border: var(--hair) solid hsl(var(--border));
-  border-radius: var(--radius);
+  margin: 1.65rem 0;
+  padding: 1rem 1.25rem 0.65rem;
+  border: 1.5px solid var(--ink-hard, #171716);
+  border-radius: 2px;
+  background: hsl(var(--card));
   font-style: normal;
   quotes: none;
 }
 .prose aside.callout > :last-child {
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.5rem;
 }
 .prose aside.callout p {
-  margin: 0.35rem 0;
+  margin: 0.4rem 0;
 }
 .prose .callout-head {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 0.6rem;
   align-items: baseline;
-  margin: 0 0 0.25rem !important;
+  margin: 0 0 0.45rem !important;
 }
 .prose .callout-label {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: hsl(var(--muted-foreground));
 }
@@ -286,32 +297,39 @@ body::-webkit-scrollbar {
   font-weight: 600;
   color: hsl(var(--foreground));
 }
-/* Systems-paper takeaway: surface + scarf rule */
+/* Systems-paper takeaway: crisp signal-orange accent rule */
 .prose .callout-takeaway {
   background: hsl(var(--card));
-  box-shadow: inset 3px 0 0 hsl(var(--scarf));
+  border-left: 4px solid var(--c-l6, #fa6d01);
 }
 .prose .callout-takeaway .callout-label {
-  color: hsl(var(--primary));
+  color: var(--c-l6, #fa6d01);
 }
-/* ML-paper formal statement: sunken + serif */
+/* ML-paper formal statement / theorem box: framed card + signal-orange rule */
 .prose .callout-formal {
-  background: hsl(var(--muted));
-  font-family: var(--font-display);
+  background: hsl(var(--card));
+  border-left: 4px solid var(--c-l6, #fa6d01);
+  font-family: var(--font-body);
+}
+.prose .callout-formal .callout-label {
+  color: var(--c-l6, #fa6d01);
 }
 .prose .callout-formal .callout-title {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
 }
 .prose .callout-note {
   background: hsl(var(--card));
-  box-shadow: inset 3px 0 0 hsl(var(--info));
+  border-left: 4px solid var(--c-l5, #2b5cff);
+}
+.prose .callout-note .callout-label {
+  color: var(--c-l5, #2b5cff);
 }
 .prose .callout-warn {
   background: hsl(var(--card));
-  box-shadow: inset 3px 0 0 hsl(var(--warning));
+  border-left: 4px solid var(--c-l3-ui, #cfaf00);
 }
 .prose .callout-warn .callout-label {
-  color: hsl(var(--warning));
+  color: var(--c-l3-ui, #cfaf00);
 }
 
 /* ---------- Post template (src/layouts/BlogPost.astro) ---------- */
@@ -320,10 +338,10 @@ body::-webkit-scrollbar {
 }
 /* Lead paragraph */
 .post-prose > p:first-of-type {
-  font-size: 1.2rem;
-  line-height: 1.75;
+  font-size: 1.12rem;
+  line-height: 1.8;
   color: hsl(var(--foreground));
-  margin-bottom: 1.6em;
+  margin-bottom: 1.5em;
 }
 /* Posts that number their own sections keep the rule but drop the "01" label */
 .post-prose h2.h2-own::before {
@@ -332,34 +350,50 @@ body::-webkit-scrollbar {
   background-position: 0 50%;
   background-size: 100% 1px;
 }
+/* Leading Markdown H1 duplicates the PostHero headline */
+.post-prose > h1:first-child {
+  display: none;
+}
+.post-prose > h1:first-child + * {
+  margin-top: 0;
+}
 /* Section labels: "01 ———" above every h2 */
 .post-prose h2 {
   counter-increment: sec;
-  margin-top: 3.25em;
+  margin-top: 3rem;
   font-family: var(--font-body);
-  font-size: 1.75em;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
+  font-size: 1.65em;
+  font-weight: 400;
+  letter-spacing: -0.026em;
+  line-height: 1.24;
 }
 .post-prose h2::before {
   content: counter(sec, decimal-leading-zero);
   display: flex;
   align-items: center;
   gap: 0.9rem;
-  margin-bottom: 1.1rem;
+  margin-bottom: 0.9rem;
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 400;
+  font-size: 0.7rem;
+  font-weight: 500;
   letter-spacing: 0.08em;
-  color: hsl(var(--faint));
-  background: linear-gradient(hsl(var(--border)), hsl(var(--border))) 2.4rem 50% / calc(100% - 2.4rem) 1px no-repeat;
+  color: var(--c-l6, #fa6d01);
+  background: linear-gradient(hsl(var(--border)), hsl(var(--border))) 2.2rem 50% / calc(100% - 2.2rem) 1px no-repeat;
 }
 .post-prose h3 {
   font-family: var(--font-body);
-  font-weight: 600;
+  font-size: 1.18em;
+  font-weight: 500;
   letter-spacing: -0.015em;
-  margin-top: 2.2em;
+  margin-top: 2.1em;
+}
+/* Display math boxes in articles */
+.post-prose span.katex-display {
+  margin: 1.15rem 0;
+  padding: 0.75rem 1rem;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 2px;
 }
 /* Tables: mono uppercase heads, hairlines, no zebra */
 .post-prose table {

@@ -215,17 +215,19 @@ const first = bubbles[0]
     padding: 2.5rem 0 1.5rem;
   }
   .mouse-stage {
-    padding: 1.5rem 2.5rem 1rem 1.5rem;
-    border: var(--hair) solid hsl(var(--border));
-    border-radius: var(--radius-box);
-    background:
-      radial-gradient(hsl(var(--border)) 1px, transparent 1px) 0 0 / 9px 9px,
-      hsl(var(--card));
+    padding: 1.35rem 2.25rem 0.9rem 1.35rem;
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 0;
+    box-shadow: inset 0 0 0 10px var(--c-l1, #108d47);
+    background: var(--cream, #f4f3e6);
   }
   .eyebrow {
     display: flex;
     gap: 0.75rem;
     margin: 0;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: hsl(var(--muted-foreground));
   }
   .eyebrow span + span::before {
@@ -234,57 +236,46 @@ const first = bubbles[0]
     color: hsl(var(--faint));
   }
   h1 {
-    margin: 0.6rem 0 1.25rem;
-    font-size: clamp(2.25rem, 5vw, 3.25rem);
-    font-weight: 600;
-    letter-spacing: -0.035em;
+    margin: 0.6rem 0 1.1rem;
+    font-size: clamp(2.15rem, 4.6vw, 3.1rem);
+    font-weight: 400;
+    letter-spacing: -0.032em;
     line-height: 1.05;
   }
   h1 small {
-    font-size: 0.38em;
-    font-weight: 500;
+    font-size: 0.4em;
+    font-weight: 400;
     letter-spacing: 0;
     color: hsl(var(--muted-foreground));
     margin-left: 0.6rem;
-    vertical-align: 0.4em;
+    vertical-align: 0.35em;
   }
   .bubble {
     position: relative;
     margin: 0;
-    max-width: 38rem;
-    padding: 1rem 1.2rem 0.8rem;
-    border: var(--hair) solid hsl(var(--foreground) / 0.7);
-    border-radius: 3px;
-    background: hsl(var(--card));
+    max-width: 40rem;
+    padding: 1.15rem 1.3rem 0.9rem;
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-left: 5px solid var(--c-l6, #fa6d01);
+    border-radius: 0;
+    background: var(--cream, #f4f3e6);
+    color: #171716;
   }
-  /* Speech-bubble tail pointing at the mouse */
   .bubble::before,
   .bubble::after {
-    content: '';
-    position: absolute;
-    left: -9px;
-    top: 1.4rem;
-    border: 9px solid transparent;
-    border-left: 0;
-  }
-  .bubble::before {
-    border-right-color: hsl(var(--foreground) / 0.7);
-    left: -10px;
-  }
-  .bubble::after {
-    border-right-color: hsl(var(--card));
+    display: none;
   }
   .bubble blockquote {
     margin: 0;
-    min-height: 3.4em;
-    font-size: 1.05rem;
+    min-height: 3.2em;
+    font-size: 1.04rem;
     line-height: 1.7;
-    color: hsl(var(--foreground));
+    color: #171716;
   }
   .bubble blockquote.typing::after {
     content: '▍';
     margin-left: 1px;
-    color: hsl(var(--scarf));
+    color: var(--c-l6, #fa6d01);
     animation: blink 0.8s steps(1) infinite;
   }
   @keyframes blink {
@@ -299,7 +290,7 @@ const first = bubbles[0]
     gap: 0.5rem 1rem;
     margin-top: 0.75rem;
     font-size: 0.7rem;
-    color: hsl(var(--faint));
+    color: #50504e;
   }
   .actions {
     display: flex;
@@ -308,19 +299,19 @@ const first = bubbles[0]
   .actions a,
   .actions button {
     font: inherit;
-    letter-spacing: 0.04em;
-    color: hsl(var(--foreground));
+    letter-spacing: 0.05em;
+    color: #171716;
     background: transparent;
-    border: var(--hair) solid hsl(var(--foreground) / 0.5);
-    border-radius: var(--radius);
-    padding: 0.15rem 0.5rem;
+    border: 1px solid #171716;
+    border-radius: 2px;
+    padding: 0.2rem 0.55rem;
     text-decoration: none;
     cursor: pointer;
   }
   .actions a:hover,
   .actions button:hover {
-    border-color: hsl(var(--scarf));
-    color: hsl(var(--primary));
+    background: #171716;
+    color: #f4f3e6;
   }
   .keys {
     font-size: 0.7rem;

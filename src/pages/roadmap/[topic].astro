@@ -329,15 +329,15 @@ const DIFF: Record<string, string> = { easy: 'E', medium: 'M', hard: 'H' }
   .summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.4fr);
-    border: var(--hair) solid hsl(var(--border));
-    border-radius: var(--radius-box);
+    border: 1.5px solid hsl(var(--foreground));
+    border-radius: 0;
     background: hsl(var(--card));
     margin-bottom: 2rem;
   }
   .summary > div {
     display: grid;
     gap: 0.15rem;
-    padding: 0.7rem 1rem;
+    padding: 0.75rem 1rem;
     border-left: var(--hair) solid hsl(var(--border));
   }
   .summary > div:first-child {
@@ -352,6 +352,7 @@ const DIFF: Record<string, string> = { easy: 'E', medium: 'M', hard: 'H' }
   }
   .summary b {
     font-size: 1.5rem;
+    font-weight: 400;
     line-height: 1.15;
   }
   .spark {

@@ -5,11 +5,13 @@ import { getBlogCollection } from 'astro-pure/server'
 import PageLayout from '@/layouts/BaseLayout.astro'
 import PixelMouse from '@/components/brand/PixelMouse.astro'
 import Deadlines from '@/components/home/Deadlines.astro'
+import HeroFabric from '@/components/home/HeroFabric.astro'
 import NowPlaying from '@/components/home/NowPlaying.astro'
 import Publications from '@/components/home/Publications.astro'
 import StackTrace from '@/components/home/StackTrace.astro'
+import TeardownBench from '@/components/home/TeardownBench.astro'
 import WritingIndex from '@/components/home/WritingIndex.astro'
-import { layerLabel, SERIES } from '@/data/stack'
+import { layerColor, layerLabel, SERIES } from '@/data/stack'
 
 const allPosts = (await getBlogCollection('blog')) as CollectionEntry<'blog'>[]
 const byDate = [...allPosts].sort(
@@ -22,11 +24,11 @@ const research = [
   { layer: 'runtime', text: '运行时：沙箱隔离（容器、microVM）、工具网关，以及并发下的正确性。' },
   { layer: 'model', text: '模型机制：Attention、KV Cache 的压缩与检索、稀疏自编码器与可解释性。' },
   { layer: 'training', text: '后训练：策略梯度、PPO 与 GRPO，用 KL 投影统一看 SFT 和 RL。' },
-  { layer: 'systems', text: '系统：FUSE 虚拟文件系统、Monorepo 与 Buck2 构建、性能剖析。' }
+  { layer: 'systems', text: '系统与加速：GPU/NPU 算子优化、FUSE 虚拟文件系统、Monorepo 与 Buck2 构建、性能剖析。' }
 ]
 
 const news = [
-  { date: '2026-11', text: '网站改版：文章按 Agent × Infra 的六层栈重新组织，戴耳机的小白鼠住进来了。' },
+  { date: '2026-11', text: '网站升级：引入 3D AI 加速器 Teardown 机台与瑞士专色六层栈设计体系。' },
   {
     date: '2026-06',
     text: '「形式化建模」两篇：SFT 是前向 KL 投影，RL 是 reward-tilting 与 KL 正则投影。',
@@ -60,63 +62,138 @@ const news = [
   { date: '2025-11', text: '博客从 Hexo 迁移到 Astro。' }
 ]
 
+const seriesMeta: Record<string, { mat: string; dark: boolean; captionA: string; captionB: string }> = {
+  attention: { mat: '#DE99FE', dark: false, captionA: 'CAUSAL MASK', captionB: 'SOFTMAX SIMPLEX' },
+  rl: { mat: '#FA6D01', dark: true, captionA: 'REWARD-TILTED', captionB: 'KL PROJECTION' },
+  'coding-agent': { mat: '#2B5CFF', dark: false, captionA: 'HARNESS LOOP', captionB: 'TOOL GATEWAY' },
+  fuse: { mat: '#00CD6E', dark: true, captionA: 'KERNEL / USER', captionB: 'ASYNC IO TRACE' }
+}
+
 const series = SERIES.map((s) => {
   const posts = s.slugs.map((x) => bySlug[x]).filter(Boolean)
   const dates = posts.map((p) => p.data.publishDate.toISOString().slice(0, 7)).sort()
   const span = dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]} → ${dates[dates.length - 1]}`
-  return { ...s, posts, span }
+  const style = seriesMeta[s.id] ?? { mat: layerColor(s.layer), dark: false, captionA: 'SERIES', captionB: 'TRACK' }
+  return { ...s, posts, span, ...style }
 })
 ---
 
 <PageLayout meta={{ title: '首页' }}>
+  <!-- Hidden SVG Filter: 10fps Stepped Risograph Boil (0.mp4 DESSN craft) -->
+  <svg width='0' height='0' style='position:absolute' aria-hidden='true'>
+    <defs>
+      <filter id='riso-boil' x='-8%' y='-8%' width='116%' height='116%'>
+        <feTurbulence id='riso-turb' type='fractalNoise' baseFrequency='0.022' numOctaves='2' seed='2' result='n' />
+        <feDisplacementMap in='SourceGraphic' in2='n' scale='1.4' xChannelSelector='R' yChannelSelector='G' />
+      </filter>
+    </defs>
+  </svg>
+
   <main class='home'>
-    {/* Intro */}
-    <section class='intro'>
-      <figure class='stage' aria-label='头像：戴耳机听歌的小白鼠'>
-        <div class='stage-bar mono'>
-          <span class='dots' aria-hidden='true'><i></i><i></i><i></i></span>
-          <span>~/jerry609</span>
-          <span class='stage-state'>♪ playing</span>
+    {/* Hero: Systolic Fabric Backdrop + Asymmetric Editorial + DESSN Mouse + NowPlaying Window */}
+    <section class='hero'>
+      <HeroFabric />
+
+      <div class='hero-top'>
+        <div class='hero-left'>
+          <p class='mono who'>
+            <span class='sq-dot' style='background:var(--c-l6)' aria-hidden='true' />
+            <span>JERRY ZHANG</span><span>UCAS · IIE</span><span>BEIJING</span>
+          </p>
+          <h1>
+            Agent × Infra<br />全栈研究笔记。
+            <span class='sub-en'>AI Accelerators, LLM Training Infra, Sandbox Runtimes &amp; Agent Harness.</span>
+          </h1>
+          <div class='hw-tags'>
+            <span class='hw-pill mono'><span class='sq-dot' style='background:var(--c-l6)' />GPU / NPU KERNELS</span>
+            <span class='hw-pill mono'><span class='sq-dot' style='background:var(--c-l5)' />HPC &amp; DISTRIBUTED SYS</span>
+            <span class='hw-pill mono'><span class='sq-dot' style='background:var(--c-l3)' />LLM POST-TRAINING</span>
+            <span class='hw-pill mono'><span class='sq-dot' style='background:var(--c-l2)' />FUSE / RUNTIME</span>
+          </div>
         </div>
-        <div class='stage-body'>
-          <PixelMouse animated px={9} class='mascot' />
-          <span class='shadow' aria-hidden='true'></span>
+
+        <div class='hero-right'>
+          <p class='hero-lead'>
+            按 <strong>L6 Agent → L1 Math</strong> 六层栈记录从 GPU/NPU 算子与分布式训练底座、FUSE 文件系统与沙箱运行时，到模型机制与 Agent Harness 的源码拆解与第一性原理推导。
+          </p>
+          <div class='cta-row'>
+            <a class='cta cta-solid mono' href='#teardown-lab'>3D TEARDOWN &gt;</a>
+            <a class='cta cta-ghost mono' href='https://github.com/jerry609' target='_blank' rel='noopener'>GITHUB ↗</a>
+            <a class='cta cta-ghost mono' href='/blog'>WRITING</a>
+            <a class='cta cta-ghost mono' href='/rss.xml'>RSS</a>
+          </div>
+          <blockquote class='pg'>
+            <p>
+              “所以，你要做的，就是增加自己被运气青睐的概率……终极大奖就是寻找到缝隙中那根有可能生长出来的枝杈。你发现了知识表层的裂缝，将它破开，而后洞见了一个崭新的世界。”
+            </p>
+            <footer class='mono'>— PAUL GRAHAM · 保罗·格雷厄姆</footer>
+          </blockquote>
         </div>
-      </figure>
-      <div class='intro-text'>
-        <p class='mono who'>
-          <span>jerry609</span><span>UCAS · IIE</span><span>Beijing</span>
-        </p>
-        <h1>Jerry Zhang</h1>
-        <blockquote class='pg'>
-          <p>所以，你要做的，就是增加自己被运气青睐的概率。而增加的方式，正是保持好奇心。尝试更多事、见更多人、读更多书、问更多问题。</p>
-          <p>终极大奖就是寻找到缝隙中那根有可能生长出来的枝杈。你发现了知识表层的裂缝，将它破开，而后洞见了一个崭新的世界。</p>
-          <footer>—— 保罗·格雷厄姆 (Paul Graham)</footer>
-        </blockquote>
-        <p class='links mono'>
-          <a href='https://github.com/jerry609' target='_blank' rel='noopener'>GitHub ↗</a>
-          <a href='/blog'>Writing</a>
-          <a href='/rss.xml'>RSS</a>
-        </p>
+      </div>
+
+      <div class='hero-horizon'>
+        {/* DESSN Botanical-Green Framed Pixel Mouse (uses Jerry's real PixelMouse sprite!) */}
+        <figure class='dessn-mat' aria-label='头像：戴耳机听歌的小白鼠'>
+          <div class='dessn-card'>
+            <div class='dessn-bar mono'>
+              <span>~/jerry609</span>
+              <span class='dessn-live'>♪ PLAYING</span>
+            </div>
+            <div class='dessn-stage'>
+              <svg class='dessn-stripes' viewBox='0 0 320 260' preserveAspectRatio='none' aria-hidden='true'>
+                <g class='dessn-stripes-g boil-layer' fill='#E3E1D4'>
+                  <path d='M10,0 Q26,65 8,130 T14,260 L44,260 Q60,195 42,130 T48,0 Z' />
+                  <path d='M84,0 Q100,65 82,130 T88,260 L118,260 Q134,195 116,130 T122,0 Z' />
+                  <path d='M158,0 Q174,65 156,130 T162,260 L192,260 Q208,195 190,130 T196,0 Z' />
+                  <path d='M232,0 Q248,65 230,130 T236,260 L266,260 Q282,195 264,130 T270,0 Z' />
+                </g>
+              </svg>
+              <div class='dessn-mouse-wrap boil-layer'>
+                <PixelMouse animated px={8} class='mascot' />
+              </div>
+            </div>
+            <div class='dessn-foot mono'>
+              <span>RISOBOIL · 10FPS</span>
+              <span>如其所是</span>
+            </div>
+          </div>
+        </figure>
+
+        {/* Crisp-Ink NowReading Window */}
+        <NowPlaying posts={byDate.slice(0, 10)} />
       </div>
     </section>
 
-    <div class='console'>
-      <NowPlaying posts={byDate.slice(0, 10)} />
-      <Deadlines />
-    </div>
+    {/* 3D Interactive AI Accelerator × Six-Layer Teardown Lab */}
+    <TeardownBench />
+
+    {/* Conference Deadlines Telemetry */}
+    <Deadlines />
 
     <Publications />
+
+    {/* Dark Obsidian Stack Trace */}
+    <section>
+      <div class='sec-head'>
+        <h2 class='sec-title'>The Stack<span class='zh'>写作轨迹</span></h2>
+        <span class='sec-note mono'>L6 AGENT → L1 MATH · CLICK LAYER TO FILTER</span>
+      </div>
+      <StackTrace posts={allPosts} />
+    </section>
 
     {/* Research + News */}
     <section class='two-col'>
       <div>
-        <div class='sec-head'><h2 class='sec-title'>Research<span class='zh'>研究方向</span></h2></div>
+        <div class='sec-head'>
+          <h2 class='sec-title'>Research<span class='zh'>研究方向</span></h2>
+          <span class='sec-note mono'>L6 → L2</span>
+        </div>
         <ul class='research'>
           {
             research.map((r) => (
               <li>
                 <a class='mono code' href={`/blog?layer=${r.layer}`}>
+                  <span class='sq-dot' style={`background:${layerColor(r.layer)}`} aria-hidden='true' />
                   {layerLabel(r.layer)}
                 </a>
                 <span>{r.text}</span>
@@ -126,7 +203,10 @@ const series = SERIES.map((s) => {
         </ul>
       </div>
       <div>
-        <div class='sec-head'><h2 class='sec-title'>News<span class='zh'>近况</span></h2></div>
+        <div class='sec-head'>
+          <h2 class='sec-title'>News<span class='zh'>近况</span></h2>
+          <span class='sec-note mono'>2025.11 — 2026.11</span>
+        </div>
         <ul class='news'>
           {
             news.map((n) => (
@@ -140,49 +220,123 @@ const series = SERIES.map((s) => {
       </div>
     </section>
 
-    {/* Stack trace */}
+    {/* Series: 2×2 Framed Chromatic Poster Mats with Clean Vector Schematics */}
     <section>
       <div class='sec-head'>
-        <h2 class='sec-title'>The Stack<span class='zh'>写作轨迹</span></h2>
-        <span class='sec-note mono'>L6 Agent → L1 Math</span>
+        <h2 class='sec-title'>Series<span class='zh'>专题连载</span></h2>
+        <span class='sec-note mono'>按顺序读的成组文章 · 4 SERIES</span>
       </div>
-      <StackTrace posts={allPosts} />
-    </section>
-
-    {/* Series */}
-    <section>
-      <div class='sec-head'>
-        <h2 class='sec-title'>Series<span class='zh'>连载</span></h2>
-        <span class='sec-note mono'>按顺序读的成组文章</span>
-      </div>
-      <div class='series'>
+      <div class='series-grid'>
         {
           series.map((s) => (
-            <a class='serie' href={`/blog/${s.posts[0].id}`}>
-              <span class='mono kicker'>{layerLabel(s.layer)}</span>
-              <h3>{s.title}</h3>
-              <p>{s.desc}</p>
-              <ol>
-                {s.posts.slice(0, 3).map((p) => (
-                  <li>{p.data.title}</li>
-                ))}
-              </ol>
-              <div class='serie-foot'>
-                {'planned' in s && s.planned && (
-                  <div class='meter' role='img' aria-label={`已发布 ${s.posts.length} / ${s.planned}`}>
-                    <i style={`width:${((s.posts.length / s.planned) * 100).toFixed(1)}%`} />
+            <article class='poster-mat' style={`--mat-c:${s.mat}`}>
+              <div class:list={['poster-inner', s.dark && 'dark-card']}>
+                <div>
+                  <div class='poster-top mono'>
+                    <span>■ {layerLabel(s.layer)}</span>
+                    <span>
+                      {'planned' in s && s.planned ? `${s.posts.length} / ${s.planned} ${s.unit}` : `${s.posts.length} 篇`} · {s.span}
+                    </span>
                   </div>
-                )}
-                <div class='mono meta'>
-                  <span>
-                    {'planned' in s && s.planned
-                      ? `${s.posts.length} / ${s.planned} ${s.unit}`
-                      : `${s.posts.length} 篇`}
-                  </span>
-                  <span>{s.span}</span>
+
+                  {/* Clean Domain SVG Schematic (Zero garbled ASCII) */}
+                  <div class='poster-diagram' aria-hidden='true'>
+                    {s.id === 'attention' && (
+                      <svg viewBox='0 0 180 48'>
+                        <g stroke='#171716' stroke-width='0.6' stroke-opacity='0.22'>
+                          <rect x='2' y='2' width='10' height='10' fill='#DE99FE' />
+                          <rect x='2' y='13' width='10' height='10' fill='#DE99FE' fill-opacity='0.45' />
+                          <rect x='13' y='13' width='10' height='10' fill='#DE99FE' />
+                          <rect x='2' y='24' width='10' height='10' fill='#DE99FE' fill-opacity='0.25' />
+                          <rect x='13' y='24' width='10' height='10' fill='#DE99FE' fill-opacity='0.65' />
+                          <rect x='24' y='24' width='10' height='10' fill='#DE99FE' />
+                          <rect x='2' y='35' width='10' height='10' fill='#DE99FE' fill-opacity='0.18' />
+                          <rect x='13' y='35' width='10' height='10' fill='#DE99FE' fill-opacity='0.38' />
+                          <rect x='24' y='35' width='10' height='10' fill='#DE99FE' fill-opacity='0.72' />
+                          <rect x='35' y='35' width='10' height='10' fill='#FA6D01' />
+                        </g>
+                        <line x1='60' y1='24' x2='78' y2='24' stroke='currentColor' stroke-width='1.2' />
+                        <polygon points='78,21 84,24 78,27' fill='currentColor' />
+                        <rect x='94' y='28' width='14' height='16' fill='#DE99FE' stroke='currentColor' stroke-width='0.9' />
+                        <rect x='114' y='8' width='14' height='36' fill='#FA6D01' stroke='currentColor' stroke-width='0.9' />
+                        <rect x='134' y='20' width='14' height='24' fill='#DE99FE' fill-opacity='0.65' stroke='currentColor' stroke-width='0.9' />
+                        <rect x='154' y='34' width='14' height='10' fill='#D1D1CF' stroke='currentColor' stroke-width='0.9' />
+                      </svg>
+                    )}
+                    {s.id === 'rl' && (
+                      <svg viewBox='0 0 180 48'>
+                        <line x1='4' y1='42' x2='174' y2='42' stroke='#454542' stroke-width='1' />
+                        <path d='M12,42 C32,42 42,10 62,10 C82,10 92,42 112,42' fill='none' stroke='#8C8C88' stroke-width='1.4' stroke-dasharray='3 2.5' />
+                        <path d='M56,42 C78,42 94,6 116,6 C138,6 148,42 168,42' fill='#F8E600' fill-opacity='0.16' stroke='#F8E600' stroke-width='1.8' />
+                        <line x1='66' y1='16' x2='106' y2='16' stroke='#FA6D01' stroke-width='1.3' />
+                        <polygon points='106,13 112,16 106,19' fill='#FA6D01' />
+                      </svg>
+                    )}
+                    {s.id === 'coding-agent' && (
+                      <svg viewBox='0 0 190 48'>
+                        <rect x='4' y='13' width='38' height='22' fill='hsl(var(--card))' stroke='currentColor' stroke-width='1.2' />
+                        <text x='23' y='27' text-anchor='middle' font-family='Geist Mono Variable, monospace' font-size='8' fill='currentColor'>CTX</text>
+                        <line x1='42' y1='24' x2='56' y2='24' stroke='#2B5CFF' stroke-width='1.4' />
+                        <rect x='58' y='13' width='44' height='22' fill='#2B5CFF' stroke='currentColor' stroke-width='1.2' />
+                        <text x='80' y='27' text-anchor='middle' font-family='Geist Mono Variable, monospace' font-size='8' fill='#FFFFFF'>LOOP</text>
+                        <line x1='102' y1='24' x2='116' y2='24' stroke='#2B5CFF' stroke-width='1.4' />
+                        <rect x='118' y='13' width='48' height='22' fill='hsl(var(--card))' stroke='currentColor' stroke-width='1.2' />
+                        <text x='142' y='27' text-anchor='middle' font-family='Geist Mono Variable, monospace' font-size='8' fill='currentColor'>TOOLS</text>
+                        <path d='M142,35 L142,43 L23,43 L23,37' fill='none' stroke='#FA6D01' stroke-width='1.2' />
+                        <polygon points='20,38 23,33 26,38' fill='#FA6D01' />
+                      </svg>
+                    )}
+                    {s.id === 'fuse' && (
+                      <svg viewBox='0 0 190 48'>
+                        <line x1='2' y1='24' x2='184' y2='24' stroke='#474744' stroke-width='1' stroke-dasharray='3 2' />
+                        <rect x='6' y='4' width='46' height='16' fill='#232321' stroke='#00CD6E' stroke-width='1.2' />
+                        <text x='29' y='15' text-anchor='middle' font-family='Geist Mono Variable, monospace' font-size='8' fill='#00CD6E'>VFS</text>
+                        <rect x='64' y='4' width='54' height='16' fill='#232321' stroke='#00CD6E' stroke-width='1.2' />
+                        <text x='91' y='15' text-anchor='middle' font-family='Geist Mono Variable, monospace' font-size='8' fill='#F0F0EF'>/dev/fuse</text>
+                        <rect x='64' y='28' width='54' height='16' fill='#00CD6E' stroke='#00CD6E' stroke-width='1.2' />
+                        <text x='91' y='39' text-anchor='middle' font-family='Geist Mono Variable, monospace' font-size='8' fill='#141413'>DICFUSE</text>
+                        <rect x='130' y='28' width='50' height='16' fill='#232321' stroke='#FA6D01' stroke-width='1.2' />
+                        <text x='155' y='39' text-anchor='middle' font-family='Geist Mono Variable, monospace' font-size='8' fill='#FA6D01'>BUCK2</text>
+                        <line x1='52' y1='12' x2='64' y2='12' stroke='#00CD6E' stroke-width='1.2' />
+                        <line x1='91' y1='20' x2='91' y2='28' stroke='#00CD6E' stroke-width='1.2' />
+                        <line x1='118' y1='36' x2='130' y2='36' stroke='#FA6D01' stroke-width='1.2' />
+                      </svg>
+                    )}
+                    <div class='diagram-meta mono'>
+                      <div>{s.captionA}</div>
+                      <div>{s.captionB}</div>
+                    </div>
+                  </div>
+
+                  <h3 class='poster-title'>
+                    <a href={`/blog/${s.posts[0]?.id ?? ''}`}>{s.title}</a>
+                  </h3>
+                  <p class='poster-desc'>{s.desc}</p>
+                </div>
+
+                <div>
+                  <ol class='poster-chapters'>
+                    {s.posts.slice(0, 3).map((p, idx) => (
+                      <li>
+                        <a href={`/blog/${p.id}`}>
+                          <span class='chap-num mono'>{String(idx + 1).padStart(2, '0')}</span>
+                          <span class='chap-name'>{p.data.title}</span>
+                          <span class='chap-date mono'>{p.data.publishDate.toISOString().slice(5, 10)}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                  <div class='poster-foot mono'>
+                    <span>
+                      {'planned' in s && s.planned
+                        ? `PROGRESS ${Math.round((s.posts.length / s.planned) * 100)}%`
+                        : `${s.posts.length} POSTS`}
+                    </span>
+                    <a class='poster-btn' href={`/blog/${s.posts[0]?.id ?? ''}`}>START READING &gt;</a>
+                  </div>
                 </div>
               </div>
-            </a>
+            </article>
           ))
         }
       </div>
@@ -199,128 +353,242 @@ const series = SERIES.map((s) => {
   </main>
 </PageLayout>
 
+<script>
+  // 10fps posterize-time risograph boil for DESSN mouse card (0.mp4 technique)
+  const turb = document.getElementById('riso-turb')
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (turb && !reduce) {
+    let seed = 2
+    window.setInterval(() => {
+      seed = (seed % 7) + 1
+      turb.setAttribute('seed', String(seed))
+    }, 100)
+  }
+</script>
+
 <style>
   .home {
     display: flex;
     flex-direction: column;
     gap: 3.5rem;
-    padding-top: 1.5rem;
   }
-  .intro {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 3rem;
-    align-items: center;
-    padding-bottom: 0.5rem;
-  }
-  .stage {
-    margin: 0;
-    border: var(--hair) solid hsl(var(--border));
-    border-radius: var(--radius-box);
-    background: hsl(var(--card));
-    overflow: hidden;
-  }
-  .stage-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.45rem 0.75rem;
-    border-bottom: var(--hair) solid hsl(var(--border));
-    color: hsl(var(--faint));
-    font-size: 0.72rem;
-  }
-  .dots {
-    display: flex;
-    gap: 4px;
-  }
-  .dots i {
-    display: block;
-    width: 7px;
-    height: 7px;
-    background: hsl(var(--border));
-  }
-  .dots i:first-child {
-    background: hsl(var(--scarf));
-  }
-  .stage-state {
-    margin-left: auto;
-    color: hsl(var(--primary));
-  }
-  .stage-body {
+
+  /* Hero */
+  .hero {
     position: relative;
-    display: grid;
-    place-items: center;
-    padding: 2.25rem 3.25rem 1.75rem 2.25rem;
-    background-image: radial-gradient(hsl(var(--border)) 1px, transparent 1px);
-    background-size: 9px 9px;
+    padding: 1.5rem 0 2.25rem;
   }
-  .shadow {
-    position: absolute;
-    bottom: 1.25rem;
-    left: 50%;
-    width: 9rem;
-    height: 9px;
-    margin-left: -5rem;
-    background: hsl(var(--foreground) / 0.08);
+  .hero-top {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr);
+    gap: 2.5rem;
+    align-items: start;
+    padding-bottom: 1.75rem;
   }
   .who {
-    display: flex;
+    display: inline-flex;
     flex-wrap: wrap;
-    gap: 0.25rem 0.75rem;
+    align-items: center;
+    gap: 0.35rem 0.65rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
     color: hsl(var(--muted-foreground));
-    margin: 0;
+    margin: 0 0 0.9rem;
   }
-  .who span + span::before {
+  .who span:nth-child(n + 3)::before {
     content: '/';
-    margin-right: 0.75rem;
+    margin-right: 0.65rem;
     color: hsl(var(--faint));
   }
   h1 {
     font-family: var(--font-body);
-    font-size: clamp(2.6rem, 6.5vw, 4.25rem);
-    font-weight: 600;
-    letter-spacing: -0.045em;
-    line-height: 1;
-    margin: 0.75rem 0 1.5rem;
+    font-size: clamp(2.35rem, 4.6vw, 3.6rem);
+    font-weight: 400;
+    letter-spacing: -0.032em;
+    line-height: 1.09;
+    margin: 0;
+    color: hsl(var(--foreground));
+  }
+  .sub-en {
+    display: block;
+    font-size: clamp(0.98rem, 1.5vw, 1.2rem);
+    letter-spacing: -0.015em;
+    line-height: 1.45;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.7rem;
+  }
+  .hw-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 1.1rem;
+  }
+  .hw-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
+    padding: 3px 7px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 2px;
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+  }
+  .hero-right {
+    padding-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+  }
+  .hero-lead {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.72;
+    color: hsl(var(--muted-foreground));
+  }
+  .hero-lead strong {
+    color: hsl(var(--foreground));
+    font-weight: 500;
+  }
+  .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 2px;
+    text-decoration: none;
+    transition:
+      background-color 0.16s ease,
+      color 0.16s ease,
+      border-color 0.16s ease;
+  }
+  .cta-solid {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    border-color: hsl(var(--foreground));
+  }
+  .cta-solid:hover {
+    background: var(--c-l6);
+    border-color: var(--c-l6);
+    color: #fff;
+  }
+  .cta-ghost {
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+  }
+  .cta-ghost:hover {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
   }
   .pg {
     margin: 0;
-    padding-left: 1rem;
-    border-left: 3px solid hsl(var(--scarf));
-    max-width: 38em;
+    padding: 0.65rem 0.9rem;
+    border-left: 2px solid var(--c-l6);
+    background: hsl(var(--card) / 0.82);
   }
   .pg p {
-    margin: 0 0 0.6rem;
-    font-family: var(--font-display);
-    font-size: 1.08rem;
-    line-height: 1.85;
-    color: hsl(var(--foreground) / 0.88);
+    margin: 0 0 0.35rem;
+    font-size: 0.8rem;
+    line-height: 1.65;
+    color: hsl(var(--muted-foreground));
   }
   .pg footer {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
     color: hsl(var(--faint));
   }
-  .links {
+
+  /* Lower Horizon: DESSN Mouse + NowPlaying */
+  .hero-horizon {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: end;
+  }
+  .dessn-mat {
+    margin: 0;
+    background: var(--c-l1, #108d47);
+    padding: 12px;
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 0;
+  }
+  .dessn-card {
+    background: var(--cream, #f4f3e6);
+    border: 1px solid rgba(23, 23, 22, 0.16);
+    position: relative;
+    overflow: hidden;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem 1.25rem;
-    margin: 1.5rem 0 0;
+    flex-direction: column;
+    justify-content: space-between;
   }
-  .links a {
-    color: hsl(var(--foreground));
-    text-decoration: none;
-    border-bottom: 1px solid hsl(var(--foreground) / 0.25);
+  .dessn-bar,
+  .dessn-foot {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 10px;
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    color: #171716;
+    text-transform: uppercase;
+    background: rgba(244, 243, 230, 0.9);
   }
-  .links a:hover {
-    color: hsl(var(--primary));
-    border-bottom-color: hsl(var(--primary));
+  .dessn-bar {
+    border-bottom: 1px solid rgba(23, 23, 22, 0.1);
+  }
+  .dessn-foot {
+    border-top: 1px solid rgba(23, 23, 22, 0.1);
+  }
+  .dessn-live {
+    color: #d15504;
+    font-weight: 500;
+  }
+  .dessn-stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+    padding: 1.25rem 1.75rem 1rem 1.25rem;
+    overflow: hidden;
+  }
+  .dessn-stripes {
+    position: absolute;
+    inset: -12px -44px;
+    width: calc(100% + 88px);
+    height: calc(100% + 24px);
+    z-index: 1;
+  }
+  .dessn-stripes-g {
+    animation: dessnSway 5s ease-in-out infinite;
+  }
+  @keyframes dessnSway {
+    0%, 20%, 40%, 60%, 80%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-14px); }
+    5%, 25%, 45%, 65%, 85% { transform: translateX(12px); }
+  }
+  .dessn-mouse-wrap {
+    position: relative;
+    z-index: 2;
+  }
+  .boil-layer {
+    filter: url(#riso-boil);
   }
 
-  .console {
-    display: grid;
-    gap: 0.75rem;
-  }
+  /* Research & News */
   .two-col {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -331,29 +599,43 @@ const series = SERIES.map((s) => {
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: var(--hair) solid hsl(var(--border));
+    border-top: 1.5px solid var(--ink-hard, #171716);
   }
   .research li,
   .news li {
     display: grid;
-    grid-template-columns: 6.5rem minmax(0, 1fr);
+    grid-template-columns: 7.4rem minmax(0, 1fr);
     gap: 1rem;
-    padding: 0.7rem 0;
-    border-bottom: var(--hair) solid hsl(var(--border));
-    line-height: 1.65;
-    font-size: 0.94rem;
+    padding: 0.78rem 0;
+    border-bottom: 1px solid hsl(var(--border));
+    line-height: 1.62;
+    font-size: 0.9rem;
+    align-items: baseline;
+  }
+  .news li {
+    grid-template-columns: 5rem minmax(0, 1fr);
   }
   .research .code {
-    color: hsl(var(--muted-foreground));
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 7px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 2px;
+    background: hsl(var(--card));
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: hsl(var(--foreground));
     text-decoration: none;
-    padding-top: 0.1rem;
+    justify-self: start;
   }
   .research .code:hover {
-    color: hsl(var(--primary));
+    border-color: var(--ink-hard, #171716);
   }
   .news .date {
+    font-size: 0.72rem;
     color: hsl(var(--faint));
-    padding-top: 0.1rem;
     font-variant-numeric: tabular-nums;
   }
   .news a {
@@ -364,116 +646,197 @@ const series = SERIES.map((s) => {
     color: hsl(var(--primary));
   }
 
-  .series {
+  /* Series: 2×2 Chromatic Poster Grid */
+  .series-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.35rem;
   }
-  .serie {
+  .poster-mat {
+    padding: 12px;
+    background: var(--mat-c, #fa6d01);
+    border: 1.5px solid var(--ink-hard, #171716);
+    transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .poster-mat:hover {
+    transform: translateY(-2px);
+  }
+  .poster-inner {
+    background: hsl(var(--card));
+    color: hsl(var(--foreground));
+    border: 1px solid rgba(23, 23, 22, 0.14);
+    padding: 1.25rem 1.35rem;
+    height: 100%;
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
+    gap: 0.9rem;
+  }
+  .poster-inner.dark-card {
+    background: #1d1d1d;
+    color: #f0f0ef;
+    border-color: #323230;
+  }
+  .poster-top {
+    display: flex;
+    justify-content: space-between;
     gap: 0.5rem;
-    padding-top: 1rem;
-    border-top: 2px solid hsl(var(--foreground));
-    text-decoration: none;
-    color: inherit;
-    min-width: 0;
-  }
-  .serie:hover h3 {
-    color: hsl(var(--primary));
-  }
-  .serie .kicker {
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: hsl(var(--faint));
   }
-  .serie h3 {
-    font-family: var(--font-display);
-    font-size: 1.2rem;
-    font-weight: 600;
-    line-height: 1.35;
-    margin: 0;
-    text-wrap: balance;
-    transition: color 0.15s ease;
+  .dark-card .poster-top {
+    color: #9a9a97;
   }
-  .serie p {
+  .poster-diagram {
+    margin: 0.7rem 0 0.85rem;
+    padding: 9px 11px;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
+    height: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .dark-card .poster-diagram {
+    background: #141413;
+    border-color: #2e2e2c;
+  }
+  .poster-diagram svg {
+    height: 42px;
+    width: auto;
+    display: block;
+  }
+  .diagram-meta {
+    font-size: 0.6rem;
+    line-height: 1.45;
+    color: hsl(var(--faint));
+    text-align: right;
+  }
+  .dark-card .diagram-meta {
+    color: #9a9a97;
+  }
+  .poster-title {
+    margin: 0 0 0.35rem;
+    font-size: 1.32rem;
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    line-height: 1.25;
+  }
+  .poster-title a {
+    text-decoration: none;
+    color: inherit;
+  }
+  .poster-title a:hover {
+    color: var(--c-l6);
+  }
+  .poster-desc {
     margin: 0;
+    font-size: 0.84rem;
+    line-height: 1.58;
     color: hsl(var(--muted-foreground));
-    font-size: 0.875rem;
-    line-height: 1.6;
   }
-  .serie ol {
+  .dark-card .poster-desc {
+    color: #a3a3a0;
+  }
+  .poster-chapters {
     list-style: none;
-    margin: 0.25rem 0 0;
-    padding: 0.625rem 0 0;
-    border-top: var(--hair) dashed hsl(var(--border));
+    margin: 0;
+    padding: 0.65rem 0 0;
+    border-top: 1px solid hsl(var(--border));
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .dark-card .poster-chapters {
+    border-top-color: #323230;
+  }
+  .poster-chapters a {
     display: grid;
-    gap: 0.25rem;
+    grid-template-columns: 1.4rem minmax(0, 1fr) 2.8rem;
+    gap: 0.5rem;
+    align-items: baseline;
     font-size: 0.8rem;
     color: hsl(var(--muted-foreground));
+    text-decoration: none;
   }
-  .serie ol li {
+  .dark-card .poster-chapters a {
+    color: #a3a3a0;
+  }
+  .poster-chapters a:hover {
+    color: hsl(var(--foreground));
+  }
+  .dark-card .poster-chapters a:hover {
+    color: #ffffff;
+  }
+  .chap-num,
+  .chap-date {
+    font-size: 0.65rem;
+    color: hsl(var(--faint));
+  }
+  .chap-date {
+    text-align: right;
+  }
+  .chap-name {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .serie-foot {
-    margin-top: auto;
-    padding-top: 0.5rem;
-    display: grid;
-    gap: 0.5rem;
-  }
-  .serie .meta {
+  .poster-foot {
     display: flex;
     justify-content: space-between;
-    gap: 0.5rem;
-    color: hsl(var(--muted-foreground));
+    align-items: center;
+    margin-top: 0.7rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid hsl(var(--border));
+    font-size: 0.66rem;
+    color: hsl(var(--faint));
+  }
+  .dark-card .poster-foot {
+    border-top-color: #323230;
+    color: #9a9a97;
+  }
+  .poster-btn {
+    padding: 4px 9px;
+    border: 1px solid var(--ink-hard, #171716);
+    border-radius: 2px;
+    text-decoration: none;
+    color: inherit;
+    font-size: 0.62rem;
+    letter-spacing: 0.07em;
+  }
+  .dark-card .poster-btn {
+    border-color: #4a4a47;
+    color: #f0f0ef;
+  }
+  .poster-btn:hover {
+    background: var(--c-l6);
+    border-color: var(--c-l6);
+    color: #fff;
   }
 
   @media (max-width: 960px) {
-    .series {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .hero-top,
+    .hero-horizon,
+    .two-col,
+    .series-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .hero-right {
+      padding-top: 0;
+    }
+    .dessn-mat {
+      max-width: 280px;
     }
   }
-  @media (max-width: 800px) {
-    .two-col {
-      grid-template-columns: minmax(0, 1fr);
+  @media (prefers-reduced-motion: reduce) {
+    .dessn-stripes-g {
+      animation: none;
     }
-    .intro {
-      gap: 2rem;
-    }
-  }
-  @media (max-width: 600px) {
-    .home {
-      gap: 2.75rem;
-      padding-top: 0.5rem;
-    }
-    .intro {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 1.5rem;
-    }
-    .stage-body {
-      padding: 1.5rem 2.5rem 1.25rem 1.5rem;
-    }
-    .stage :global(.mascot) {
-      --px: 6px !important;
-      width: 144px !important;
-      height: 144px !important;
-    }
-    .stage :global(.mascot > svg) {
-      width: 144px;
-      height: 144px;
-    }
-    .shadow {
-      width: 6rem;
-      margin-left: -3.4rem;
-      bottom: 0.9rem;
-    }
-    .series {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .research li,
-    .news li {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0.125rem;
+    .boil-layer {
+      filter: none;
     }
   }
 </style>

@@ -25,8 +25,15 @@ const last = data[data.length - 1]?.d.slice(0, 7)
       <div class='lanes' role='group' aria-label='按栈层筛选文章'>
         {
           LAYERS.map((l) => (
-            <button class='lane-btn' type='button' data-layer={l.id} aria-pressed='false'>
+            <button
+              class='lane-btn'
+              type='button'
+              data-layer={l.id}
+              aria-pressed='false'
+              style={`--lane-c:${l.color}`}
+            >
               <span class='l1'>
+                <span class='lane-sq' aria-hidden='true' />
                 <span class='code'>{l.code}</span>
                 <span class='name'>{l.name}</span>
                 <span class='cnt'>{counts[l.id]}</span>
@@ -141,11 +148,13 @@ const last = data[data.length - 1]?.d.slice(0, 7)
       s += `<text x="${EARLY / 2}" y="${y + 19}" text-anchor="middle">更早</text>`
       for (const { p, i } of placed) {
         const k = LAYERS.findIndex((l) => l.id === p.l)
+        const layerObj = LAYERS[k]
         const cx = xOf(p.d)
         const ry = tops[p.l] + laneH(p.l) - 10 - MARK - i * STEP
         const cls = `mark ${k % 2 === 0 ? 'on-a' : 'on-b'}${layer === p.l ? ' sel' : ''}`
+        const fill = layerObj?.color ?? '#FA6D01'
         const label = `${p.d} ${p.t}`.replace(/"/g, '&quot;')
-        s += `<a href="/blog/${p.s}" aria-label="${label}"><rect class="${cls}" data-s="${p.s}" x="${(cx - MARK / 2).toFixed(1)}" y="${ry}" width="${MARK}" height="${MARK}" rx="1.5"></rect></a>`
+        s += `<a href="/blog/${p.s}" aria-label="${label}"><rect class="${cls}" style="fill:${fill}" data-s="${p.s}" x="${(cx - MARK / 2).toFixed(1)}" y="${ry}" width="${MARK}" height="${MARK}" rx="1"></rect></a>`
       }
       s += '</svg>'
       plot.querySelector('svg')?.remove()
@@ -216,22 +225,26 @@ const last = data[data.length - 1]?.d.slice(0, 7)
 </script>
 
 <style>
+  /* Matte Obsidian Dark Telemetry Bento (Ayush Soni Panel 3 / 6 aesthetic) */
   .trace {
     margin: 0;
-    border: var(--hair) solid hsl(var(--border));
-    border-radius: var(--radius-box);
-    background: hsl(var(--card));
+    border: 1.5px solid #020100;
+    border-radius: 2px;
+    background: #1d1d1d;
+    color: #f0f0ef;
+    overflow: hidden;
   }
   .trace-scroll {
     overflow-x: auto;
   }
   .trace-grid {
     display: grid;
-    grid-template-columns: 13rem minmax(0, 1fr) 5.5rem;
+    grid-template-columns: 13.5rem minmax(0, 1fr) 5.75rem;
     min-width: 800px;
   }
   .lanes {
-    border-right: var(--hair) solid hsl(var(--border));
+    border-right: 1px solid #2e2e2c;
+    background: #171716;
   }
   .lane-btn {
     display: flex;
@@ -241,56 +254,66 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     height: 56px;
     text-align: left;
     font: inherit;
-    color: inherit;
+    color: #f0f0ef;
     background: transparent;
     border: 0;
-    border-bottom: var(--hair) solid hsl(var(--border));
-    padding: 0 0.875rem 0 1.125rem;
+    border-bottom: 1px solid #292927;
+    padding: 0 0.875rem 0 1rem;
     cursor: pointer;
+    transition: background-color 0.14s ease;
   }
   .lane-btn:nth-child(odd) {
-    background: hsl(var(--band));
+    background: #1b1b1a;
+  }
+  .lane-btn:hover {
+    background: #252523;
   }
   .lane-btn .l1 {
     display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .lane-sq {
+    width: 7px;
+    height: 7px;
+    background: var(--lane-c, #fa6d01);
+    flex-shrink: 0;
   }
   .lane-btn .code {
     font-family: var(--font-mono);
     font-size: 0.7rem;
-    color: hsl(var(--faint));
-    width: 1.25rem;
+    color: #9a9a97;
+    width: 1.3rem;
   }
   .lane-btn .name {
-    font-weight: 600;
+    font-weight: 500;
     font-size: 0.875rem;
+    color: #f0f0ef;
   }
   .lane-btn .cnt {
     margin-left: auto;
     font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
+    font-size: 0.72rem;
+    color: #7c7c78;
     font-variant-numeric: tabular-nums;
   }
   .lane-btn .zh {
-    font-size: 0.75rem;
-    color: hsl(var(--muted-foreground));
-    padding-left: 1.75rem;
+    font-size: 0.72rem;
+    color: #8f8f8b;
+    padding-left: 1.95rem;
     line-height: 1.4;
-  }
-  .lane-btn:hover .name {
-    color: hsl(var(--primary));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .lane-btn[aria-pressed='true'] {
-    box-shadow: inset 3px 0 0 hsl(var(--scarf));
-  }
-  .lane-btn[aria-pressed='true'] .name {
-    color: hsl(var(--primary));
+    background: #262624;
+    box-shadow: inset 3px 0 0 var(--lane-c, #fa6d01);
   }
   .plot {
     position: relative;
     min-height: 360px;
+    background: #171716;
   }
   .venues {
     position: relative;
@@ -298,8 +321,9 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     flex-direction: column;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 0 2.6rem;
-    border-left: var(--hair) solid hsl(var(--border));
+    padding: 0.65rem 0 2.6rem;
+    border-left: 1px solid #2e2e2c;
+    background: #1a1a19;
     text-align: center;
   }
   .venues::before {
@@ -309,25 +333,26 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     top: 1.9rem;
     bottom: 3.9rem;
     width: 1px;
-    background: hsl(var(--s2));
+    background: #353533;
   }
   .venues span {
     position: relative;
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     line-height: 1.35;
-    background: hsl(var(--card));
-    padding: 0.2rem 0.3rem;
+    background: #1a1a19;
+    padding: 0.22rem 0.35rem;
   }
   .venues .end {
-    color: hsl(var(--faint));
+    color: #6d6d69;
   }
   .venues .v {
-    color: hsl(var(--muted-foreground));
+    color: #c8c8c4;
+    border: 1px solid #353533;
   }
   .venues .mid {
-    color: hsl(var(--primary));
-    border: var(--hair) solid hsl(var(--scarf));
-    border-radius: var(--radius);
+    color: var(--c-l6, #fa6d01);
+    border: 1px solid var(--c-l6, #fa6d01);
+    border-radius: 2px;
   }
   .plot :global(svg) {
     display: block;
@@ -335,48 +360,46 @@ const last = data[data.length - 1]?.d.slice(0, 7)
   }
   .plot :global(text) {
     font-family: var(--font-mono);
-    font-size: 10.5px;
-    fill: hsl(var(--faint));
+    font-size: 10px;
+    fill: #7c7c78;
   }
   .plot :global(.band-a) {
-    fill: hsl(var(--band));
+    fill: #1b1b1a;
   }
   .plot :global(.band-b) {
-    fill: hsl(var(--card));
+    fill: #171716;
   }
   .plot :global(.rule),
   .plot :global(.grid) {
-    stroke: hsl(var(--border));
+    stroke: #292927;
     stroke-width: 1;
   }
   .plot :global(.brk) {
-    stroke: hsl(var(--faint));
+    stroke: #464642;
     stroke-dasharray: 2 3;
   }
   .plot :global(rect.mark) {
-    fill: hsl(var(--mark));
-    stroke-width: 2;
+    stroke-width: 1.5;
     cursor: pointer;
     transition:
       opacity 0.18s,
-      fill 0.12s;
+      transform 0.14s;
   }
   .plot :global(rect.mark.on-a) {
-    stroke: hsl(var(--band));
+    stroke: #1b1b1a;
   }
   .plot :global(rect.mark.on-b) {
-    stroke: hsl(var(--card));
+    stroke: #171716;
   }
   .plot.filtering :global(rect.mark) {
-    opacity: 0.16;
+    opacity: 0.14;
   }
   .plot.filtering :global(rect.mark.sel) {
     opacity: 1;
-    fill: hsl(var(--scarf));
   }
   .plot :global(a:hover rect.mark),
   .plot :global(a:focus-visible rect.mark) {
-    fill: hsl(var(--scarf));
+    stroke: #ffffff;
     opacity: 1;
   }
   .plot :global(a:focus-visible) {
@@ -386,21 +409,21 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     position: absolute;
     z-index: 3;
     pointer-events: none;
-    width: 18rem;
+    width: 19rem;
     max-width: calc(100% - 16px);
-    background: hsl(var(--foreground));
-    color: hsl(var(--background));
-    border-radius: 4px;
+    background: #f4f3e6;
+    color: #171716;
+    border: 1.5px solid #020100;
+    border-radius: 2px;
     padding: 0.55rem 0.7rem;
     font-size: 0.8rem;
     line-height: 1.45;
-    box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
   }
   .tip :global(.m) {
     display: block;
     font-family: var(--font-mono);
-    font-size: 0.7rem;
-    opacity: 0.7;
+    font-size: 0.68rem;
+    color: #d15504;
     margin-bottom: 0.2rem;
   }
   figcaption {
@@ -408,10 +431,11 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     flex-wrap: wrap;
     gap: 0.25rem 0.75rem;
     align-items: baseline;
-    padding: 0.7rem 1.125rem;
-    border-top: var(--hair) solid hsl(var(--border));
-    color: hsl(var(--muted-foreground));
-    font-size: 0.82rem;
+    padding: 0.75rem 1.125rem;
+    border-top: 1px solid #2e2e2c;
+    background: #141413;
+    color: #9a9a97;
+    font-size: 0.78rem;
     line-height: 1.6;
   }
   figcaption > span:nth-child(2) {
@@ -419,10 +443,10 @@ const last = data[data.length - 1]?.d.slice(0, 7)
     min-width: 0;
   }
   .fig {
-    color: hsl(var(--foreground));
+    color: var(--c-l3, #f8e600);
     font-weight: 500;
   }
   .range {
-    color: hsl(var(--faint));
+    color: #7c7c78;
   }
 </style>

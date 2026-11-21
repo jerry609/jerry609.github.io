@@ -1,0 +1,1171 @@
+---
+/**
+ * Interactive 3D AI Accelerator × Agent-Infra Six-Layer Teardown Bench.
+ * Inspired by elvarofficial/teardown (single math source -> 3D pose + Roofline + telemetry + auto-tour)
+ * styled in Ayush Soni flat Swiss print-craft.
+ */
+---
+
+<section class='td-wrap' id='teardown-lab' aria-label='可拆解 AI 加速器 3D 交互机台'>
+  <div class='sec-head'>
+    <h2 class='sec-title'>Teardown Lab<span class='zh'>可拆解 AI 加速器 × 六层栈 3D 机台</span></h2>
+    <span class='sec-note mono'>DRAG TO ORBIT · SINGLE ROOFLINE MODEL</span>
+  </div>
+
+  <div class='td-shell' id='tdShell'>
+    <!-- Auto-tour operator cursor + click ring -->
+    <div class='td-cursor' id='tdCursor' aria-hidden='true'>
+      <svg width='22' height='22' viewBox='0 0 34 34'>
+        <path
+          d='M4 3 L30 13.5 L17.5 17.5 L13.5 30 Z'
+          fill='#171716'
+          stroke='#FFFFFF'
+          stroke-width='2.4'
+          stroke-linejoin='round'></path>
+      </svg>
+    </div>
+    <div class='td-ring' id='tdRing' aria-hidden='true'></div>
+
+    <div class='td-header'>
+      <div class='td-brand'>
+        <span class='td-bar' aria-hidden='true'></span>
+        <div>
+          <div class='td-title'>AI Accelerator <span style='color:var(--c-l6)'>·</span> Six-Layer Teardown Bench</div>
+          <div class='td-sub'>BF16 989 TFLOPS PEAK · HBM3E 3.35 TB/S · RIDGE 295 OP/BYTE · AGENT×INFRA</div>
+        </div>
+      </div>
+      <button class='td-tourchip on' id='tdTourChip' type='button'>
+        <i></i><span id='tdTourText'>AUTO TOUR · CLICK TO TAKE OVER</span>
+      </button>
+    </div>
+
+    <div class='td-workspace'>
+      <!-- Left: Primary Throughput + Live Roofline + Transport & Sliders -->
+      <div class='td-col'>
+        <div class='td-panel'>
+          <div class='td-cap'>
+            <span>THROUGHPUT</span>
+            <span id='tdRegimeTag' style='color:var(--c-l6)'>COMPUTE-BOUND</span>
+          </div>
+          <div class='td-big-num' id='tdTflops'>842</div>
+          <div class='td-big-unit'>TFLOPS · BF16 TENSOR CUBE</div>
+          <div class='td-meter'><div class='td-meter-fill' id='tdTflopsFill' style='width:85%'></div></div>
+          <div class='td-kv-grid'>
+            <div><div class='td-kv-k'>HBM3E BW</div><div class='td-kv-v' id='tdHbmBw'>2.84 TB/s</div></div>
+            <div><div class='td-kv-k'>ARITH INTENSITY</div><div class='td-kv-v' id='tdAiVal'>388 OP/B</div></div>
+            <div><div class='td-kv-k'>MFU UTIL</div><div class='td-kv-v' id='tdMfuVal'>85.1%</div></div>
+            <div><div class='td-kv-k'>CYCLE PHASE</div><div class='td-kv-v' id='tdPhaseVal'>φ 048°</div></div>
+          </div>
+        </div>
+
+        <div class='td-panel'>
+          <div class='td-cap'><span>ROOFLINE MODEL</span><span>LOG-LOG</span></div>
+          <svg id='tdRooflineSvg' viewBox='0 0 212 108' width='100%' height='104' style='display:block'></svg>
+          <div class='td-axis-row'>
+            <span>1 OP/B</span><span>RIDGE 295</span><span>1000 OP/B</span>
+          </div>
+        </div>
+
+        <div class='td-panel'>
+          <div class='td-transport'>
+            <button class='td-btn active' id='tdPauseBtn' type='button'>❚❚ PAUSE</button>
+            <button class='td-btn' id='tdStepBack' type='button'>−1 CYC</button>
+            <button class='td-btn' id='tdStepFwd' type='button'>+1 CYC</button>
+          </div>
+          <div class='td-slider-row'>
+            <div class='td-slider-head'><span>BATCH SIZE (B)</span><strong id='tdBatchVal'>32</strong></div>
+            <input class='td-range' id='tdBatchSlider' type='range' min='1' max='128' value='32' />
+          </div>
+          <div class='td-slider-row'>
+            <div class='td-slider-head'><span>EXPLODE GAP</span><strong id='tdExplodeVal'>0%</strong></div>
+            <input class='td-range' id='tdExplodeSlider' type='range' min='0' max='100' value='0' />
+          </div>
+        </div>
+      </div>
+
+      <!-- Center: 3D Perspective Orbiting Hardware/Stack Machine -->
+      <div class='td-stage' id='tdStage'>
+        <canvas id='tdCanvas'></canvas>
+        <div class='td-stage-top'>
+          <div class='td-legend'>
+            <span><i style='background:var(--c-l6)'></i>COMPUTE</span>
+            <span><i style='background:var(--c-l5)'></i>HBM3E/NVL</span>
+            <span><i style='background:var(--c-l2)'></i>DMA/FUSE</span>
+            <span><i style='background:var(--c-l4)'></i>KV/ATTN</span>
+          </div>
+          <div class='td-badge' id='tdActivePart'>ALL LAYERS · ASSEMBLED</div>
+        </div>
+
+        <div class='td-stage-bot'>
+          <div class='td-layer-picker' id='tdLayerPicker'>
+            <button class='td-btn ink-active' data-iso='ALL' type='button'>ALL STACK</button>
+            <button class='td-btn' data-iso='agent' type='button'>L6 AGENT</button>
+            <button class='td-btn' data-iso='runtime' type='button'>L5 RUNTIME</button>
+            <button class='td-btn' data-iso='model' type='button'>L4/L3 CUBE DIE</button>
+            <button class='td-btn' data-iso='systems' type='button'>L2 HBM+IO</button>
+          </div>
+          <div class='td-hint'>DRAG TO ORBIT 3D · SCROLL TO ZOOM · CLICK SUBSYSTEM TO ISOLATE</div>
+        </div>
+      </div>
+
+      <!-- Right: Workload / Cutaway / Camera + Synced Pipeline Waveforms -->
+      <div class='td-col td-col--right'>
+        <div class='td-panel'>
+          <div class='td-cap'><span>WORKLOAD</span><span>REAL-TIME</span></div>
+          <div class='td-btn-grid' id='tdWorkloads'>
+            <button class='td-btn active' data-wl='prefill' type='button'>PREFILL GEMM</button>
+            <button class='td-btn' data-wl='decode' type='button'>DECODE KV</button>
+            <button class='td-btn' data-wl='allreduce' type='button'>RING ALLREDUCE</button>
+          </div>
+
+          <div class='td-cap' style='margin-top:8px'><span>CUTAWAY</span><span>OPEN UP</span></div>
+          <div class='td-btn-grid' id='tdCutaways'>
+            <button class='td-btn ink-active' data-cut='solid' type='button'>ASSEMBLED</button>
+            <button class='td-btn' data-cut='exploded' type='button'>EXPLODED</button>
+            <button class='td-btn' data-cut='xray' type='button'>X-RAY GLASS</button>
+          </div>
+
+          <div class='td-cap' style='margin-top:8px'><span>CAMERA VIEW</span><span>ORBIT</span></div>
+          <div class='td-btn-grid' id='tdCams' style='margin-bottom:0'>
+            <button class='td-btn ink-active' data-cam='hero' type='button'>HERO 3/4</button>
+            <button class='td-btn' data-cam='top' type='button'>TOP DIE</button>
+            <button class='td-btn' data-cam='side' type='button'>SIDE STACK</button>
+            <button class='td-btn' data-cam='core' type='button'>CORE ZOOM</button>
+          </div>
+        </div>
+
+        <div class='td-panel'>
+          <div class='td-cap'><span>PIPELINE TELEMETRY</span><span>SYNCED φ</span></div>
+          <svg id='tdWaveSvg' viewBox='0 0 220 94' width='100%' height='92' style='display:block'></svg>
+          <p class='td-note' id='tdSubsystemNote'>
+            Prefill B=32：大矩阵 GEMM 算术强度超过 Ridge (295)，受 Tensor/Cube 算力天花板约束。
+          </p>
+        </div>
+
+        <div class='td-panel' style='padding:10px 12px'>
+          <div class='td-cap' style='margin-bottom:5px'><span>OVERLAYS</span></div>
+          <div class='td-btn-grid' style='margin-bottom:0'>
+            <button class='td-btn ink-active' id='tdCalloutToggle' type='button'>CALLOUTS: ON</button>
+            <button class='td-btn' id='tdFilterJump' type='button'>READ NOTES &gt;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const shell = document.getElementById('tdShell')
+  const canvas = document.getElementById('tdCanvas') as HTMLCanvasElement | null
+  const stage = document.getElementById('tdStage')
+  if (shell && canvas && stage) {
+    const ctx = canvas.getContext('2d')!
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    const CAMS: Record<string, { az: number; el: number; zoom: number }> = {
+      hero: { az: 0.72, el: 0.52, zoom: 1.0 },
+      top: { az: 0.78, el: 1.36, zoom: 1.08 },
+      side: { az: 0.14, el: 0.16, zoom: 1.06 },
+      core: { az: 0.85, el: 0.68, zoom: 1.42 }
+    }
+
+    const st = {
+      cycle: 18,
+      paused: false,
+      batch: 32,
+      workload: 'prefill' as 'prefill' | 'decode' | 'allreduce',
+      cutaway: 'solid' as 'solid' | 'exploded' | 'xray',
+      isolate: 'ALL',
+      callouts: true,
+      az: CAMS.hero.az,
+      el: CAMS.hero.el,
+      zoom: CAMS.hero.zoom,
+      tAz: CAMS.hero.az,
+      tEl: CAMS.hero.el,
+      tZoom: CAMS.hero.zoom,
+      explode: 0,
+      tExplode: 0,
+      autoTour: !reduce,
+      dragging: false,
+      lastX: 0,
+      lastY: 0
+    }
+
+    const computeHw = (cycle: number, batch: number, wl: string) => {
+      const PEAK_TFLOPS = 989
+      const PEAK_HBM_BW = 3.35
+      const RIDGE = PEAK_TFLOPS / PEAK_HBM_BW
+      const osc = 0.94 + 0.06 * Math.sin(cycle * 0.14)
+      let ai: number
+      let eff: number
+      let note: string
+      if (wl === 'prefill') {
+        ai = Math.min(950, 170 + batch * 7.2)
+        eff = 0.86 * osc
+        note = `Prefill B=${batch}：大矩阵 GEMM 算术强度 ${Math.round(ai)} OP/B 超过 Ridge (295)，受 Tensor/Cube 算力天花板约束。`
+      } else if (wl === 'decode') {
+        ai = Math.min(260, 1.8 * batch + 2.4)
+        eff = 0.91 * osc
+        note = `Decode B=${batch}：自回归逐 token 读写 KV Cache，算术强度仅 ${ai.toFixed(1)} OP/B，典型 HBM3e 访存受限。`
+      } else {
+        ai = Math.min(520, 75 + batch * 3.1)
+        eff = 0.78 * osc
+        note = `Ring AllReduce B=${batch}：反向计算与通信异步重叠，NVLink/HCCS 环带宽决定多卡扩展效率。`
+      }
+      const theo = Math.min(PEAK_TFLOPS, ai * PEAK_HBM_BW)
+      const achievedTflops = theo * eff
+      const hbmBw = Math.min(PEAK_HBM_BW, achievedTflops / ai)
+      const mfu = (achievedTflops / PEAK_TFLOPS) * 100
+      return {
+        PEAK_TFLOPS,
+        RIDGE,
+        ai,
+        achievedTflops,
+        hbmBw,
+        mfu,
+        bound: ai >= RIDGE ? 'COMPUTE-BOUND' : 'MEMORY-BOUND',
+        note,
+        phaseDeg: Math.round((cycle * 6) % 360)
+      }
+    }
+
+    const resize = () => {
+      const r = stage.getBoundingClientRect()
+      if (!r.width) return
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.floor(r.width * dpr)
+      canvas.height = Math.floor(r.height * dpr)
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    const proj3D = (x: number, y: number, z: number, W: number, H: number) => {
+      const ca = Math.cos(st.az)
+      const sa = Math.sin(st.az)
+      const ce = Math.cos(st.el)
+      const se = Math.sin(st.el)
+      const x1 = x * ca - z * sa
+      const z1 = x * sa + z * ca
+      const y2 = y * ce - z1 * se
+      const z2 = y * se + z1 * ce
+      const camD = 17.5 / st.zoom
+      const fov = Math.min(W, H) * 1.18
+      const scale = fov / Math.max(2.5, camD - z2)
+      return { sx: W * 0.5 + x1 * scale, sy: H * 0.51 - y2 * scale, depth: z2 }
+    }
+
+    const shadeHex = (hex: string, factor: number) => {
+      const n = parseInt(hex.slice(1), 16)
+      const r = Math.min(255, Math.max(0, Math.round(((n >> 16) & 255) * factor)))
+      const g = Math.min(255, Math.max(0, Math.round(((n >> 8) & 255) * factor)))
+      const b = Math.min(255, Math.max(0, Math.round((n & 255) * factor)))
+      return `rgb(${r},${g},${b})`
+    }
+
+    type Face = { v: { sx: number; sy: number; depth: number }[]; depth: number; fill: string; alpha: number; stroke: string }
+
+    const pushBox = (
+      faces: Face[],
+      cx: number,
+      cy: number,
+      cz: number,
+      sx: number,
+      sy: number,
+      sz: number,
+      color: string,
+      alpha: number,
+      stroke: string,
+      W: number,
+      H: number
+    ) => {
+      const hx = sx / 2
+      const hy = sy / 2
+      const hz = sz / 2
+      const pts = [
+        proj3D(cx - hx, cy - hy, cz - hz, W, H),
+        proj3D(cx + hx, cy - hy, cz - hz, W, H),
+        proj3D(cx + hx, cy + hy, cz - hz, W, H),
+        proj3D(cx - hx, cy + hy, cz - hz, W, H),
+        proj3D(cx - hx, cy - hy, cz + hz, W, H),
+        proj3D(cx + hx, cy - hy, cz + hz, W, H),
+        proj3D(cx + hx, cy + hy, cz + hz, W, H),
+        proj3D(cx - hx, cy + hy, cz + hz, W, H)
+      ]
+      const defs = [
+        { idx: [3, 2, 6, 7], shade: 1.05 },
+        { idx: [0, 1, 5, 4], shade: 0.55 },
+        { idx: [4, 5, 6, 7], shade: 0.88 },
+        { idx: [0, 1, 2, 3], shade: 0.68 },
+        { idx: [1, 2, 6, 5], shade: 0.78 },
+        { idx: [0, 3, 7, 4], shade: 0.64 }
+      ]
+      for (const d of defs) {
+        const v = d.idx.map((i) => pts[i])
+        const depth = (v[0].depth + v[1].depth + v[2].depth + v[3].depth) * 0.25
+        faces.push({ v, depth, fill: shadeHex(color, d.shade), alpha, stroke })
+      }
+    }
+
+    const drawScene = (hw: ReturnType<typeof computeHw>) => {
+      const r = stage.getBoundingClientRect()
+      if (!r.width) return
+      const W = r.width
+      const H = r.height
+      const isDark = document.documentElement.classList.contains('dark')
+
+      st.az += (st.tAz - st.az) * 0.12
+      st.el += (st.tEl - st.el) * 0.12
+      st.zoom += (st.tZoom - st.zoom) * 0.12
+      st.explode += (st.tExplode - st.explode) * 0.12
+
+      ctx.clearRect(0, 0, W, H)
+
+      // Studio floor grid
+      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(23,23,22,0.065)'
+      ctx.lineWidth = 1
+      for (let g = -5; g <= 5; g++) {
+        const a = proj3D(g * 1.1, -2.15, -5.5, W, H)
+        const b = proj3D(g * 1.1, -2.15, 5.5, W, H)
+        ctx.beginPath()
+        ctx.moveTo(a.sx, a.sy)
+        ctx.lineTo(b.sx, b.sy)
+        ctx.stroke()
+        const c = proj3D(-5.5, -2.15, g * 1.1, W, H)
+        const d = proj3D(5.5, -2.15, g * 1.1, W, H)
+        ctx.beginPath()
+        ctx.moveTo(c.sx, c.sy)
+        ctx.lineTo(d.sx, d.sy)
+        ctx.stroke()
+      }
+
+      const faces: Face[] = []
+      const ex = st.explode
+      const isXray = st.cutaway === 'xray'
+      const iso = st.isolate
+      const alphaFor = (tier: string, base = 1) => (iso !== 'ALL' && iso !== tier ? 0.14 : base)
+      const ink = isDark ? '#0D0D0C' : '#171716'
+
+      // L2 Systems: CoWoS Interposer + 4 HBM3e Stacks + NVLink Rails
+      const yL2 = -1.35 - ex * 1.15
+      const aL2 = alphaFor('systems', 1)
+      pushBox(faces, 0, yL2, 0, 5.6, 0.36, 5.6, '#2E3034', aL2, ink, W, H)
+      const hbmHot = st.workload === 'decode' || st.workload === 'allreduce'
+      ;[
+        [-2.25, -1.35],
+        [-2.25, 1.35],
+        [2.25, -1.35],
+        [2.25, 1.35]
+      ].forEach(([hx, hz], idx) => {
+        const pulse = Math.sin(st.cycle * 0.25 + idx * 1.4) > 0.1
+        pushBox(faces, hx, yL2 + 0.44, hz, 0.92, 0.56, 1.48, hbmHot && pulse ? '#2B5CFF' : '#3E63D9', aL2, ink, W, H)
+        if (hbmHot && pulse) pushBox(faces, hx, yL2 + 0.78, hz, 0.62, 0.12, 1.1, '#00CD6E', aL2, ink, W, H)
+      })
+      pushBox(faces, 0, yL2 + 0.26, 2.55, 3.4, 0.18, 0.32, '#00CD6E', aL2, ink, W, H)
+      pushBox(faces, 0, yL2 + 0.26, -2.55, 3.4, 0.18, 0.32, '#00CD6E', aL2, ink, W, H)
+
+      // L4/L3: 4×4 Tensor / NPU Cube Core Die
+      const yDie = -0.52 + ex * 0.05
+      const aDie = alphaFor('model', 1)
+      pushBox(faces, 0, yDie - 0.18, 0, 3.25, 0.22, 3.25, '#3E3E3B', aDie, ink, W, H)
+      const wave = (st.cycle * 0.18) % 9
+      const ringCoords = [
+        [0, 0],
+        [1, 0],
+        [2, 0],
+        [3, 0],
+        [3, 1],
+        [3, 2],
+        [3, 3],
+        [2, 3],
+        [1, 3],
+        [0, 3],
+        [0, 2],
+        [0, 1]
+      ]
+      const ringActive = ringCoords[Math.floor(st.cycle * 0.2) % 12]
+
+      for (let gx = 0; gx < 4; gx++) {
+        for (let gz = 0; gz < 4; gz++) {
+          const wx = (gx - 1.5) * 0.72
+          const wz = (gz - 1.5) * 0.72
+          let lift = 0
+          let col = '#63635E'
+          if (st.workload === 'prefill') {
+            const d = Math.abs(gx + gz - wave)
+            if (d < 0.95) {
+              lift = 0.28 * (hw.mfu / 90)
+              col = '#FA6D01'
+            } else if (d < 1.8) {
+              lift = 0.12
+              col = '#F8E600'
+            }
+          } else if (st.workload === 'decode') {
+            const activeCol = Math.floor(st.cycle * 0.22) % 4
+            if (gx === activeCol) {
+              lift = 0.16
+              col = '#DE99FE'
+            } else if (gz === (activeCol + 2) % 4) {
+              lift = 0.08
+              col = '#2B5CFF'
+            }
+          } else {
+            if (gx === ringActive[0] && gz === ringActive[1]) {
+              lift = 0.3
+              col = '#00CD6E'
+            } else if (gx === 0 || gx === 3 || gz === 0 || gz === 3) {
+              lift = 0.07
+              col = '#2B5CFF'
+            } else {
+              col = '#DE99FE'
+              lift = 0.12
+            }
+          }
+          pushBox(faces, wx, yDie + 0.14 + lift, wz, 0.56, 0.34, 0.56, col, aDie, ink, W, H)
+        }
+      }
+
+      // L5 Runtime Shield
+      const yL5 = 0.42 + ex * 0.95
+      pushBox(faces, 0, yL5, 0, 3.85, 0.16, 3.85, '#2B5CFF', alphaFor('runtime', isXray ? 0.24 : 0.72), ink, W, H)
+
+      // L6 Agent Harness Canopy
+      const yL6 = 1.05 + ex * 1.95
+      const aL6 = alphaFor('agent', isXray ? 0.2 : 0.94)
+      pushBox(faces, -1.0, yL6, -0.8, 1.55, 0.24, 1.35, '#FA6D01', aL6, ink, W, H)
+      pushBox(faces, 1.0, yL6, -0.8, 1.55, 0.24, 1.35, '#F2F2F0', aL6, ink, W, H)
+      pushBox(faces, 0, yL6, 0.95, 3.55, 0.24, 1.15, '#1D1D1D', aL6, ink, W, H)
+
+      faces.sort((a, b) => a.depth - b.depth)
+      for (const f of faces) {
+        ctx.save()
+        ctx.globalAlpha = f.alpha
+        ctx.beginPath()
+        ctx.moveTo(f.v[0].sx, f.v[0].sy)
+        ctx.lineTo(f.v[1].sx, f.v[1].sy)
+        ctx.lineTo(f.v[2].sx, f.v[2].sy)
+        ctx.lineTo(f.v[3].sx, f.v[3].sy)
+        ctx.closePath()
+        ctx.fillStyle = f.fill
+        ctx.fill()
+        ctx.strokeStyle = f.stroke
+        ctx.lineWidth = 1.05
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      // Crisp 3D-projected callout plates
+      if (st.callouts) {
+        const calls = [
+          { p: [-1.2, yL6 + 0.14, -0.8], dx: -136, dy: -30, title: 'L6 AGENT HARNESS', sub: 'TOOL LOOP · CTX', tier: 'agent' },
+          { p: [1.9, yL5 + 0.08, -0.1], dx: 92, dy: -24, title: 'L5 RUNTIME SHIELD', sub: 'MICROVM · GATEWAY', tier: 'runtime' },
+          { p: [1.3, yDie + 0.25, 1.2], dx: 104, dy: 30, title: 'TENSOR / CUBE DIE', sub: `${hw.achievedTflops.toFixed(0)} TFLOPS BF16`, tier: 'model' },
+          { p: [-2.3, yL2 + 0.5, 1.4], dx: -140, dy: 32, title: 'HBM3E STACK ×4', sub: `${hw.hbmBw.toFixed(2)} TB/S LIVE`, tier: 'systems' }
+        ]
+        calls.forEach((c) => {
+          if (iso !== 'ALL' && iso !== c.tier) return
+          const pt = proj3D(c.p[0], c.p[1], c.p[2], W, H)
+          const boxW = 128
+          const boxH = 30
+          const lx = Math.max(10, Math.min(W - boxW - 10, pt.sx + c.dx))
+          const ly = Math.max(46, Math.min(H - 72 - boxH, pt.sy + c.dy))
+          const anchorX = lx + (c.dx < 0 ? boxW : 0)
+          const anchorY = ly + boxH * 0.5
+
+          ctx.strokeStyle = isDark ? 'rgba(240,240,239,0.62)' : 'rgba(23,23,22,0.58)'
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          ctx.moveTo(pt.sx, pt.sy)
+          ctx.lineTo(anchorX, anchorY)
+          ctx.stroke()
+          ctx.fillStyle = '#FA6D01'
+          ctx.fillRect(pt.sx - 2.5, pt.sy - 2.5, 5, 5)
+
+          ctx.fillStyle = isDark ? 'rgba(24,24,23,0.92)' : 'rgba(255,255,255,0.93)'
+          ctx.fillRect(lx, ly, boxW, boxH)
+          ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(23,23,22,0.28)'
+          ctx.strokeRect(lx + 0.5, ly + 0.5, boxW - 1, boxH - 1)
+
+          ctx.font = '600 9.5px "Geist Mono Variable", ui-monospace, monospace'
+          ctx.fillStyle = isDark ? '#FEFEFE' : '#171716'
+          ctx.textAlign = 'left'
+          ctx.fillText(c.title, lx + 7, ly + 12)
+          ctx.font = '400 8.5px "Geist Mono Variable", ui-monospace, monospace'
+          ctx.fillStyle = isDark ? '#A3A3A0' : '#50504E'
+          ctx.fillText(c.sub, lx + 7, ly + 23)
+        })
+      }
+    }
+
+    const $ = (id: string) => document.getElementById(id)!
+    const updatePanels = (hw: ReturnType<typeof computeHw>) => {
+      $('tdTflops').textContent = String(Math.round(hw.achievedTflops))
+      $('tdTflopsFill').style.width = `${Math.min(100, hw.mfu).toFixed(1)}%`
+      $('tdHbmBw').textContent = `${hw.hbmBw.toFixed(2)} TB/s`
+      $('tdAiVal').textContent = `${hw.ai < 10 ? hw.ai.toFixed(1) : Math.round(hw.ai)} OP/B`
+      $('tdMfuVal').textContent = `${hw.mfu.toFixed(1)}%`
+      $('tdPhaseVal').textContent = `φ ${String(hw.phaseDeg).padStart(3, '0')}°`
+      const reg = $('tdRegimeTag')
+      reg.textContent = hw.bound
+      reg.style.color = hw.bound === 'COMPUTE-BOUND' ? '#FA6D01' : '#2B5CFF'
+      $('tdSubsystemNote').textContent = hw.note
+
+      const isDark = document.documentElement.classList.contains('dark')
+      const gridCol = isDark ? '#30302E' : '#E0E1DF'
+      const lineCol = isDark ? '#E5E5E2' : '#171716'
+      const mapX = (ai: number) => 12 + (Math.log10(Math.max(1, ai)) / 3) * 190
+      const mapY = (tf: number) => 96 - (Math.log10(Math.max(2, tf)) / 3.1) * 84
+      const rx = mapX(hw.RIDGE)
+      const ry = mapY(hw.PEAK_TFLOPS)
+      const px = mapX(hw.ai)
+      const py = mapY(hw.achievedTflops)
+      $('tdRooflineSvg').innerHTML = `
+        <line x1="12" y1="96" x2="202" y2="96" stroke="${gridCol}" stroke-width="1"/>
+        <line x1="${rx.toFixed(1)}" y1="12" x2="${rx.toFixed(1)}" y2="96" stroke="${gridCol}" stroke-dasharray="3 2"/>
+        <polyline points="12,${mapY(3.35).toFixed(1)} ${rx.toFixed(1)},${ry.toFixed(1)} 202,${ry.toFixed(1)}" fill="none" stroke="${lineCol}" stroke-width="1.8"/>
+        <line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${px.toFixed(1)}" y2="96" stroke="#FA6D01" stroke-dasharray="2 2"/>
+        <circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4.5" fill="#FA6D01" stroke="#FFFFFF" stroke-width="1.4"/>
+      `
+
+      const tracks = [
+        { name: 'DMA', col: '#00CD6E', phase: 0 },
+        { name: 'MMA', col: '#FA6D01', phase: 1.4 },
+        { name: 'COMM', col: '#2B5CFF', phase: 2.9 }
+      ]
+      let wHtml = ''
+      tracks.forEach((tr, i) => {
+        const y0 = 18 + i * 28
+        let pts = ''
+        for (let x = 36; x <= 214; x += 6) {
+          const v = Math.sin((x - 36) * 0.085 - st.cycle * 0.25 + tr.phase)
+          const active = st.workload === 'decode' && tr.name === 'MMA' ? (v > 0.45 ? 1 : 0) : v > -0.1 ? 1 : 0
+          pts += `${x},${y0 + (active ? -8 : 6)} `
+        }
+        wHtml += `<text x="2" y="${y0 + 3}" font-family="Geist Mono Variable, monospace" font-size="8.5" fill="${isDark ? '#9A9A97' : '#6D6D6D'}">${tr.name}</text>`
+        wHtml += `<polyline points="${pts}" fill="none" stroke="${tr.col}" stroke-width="1.6"/>`
+      })
+      $('tdWaveSvg').innerHTML = wHtml
+    }
+
+    const tourChip = $('tdTourChip')
+    const tourText = $('tdTourText')
+    const cursorEl = $('tdCursor')
+    const ringEl = $('tdRing')
+
+    const takeOver = () => {
+      if (!st.autoTour) return
+      st.autoTour = false
+      tourChip.classList.remove('on')
+      tourText.textContent = 'MANUAL CONTROL · RESUME TOUR'
+      cursorEl.style.opacity = '0'
+    }
+    if (reduce) {
+      tourChip.classList.remove('on')
+      tourText.textContent = 'REDUCED MOTION · MANUAL'
+    }
+    tourChip.addEventListener('click', () => {
+      st.autoTour = !st.autoTour
+      tourChip.classList.toggle('on', st.autoTour)
+      tourText.textContent = st.autoTour ? 'AUTO TOUR · CLICK TO TAKE OVER' : 'MANUAL CONTROL · RESUME TOUR'
+      if (!st.autoTour) cursorEl.style.opacity = '0'
+    })
+
+    const setWorkload = (wl: 'prefill' | 'decode' | 'allreduce') => {
+      st.workload = wl
+      shell.querySelectorAll<HTMLButtonElement>('#tdWorkloads .td-btn').forEach((b) =>
+        b.classList.toggle('active', b.dataset.wl === wl)
+      )
+    }
+    const setCutaway = (cut: 'solid' | 'exploded' | 'xray') => {
+      st.cutaway = cut
+      st.tExplode = cut === 'exploded' ? 1 : cut === 'xray' ? 0.35 : 0
+      const pct = Math.round(st.tExplode * 100)
+      ;($('tdExplodeSlider') as HTMLInputElement).value = String(pct)
+      $('tdExplodeVal').textContent = `${pct}%`
+      shell.querySelectorAll<HTMLButtonElement>('#tdCutaways .td-btn').forEach((b) =>
+        b.classList.toggle('ink-active', b.dataset.cut === cut)
+      )
+      $('tdActivePart').textContent = `${st.isolate === 'ALL' ? 'ALL LAYERS' : st.isolate.toUpperCase()} · ${cut.toUpperCase()}`
+    }
+    const setCam = (cam: string) => {
+      if (!CAMS[cam]) return
+      st.tAz = CAMS[cam].az
+      st.tEl = CAMS[cam].el
+      st.tZoom = CAMS[cam].zoom
+      shell.querySelectorAll<HTMLButtonElement>('#tdCams .td-btn').forEach((b) =>
+        b.classList.toggle('ink-active', b.dataset.cam === cam)
+      )
+    }
+    const setIsolate = (iso: string) => {
+      st.isolate = iso
+      shell.querySelectorAll<HTMLButtonElement>('#tdLayerPicker .td-btn').forEach((b) =>
+        b.classList.toggle('ink-active', b.dataset.iso === iso)
+      )
+      $('tdActivePart').textContent = `${iso === 'ALL' ? 'ALL LAYERS' : iso.toUpperCase()} · ${st.cutaway.toUpperCase()}`
+    }
+
+    shell.querySelectorAll<HTMLButtonElement>('#tdWorkloads .td-btn').forEach((b) =>
+      b.addEventListener('click', () => {
+        takeOver()
+        setWorkload(b.dataset.wl as 'prefill' | 'decode' | 'allreduce')
+      })
+    )
+    shell.querySelectorAll<HTMLButtonElement>('#tdCutaways .td-btn').forEach((b) =>
+      b.addEventListener('click', () => {
+        takeOver()
+        setCutaway(b.dataset.cut as 'solid' | 'exploded' | 'xray')
+      })
+    )
+    shell.querySelectorAll<HTMLButtonElement>('#tdCams .td-btn').forEach((b) =>
+      b.addEventListener('click', () => {
+        takeOver()
+        setCam(b.dataset.cam || 'hero')
+      })
+    )
+    shell.querySelectorAll<HTMLButtonElement>('#tdLayerPicker .td-btn').forEach((b) =>
+      b.addEventListener('click', () => {
+        takeOver()
+        setIsolate(b.dataset.iso || 'ALL')
+      })
+    )
+
+    $('tdPauseBtn').addEventListener('click', (e) => {
+      takeOver()
+      st.paused = !st.paused
+      const btn = e.currentTarget as HTMLButtonElement
+      btn.textContent = st.paused ? '▶ RUN' : '❚❚ PAUSE'
+      btn.classList.toggle('active', !st.paused)
+    })
+    $('tdStepBack').addEventListener('click', () => {
+      takeOver()
+      st.paused = true
+      st.cycle -= 4
+    })
+    $('tdStepFwd').addEventListener('click', () => {
+      takeOver()
+      st.paused = true
+      st.cycle += 4
+    })
+    $('tdBatchSlider').addEventListener('input', (e) => {
+      takeOver()
+      st.batch = Number((e.target as HTMLInputElement).value)
+      $('tdBatchVal').textContent = String(st.batch)
+    })
+    $('tdExplodeSlider').addEventListener('input', (e) => {
+      takeOver()
+      const val = Number((e.target as HTMLInputElement).value)
+      st.tExplode = val / 100
+      $('tdExplodeVal').textContent = `${val}%`
+    })
+    $('tdCalloutToggle').addEventListener('click', (e) => {
+      takeOver()
+      st.callouts = !st.callouts
+      const btn = e.currentTarget as HTMLButtonElement
+      btn.textContent = st.callouts ? 'CALLOUTS: ON' : 'CALLOUTS: OFF'
+      btn.classList.toggle('ink-active', st.callouts)
+    })
+    $('tdFilterJump').addEventListener('click', () => {
+      const targetLayer = st.isolate === 'ALL' ? 'systems' : st.isolate
+      document.dispatchEvent(new CustomEvent('stack:change', { detail: targetLayer }))
+      document.getElementById('writing')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+
+    // Drag-to-orbit & pinch/wheel zoom
+    stage.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('button')) return
+      takeOver()
+      st.dragging = true
+      st.lastX = e.clientX
+      st.lastY = e.clientY
+      stage.setPointerCapture(e.pointerId)
+    })
+    stage.addEventListener('pointermove', (e) => {
+      if (!st.dragging) return
+      st.tAz += (e.clientX - st.lastX) * 0.008
+      st.tEl = Math.max(0.08, Math.min(1.42, st.tEl + (e.clientY - st.lastY) * 0.006))
+      st.lastX = e.clientX
+      st.lastY = e.clientY
+    })
+    stage.addEventListener('pointerup', () => {
+      st.dragging = false
+    })
+    stage.addEventListener(
+      'wheel',
+      (e) => {
+        if (!e.ctrlKey && !e.shiftKey) return
+        e.preventDefault()
+        takeOver()
+        st.tZoom = Math.max(0.75, Math.min(1.65, st.tZoom - e.deltaY * 0.0008))
+      },
+      { passive: false }
+    )
+
+    // Auto-tour operator script (pauses when off-screen)
+    let visible = true
+    const io = new IntersectionObserver(
+      (entries) => {
+        visible = entries[0]?.isIntersecting ?? true
+      },
+      { rootMargin: '120px' }
+    )
+    io.observe(shell)
+
+    const TOUR = [
+      { sel: '#tdCutaways [data-cut="exploded"]', fn: () => setCutaway('exploded') },
+      { sel: '#tdWorkloads [data-wl="decode"]', fn: () => setWorkload('decode') },
+      { sel: '#tdCutaways [data-cut="xray"]', fn: () => setCutaway('xray') },
+      { sel: '#tdWorkloads [data-wl="allreduce"]', fn: () => setWorkload('allreduce') },
+      { sel: '#tdCams [data-cam="core"]', fn: () => setCam('core') },
+      {
+        sel: '#tdCutaways [data-cut="solid"]',
+        fn: () => {
+          setCutaway('solid')
+          setCam('hero')
+          setWorkload('prefill')
+        }
+      }
+    ]
+    let tourStep = 0
+    window.setInterval(() => {
+      if (!st.autoTour || reduce || !visible) return
+      const beat = TOUR[tourStep % TOUR.length]
+      tourStep++
+      const btn = shell.querySelector<HTMLElement>(beat.sel)
+      if (!btn) return
+      const sR = shell.getBoundingClientRect()
+      const bR = btn.getBoundingClientRect()
+      const x = bR.left - sR.left + bR.width / 2
+      const y = bR.top - sR.top + bR.height / 2
+      cursorEl.style.opacity = '1'
+      cursorEl.style.transform = `translate(${x}px, ${y}px)`
+      window.setTimeout(() => {
+        if (!st.autoTour) return
+        ringEl.style.left = `${x}px`
+        ringEl.style.top = `${y}px`
+        ringEl.classList.remove('pop')
+        void ringEl.offsetWidth
+        ringEl.classList.add('pop')
+        beat.fn()
+      }, 650)
+    }, 3900)
+
+    let lastTs = 0
+    const tick = (ts: number) => {
+      if (visible && ts - lastTs >= 33) {
+        lastTs = ts
+        if (!reduce && !st.paused) st.cycle += 0.45
+        const hw = computeHw(st.cycle, st.batch, st.workload)
+        drawScene(hw)
+        updatePanels(hw)
+      }
+      requestAnimationFrame(tick)
+    }
+
+    resize()
+    new ResizeObserver(resize).observe(stage)
+    requestAnimationFrame(tick)
+  }
+</script>
+
+<style>
+  .td-wrap {
+    scroll-margin-top: 4.5rem;
+  }
+  .td-shell {
+    position: relative;
+    background: #f4f4f1;
+    border: 1.5px solid var(--ink-hard, #171716);
+    overflow: hidden;
+  }
+  :global(.dark) .td-shell {
+    background: #1b1b1a;
+  }
+  .td-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 18px;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+  }
+  .td-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+  .td-bar {
+    width: 4px;
+    height: 26px;
+    background: var(--c-l6);
+    flex-shrink: 0;
+  }
+  .td-title {
+    font-weight: 500;
+    font-size: 0.98rem;
+    letter-spacing: -0.02em;
+    color: hsl(var(--foreground));
+  }
+  .td-sub,
+  .td-tourchip,
+  .td-cap,
+  .td-big-num,
+  .td-big-unit,
+  .td-kv-k,
+  .td-kv-v,
+  .td-axis-row,
+  .td-slider-head,
+  .td-legend,
+  .td-badge,
+  .td-hint {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .td-sub {
+    font-size: 0.64rem;
+    letter-spacing: 0.08em;
+    color: hsl(var(--faint));
+    margin-top: 2px;
+  }
+  .td-tourchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    border: 1px solid var(--ink-hard, #171716);
+    background: hsl(var(--card));
+    font-size: 0.64rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: hsl(var(--foreground));
+    cursor: pointer;
+  }
+  .td-tourchip i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: hsl(var(--faint));
+    display: block;
+  }
+  .td-tourchip.on i {
+    background: var(--c-l6);
+    animation: tdBlink 1.2s steps(2) infinite;
+  }
+  @keyframes tdBlink {
+    50% {
+      opacity: 0.2;
+    }
+  }
+  .td-workspace {
+    position: relative;
+    display: grid;
+    grid-template-columns: 244px minmax(0, 1fr) 256px;
+    min-height: 520px;
+  }
+  .td-col {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+    background: hsl(var(--card) / 0.78);
+    border-right: 1px solid hsl(var(--border));
+    z-index: 3;
+  }
+  .td-col--right {
+    border-right: none;
+    border-left: 1px solid hsl(var(--border));
+  }
+  .td-panel {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    padding: 11px;
+  }
+  .td-cap {
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    color: hsl(var(--faint));
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    margin-bottom: 7px;
+  }
+  .td-big-num {
+    font-size: 2.45rem;
+    font-weight: 500;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--c-l6);
+  }
+  .td-big-unit {
+    font-size: 0.6rem;
+    letter-spacing: 0.07em;
+    color: hsl(var(--muted-foreground));
+    margin-top: 5px;
+    white-space: nowrap;
+  }
+  .td-meter {
+    height: 6px;
+    background: hsl(var(--muted));
+    margin-top: 8px;
+    position: relative;
+  }
+  .td-meter-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: var(--c-l6);
+    transition: width 0.2s ease;
+  }
+  .td-kv-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid hsl(var(--border));
+  }
+  .td-kv-k {
+    font-size: 0.56rem;
+    color: hsl(var(--faint));
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .td-kv-v {
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: hsl(var(--foreground));
+    margin-top: 2px;
+    white-space: nowrap;
+  }
+  .td-axis-row {
+    font-size: 0.58rem;
+    color: hsl(var(--faint));
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .td-transport {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+  }
+  .td-btn {
+    flex: 1;
+    height: 26px;
+    padding: 0 7px;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: hsl(var(--foreground));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .td-btn:hover {
+    border-color: var(--ink-hard, #171716);
+  }
+  .td-btn.active {
+    background: var(--c-l6);
+    border-color: var(--c-l6);
+    color: #fff;
+  }
+  .td-btn.ink-active {
+    background: hsl(var(--foreground));
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+  .td-slider-row {
+    margin-top: 8px;
+  }
+  .td-slider-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.6rem;
+    color: hsl(var(--muted-foreground));
+    margin-bottom: 3px;
+  }
+  .td-slider-head strong {
+    color: hsl(var(--foreground));
+  }
+  .td-range {
+    width: 100%;
+    accent-color: var(--c-l6);
+    cursor: pointer;
+    height: 4px;
+  }
+  .td-stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+  }
+  .td-stage:active {
+    cursor: grabbing;
+  }
+  #tdCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .td-stage-top {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 14px;
+    pointer-events: none;
+  }
+  .td-legend {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 9px;
+    font-size: 0.58rem;
+    letter-spacing: 0.05em;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--card) / 0.92);
+    padding: 4px 8px;
+    border: 1px solid hsl(var(--border));
+    white-space: nowrap;
+  }
+  @media (max-width: 1180px) {
+    .td-legend {
+      flex-wrap: wrap;
+    }
+  }
+  .td-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .td-legend i {
+    width: 9px;
+    height: 3px;
+    display: inline-block;
+  }
+  .td-badge {
+    font-size: 0.6rem;
+    padding: 4px 8px;
+    background: hsl(var(--card) / 0.9);
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+    white-space: nowrap;
+  }
+  .td-stage-bot {
+    position: relative;
+    z-index: 3;
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(transparent, hsl(var(--background) / 0.9) 42%);
+  }
+  .td-layer-picker {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+  }
+  .td-layer-picker .td-btn {
+    flex: 0 1 auto;
+    height: 24px;
+    padding: 0 8px;
+  }
+  .td-hint {
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    color: hsl(var(--faint));
+    text-align: center;
+  }
+  .td-btn-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 10px;
+  }
+  .td-btn-grid .td-btn {
+    flex: 0 1 auto;
+    height: 24px;
+    padding: 0 8px;
+    font-size: 0.58rem;
+  }
+  .td-note {
+    margin: 6px 0 0;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: hsl(var(--muted-foreground));
+  }
+  .td-cursor {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 25;
+    pointer-events: none;
+    opacity: 0;
+    transition:
+      transform 0.62s cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 0.25s ease;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.32));
+  }
+  .td-ring {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 32px;
+    height: 32px;
+    margin: -16px 0 0 -16px;
+    border-radius: 50%;
+    border: 1.5px solid var(--c-l6);
+    pointer-events: none;
+    z-index: 24;
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  .td-ring.pop {
+    animation: tdRingPop 0.55s ease-out forwards;
+  }
+  @keyframes tdRingPop {
+    0% {
+      opacity: 0.95;
+      transform: scale(0.3);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1.45);
+    }
+  }
+  @media (max-width: 1020px) {
+    .td-workspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .td-col {
+      border-right: none;
+      border-bottom: 1px solid hsl(var(--border));
+    }
+    .td-col--right {
+      border-left: none;
+      border-top: 1px solid hsl(var(--border));
+    }
+    .td-stage {
+      min-height: 390px;
+    }
+  }
+</style>

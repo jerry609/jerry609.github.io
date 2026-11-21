@@ -158,9 +158,17 @@ const pad = (n: number) => String(n).padStart(2, '0')
             const bh = (v / binMax) * HH
             const x = 40 + i * bw
             const isMed = med !== undefined && med >= k && k + 200 > med
+            const bandFill = k < 1600 ? '#00CD6E' : k < 2000 ? '#2B5CFF' : k < 2400 ? '#FA6D01' : '#DE99FE'
             return (
               <g>
-                <rect class:list={['bar', isMed && 'med']} x={x + 3} y={HH - bh + 6} width={bw - 6} height={bh} />
+                <rect
+                  class:list={['bar', isMed && 'med']}
+                  style={`fill:${bandFill}`}
+                  x={x + 3}
+                  y={HH - bh + 6}
+                  width={bw - 6}
+                  height={bh}
+                />
                 <text class='bv' x={x + bw / 2} y={HH - bh} text-anchor='middle'>
                   {v}
                 </text>
@@ -241,16 +249,16 @@ const pad = (n: number) => String(n).padStart(2, '0')
   .readouts {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: var(--hair) solid hsl(var(--border));
-    border-radius: var(--radius-box);
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 2px;
     background: hsl(var(--card));
     margin-bottom: 2.5rem;
   }
   .readouts > div {
     display: grid;
-    gap: 0.1rem;
-    padding: 0.8rem 1rem;
-    border-left: var(--hair) solid hsl(var(--border));
+    gap: 0.15rem;
+    padding: 0.9rem 1.1rem;
+    border-left: 1px solid hsl(var(--border));
   }
   .readouts > div:first-child {
     border-left: 0;
@@ -263,7 +271,9 @@ const pad = (n: number) => String(n).padStart(2, '0')
     color: hsl(var(--faint));
   }
   .readouts b {
-    font-size: 1.85rem;
+    font-size: 1.95rem;
+    font-weight: 400;
+    letter-spacing: -0.03em;
     line-height: 1.1;
     color: hsl(var(--foreground));
   }
@@ -278,6 +288,16 @@ const pad = (n: number) => String(n).padStart(2, '0')
   :global(.site-main) {
     counter-reset: fig;
   }
+  /* Matte Obsidian Dark Telemetry Panels for DAG & Rating Histogram */
+  .fig .fig-panel:not(.tight) {
+    background: #1d1d1d;
+    border: 1.5px solid #020100;
+    border-radius: 2px;
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
   .scroll {
     overflow-x: auto;
   }
@@ -288,68 +308,72 @@ const pad = (n: number) => String(n).padStart(2, '0')
   }
   .dag .e {
     fill: none;
-    stroke: hsl(var(--s2));
-    stroke-width: 1.2;
+    stroke: #4c4c48;
+    stroke-width: 1.3;
   }
   .dag .e.main {
-    stroke: hsl(var(--scarf));
+    stroke: #fa6d01;
     stroke-width: 2;
   }
   .dag .node rect {
-    fill: hsl(var(--card));
-    stroke: hsl(var(--foreground) / 0.8);
-    stroke-width: 1;
+    fill: #242422;
+    stroke: #00cd6e;
+    stroke-width: 1.3;
     transition: fill 0.15s ease;
   }
   .dag .node.main rect {
-    stroke: hsl(var(--scarf));
-    stroke-width: 1.6;
+    fill: #232321;
+    stroke: #fa6d01;
+    stroke-width: 1.75;
   }
   .dag .node.empty rect {
-    fill: hsl(var(--background));
-    stroke: hsl(var(--s2));
+    fill: #171716;
+    stroke: #4e4e4a;
     stroke-dasharray: 4 3;
   }
   .dag a.node:hover rect,
   .dag a.node:focus-visible rect {
-    fill: hsl(var(--scarf) / 0.1);
+    fill: #32251c;
   }
   .dag .nt {
     font-family: var(--font-body);
     font-size: 13px;
-    font-weight: 600;
-    fill: hsl(var(--foreground));
+    font-weight: 500;
+    fill: #f0f0ef;
   }
   .dag .empty .nt {
-    fill: hsl(var(--faint));
+    fill: #7c7c78;
   }
   .dag .nm {
     font-family: var(--font-mono);
     font-size: 10.5px;
-    fill: hsl(var(--faint));
+    fill: #9a9a97;
   }
   .hist {
     display: block;
     width: 100%;
   }
   .hist .bar {
-    fill: hsl(var(--foreground));
+    fill: #2b5cff;
   }
   .hist .bar.med {
-    fill: hsl(var(--scarf));
+    stroke: #f8e600;
+    stroke-width: 1.5;
   }
   .hist .bv,
   .hist .bx {
     font-family: var(--font-mono);
     font-size: 11px;
-    fill: hsl(var(--faint));
+    fill: #9a9a97;
   }
   .hist .base {
-    stroke: hsl(var(--s2));
+    stroke: #383836;
   }
   .tight {
     padding: 0.5rem 1rem;
     overflow-x: auto;
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 2px;
   }
   .topics {
     width: 100%;

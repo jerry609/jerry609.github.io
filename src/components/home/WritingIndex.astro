@@ -2,7 +2,7 @@
 import type { CollectionEntry } from 'astro:content'
 
 import PixelMouse from '@/components/brand/PixelMouse.astro'
-import { ALL_LAYERS, SERIES, sourceLabel } from '@/data/stack'
+import { ALL_LAYERS, layerColor, SERIES, sourceLabel } from '@/data/stack'
 
 interface Props {
   posts: CollectionEntry<'blog'>[]
@@ -15,39 +15,40 @@ const { posts, limit = 0, id = 'writing-index' } = Astro.props
 const counts = Object.fromEntries(
   ALL_LAYERS.map((l) => [l.id, posts.filter((p) => p.data.layer === l.id).length])
 )
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-const stamp = (d: Date) =>
-  `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+const isoDate = (d: Date) => d.toISOString().slice(0, 10)
 const seriesOf = (pid: string) =>
   SERIES.find((s) => (s.slugs as readonly string[]).includes(pid))?.title
 const shortLayer = (l: string) => {
   const L = ALL_LAYERS.find((x) => x.id === l)
-  return L && L.code ? L.name.toUpperCase() : 'NOTES'
+  return L && L.code ? `${L.code} ${L.name}` : 'NOTES'
 }
 ---
 
 <div class='windex' id={id} data-limit={limit}>
   <div class='filters'>
-    <button class='search-toggle' type='button' aria-label='搜索标题和摘要' aria-expanded='false'>
-      <svg viewBox='0 0 24 24' width='14' height='14' aria-hidden='true'
-        ><circle cx='11' cy='11' r='7' fill='none' stroke='currentColor' stroke-width='2'
-        ></circle><path d='M20 20l-3.5-3.5' stroke='currentColor' stroke-width='2' fill='none'
-        ></path></svg
-      >
-    </button>
-    <label class='search' hidden>
-      <span class='sr-only'>按标题或摘要过滤</span>
-      <input type='search' placeholder='FILTER…' autocomplete='off' id={`${id}-q`} />
-    </label>
     <div class='chips' role='group' aria-label='按栈层筛选'>
       <button class='chip-btn' type='button' data-layer='all' aria-pressed='true'>All</button>
       {
         ALL_LAYERS.filter((l) => counts[l.id] > 0).map((l) => (
           <button class='chip-btn' type='button' data-layer={l.id} aria-pressed='false'>
+            <span class='sq-dot' style={`background:${l.color}`} aria-hidden='true' />
             {l.code ? `${l.code} ${l.name}` : 'Notes'}
           </button>
         ))
       }
+    </div>
+    <div class='filter-right'>
+      <button class='search-toggle' type='button' aria-label='搜索标题和摘要' aria-expanded='false'>
+        <svg viewBox='0 0 24 24' width='13' height='13' aria-hidden='true'
+          ><circle cx='11' cy='11' r='7' fill='none' stroke='currentColor' stroke-width='2'
+          ></circle><path d='M20 20l-3.5-3.5' stroke='currentColor' stroke-width='2' fill='none'
+          ></path></svg
+        >
+      </button>
+      <label class='search' hidden>
+        <span class='sr-only'>按标题或摘要过滤</span>
+        <input type='search' placeholder='Filter titles / keywords...' autocomplete='off' id={`${id}-q`} />
+      </label>
     </div>
   </div>
 
@@ -55,15 +56,16 @@ const shortLayer = (l: string) => {
     {
       posts.map((p) => {
         const right = seriesOf(p.id) ?? sourceLabel(p.data.source)
+        const c = layerColor(p.data.layer)
         return (
           <li
             data-layer={p.data.layer}
             data-q={`${p.data.title} ${p.data.description} ${p.data.tags.join(' ')} ${sourceLabel(p.data.source)}`.toLowerCase()}
           >
-            <a class='trow' href={`/blog/${p.id}`}>
-              <span class='when mono'>
-                {stamp(p.data.publishDate)}
-                <span class='dot'>·</span>
+            <a class='trow' href={`/blog/${p.id}`} style={`--row-c:${c}`}>
+              <span class='art-date mono'>{isoDate(p.data.publishDate)}</span>
+              <span class='art-layer mono'>
+                <span class='sq-dot' style={`background:${c}`} aria-hidden='true' />
                 {shortLayer(p.data.layer)}
               </span>
               <span class='ttl'>
@@ -163,40 +165,53 @@ const shortLayer = (l: string) => {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+    justify-content: space-between;
+    gap: 0.65rem;
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 0.25rem;
+    background: hsl(var(--card));
+    border: 1.5px solid var(--ink-hard, #171716);
+  }
+  .filter-right {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
   }
   .search-toggle,
   .chip-btn,
   .more {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: 0.66rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: hsl(var(--foreground));
+    color: hsl(var(--muted-foreground));
     background: transparent;
-    border: var(--hair) solid hsl(var(--foreground) / 0.55);
-    border-radius: var(--radius);
-    padding: 0.15rem 0.45rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 2px;
+    padding: 0.26rem 0.55rem;
     cursor: pointer;
-    line-height: 1.4;
+    line-height: 1.3;
   }
   .search-toggle {
     display: grid;
     place-items: center;
-    width: 1.6rem;
-    height: 1.6rem;
+    width: 1.8rem;
+    height: 1.8rem;
     padding: 0;
   }
   .chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: 0.35rem;
   }
   .chip-btn:hover,
   .search-toggle:hover,
   .more:hover {
-    border-color: hsl(var(--foreground));
+    border-color: var(--ink-hard, #171716);
+    color: hsl(var(--foreground));
   }
   .chip-btn[aria-pressed='true'] {
     background: hsl(var(--foreground));
@@ -205,83 +220,102 @@ const shortLayer = (l: string) => {
   }
   .search input {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.04em;
-    width: 12rem;
+    font-size: 0.74rem;
+    width: 13rem;
     max-width: 60vw;
-    border: var(--hair) solid hsl(var(--foreground) / 0.55);
-    border-radius: var(--radius);
-    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 2px;
+    background: hsl(var(--background));
     color: hsl(var(--foreground));
-    padding: 0.2rem 0.5rem;
+    padding: 0.28rem 0.55rem;
     outline: none;
   }
   .search input:focus {
-    border-color: hsl(var(--scarf));
+    border-color: var(--ink-hard, #171716);
   }
   .table {
     list-style: none;
     margin: 0;
     padding: 0;
-    border-top: var(--hair) solid hsl(var(--border));
+    border-bottom: 1.5px solid var(--ink-hard, #171716);
   }
   .trow {
     display: grid;
-    grid-template-columns: 12.5rem minmax(0, 1fr) 12rem;
-    gap: 1.5rem;
+    grid-template-columns: 5.8rem 6.75rem minmax(0, 1fr) 10.5rem;
+    gap: 1.15rem;
     align-items: baseline;
-    padding: 0.8rem 0.25rem;
-    border-bottom: var(--hair) solid hsl(var(--border));
+    padding: 0.9rem 0.75rem;
+    border-bottom: 1px solid hsl(var(--border));
     color: inherit;
     text-decoration: none;
+    transition:
+      background-color 0.14s ease,
+      box-shadow 0.14s ease;
   }
   .trow:hover {
-    background: hsl(var(--band));
+    background: hsl(var(--card));
+    box-shadow: inset 3px 0 0 var(--row-c, var(--c-l6));
     color: inherit;
   }
   .trow:hover .t {
     color: hsl(var(--primary));
   }
-  .when,
-  .who {
-    font-size: 0.7rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+  .art-date {
+    font-size: 0.72rem;
     color: hsl(var(--faint));
     white-space: nowrap;
   }
-  .when .dot {
-    margin: 0 0.4rem;
+  .art-layer {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.66rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    white-space: nowrap;
   }
   .who {
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    color: hsl(var(--faint));
+    white-space: nowrap;
     text-align: right;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .ttl {
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
   }
   .t {
     color: hsl(var(--foreground));
+    font-size: 0.95rem;
     font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.42;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     transition: color 0.15s ease;
   }
   .x {
     display: block;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     color: hsl(var(--muted-foreground));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-top: 0.1rem;
   }
   .empty {
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 1.25rem 0.25rem;
+    padding: 1.25rem 0.75rem;
     color: hsl(var(--muted-foreground));
-    border-bottom: var(--hair) solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
   }
   .foot {
     display: flex;
@@ -291,8 +325,10 @@ const shortLayer = (l: string) => {
     margin-top: 1.25rem;
   }
   .more {
-    padding: 0.4rem 0.9rem;
-    font-size: 0.75rem;
+    padding: 0.45rem 1.05rem;
+    font-size: 0.72rem;
+    border: 1.5px solid var(--ink-hard, #171716);
+    color: hsl(var(--foreground));
   }
   .shown {
     font-size: 0.7rem;
@@ -301,10 +337,14 @@ const shortLayer = (l: string) => {
   @media (max-width: 860px) {
     .trow {
       grid-template-columns: minmax(0, 1fr);
-      gap: 0.2rem;
+      gap: 0.22rem;
+      padding: 0.85rem 0.5rem;
     }
     .who {
       display: none;
+    }
+    .t {
+      white-space: normal;
     }
     .x {
       white-space: normal;

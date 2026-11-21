@@ -1,46 +1,51 @@
 /*
- * jerry609 theme v2: Mouse · Asphalt · Scarf
- * The palette comes from the avatar photo: a white mouse (surfaces) on grey asphalt (ground)
- * wearing a plaid scarf (the only accent). Light = asphalt by day, dark = asphalt at night.
- *
- * Accent has two tiers:
- *   --scarf    graphics only (underlines, bars, progress, focus, selected marks); it is the
- *              mascot's scarf colour and passes 3:1 against the ground
- *   --primary  accent text (link hover, labels); one step darker (light) / lighter (dark), ≥4.5:1
- * Layers of the stack never get colours; only the selected one turns scarf.
- *
- * Type: Geist for UI, titles and body; Source Serif 4 for theorem boxes; Pixelify Sans only for
- *       the wordmark and mascot-side decoration (never for numbers: its 5 reads as S);
- *       Geist Mono for metadata and numeric read-outs.
- * Scale: T1 17/30 (article body) · T2 16/26 · B1 15/24 · B2 14/22 · C1 12/18 · C2 10/14
- * Shape: radius 0 / 2px (controls, tags) / 6px (containers); hairline 0.5px on 2x screens.
+ * jerry609 theme v3: Swiss Warm Paper × Matte Obsidian × Six-Layer Spot Inks
+ * Inspired by Ayush Soni (@ayushsoni_io) flat print-craft & elvarofficial/teardown studio aesthetics.
  */
 
 /* Theme (HSL triplets, consumed by UnoCSS as hsl(var(--x) / alpha)) */
 :root {
-  /* Background */
-  --background: 210 20% 96.1%; /* ground   #f3f5f7 */
-  --card: 0 0% 100%; /* surface  #ffffff */
-  --muted: 210 18.7% 93.7%; /* sunken   #eceff2 */
-  --band: 210 21.4% 94.5%;
+  /* Background: warm archival stone paper (#F2F2F0) */
+  --background: 60 8% 94.9%; /* #f2f2f0 */
+  --card: 0 0% 100%; /* #ffffff */
+  --muted: 60 7% 91.5%; /* #eaeae6 */
+  --band: 60 9% 93%; /* #efefe9 */
   /* Lines */
-  --s1: 213 16.4% 89.2%; /* #dfe3e8 headphones */
-  --s2: 214 13.2% 79.2%; /* #c3c9d1 headphone shadow */
+  --s1: 60 5% 81.5%; /* #d1d1cf */
+  --s2: 60 4% 68%; /* #b0b0ac */
   /* Labels */
-  --foreground: 213 20% 8.8%; /* L1 #12161b ink */
-  --muted-foreground: 213 11.8% 36.5%; /* L2 #525c68 */
-  --faint: 213 9.7% 44.3%; /* L3 #66707c */
-  /* Accent */
-  --scarf: 21 66.9% 49.8%; /* #d4652a */
-  --primary: 20 77.8% 38.8%; /* #b04a16 */
+  --foreground: 60 3% 9%; /* #171716 */
+  --muted-foreground: 60 2% 31%; /* #50504e */
+  --faint: 0 0% 42.7%; /* #6d6d6d */
+  /* Primary Accent: Signal Orange (#FA6D01) */
+  --scarf: 26 99% 49%; /* #fa6d01 */
+  --primary: 24 96% 42%; /* #d15504 >=4.5:1 on light */
   --primary-foreground: 0 0% 100%;
   /* Status */
-  --positive: 148 55.4% 30.8%;
-  --warning: 40 100% 28%;
-  --negative: 4 64.1% 45.9%;
-  --info: 224 55.3% 46.5%;
-  /* Data marks (trace figure) */
-  --mark: 214 15.7% 20%;
+  --positive: 146 79% 31%; /* #108d47 */
+  --warning: 45 100% 34%;
+  --negative: 4 72% 48%;
+  --info: 226 100% 58%; /* #2b5cff */
+  /* Data marks */
+  --mark: 60 3% 9%;
+
+  /* Named design-system hex tokens */
+  --paper: #f2f2f0;
+  --cream: #f4f3e6;
+  --cream-stripe: #e3e1d4;
+  --obsidian: #1d1d1d;
+  --obsidian-deep: #141413;
+  --obsidian-gutter: #020100;
+  --ink-hard: #171716;
+
+  /* 6-Layer Agent × Infra Spot-Print Inks */
+  --c-l6: #fa6d01;
+  --c-l5: #2b5cff;
+  --c-l4: #de99fe;
+  --c-l3: #f8e600;
+  --c-l3-ui: #cfaf00;
+  --c-l2: #00cd6e;
+  --c-l1: #108d47;
 
   /* Theme compatibility */
   --card-foreground: var(--foreground);
@@ -57,37 +62,37 @@
   --ring: var(--scarf);
 
   --hair: 1px;
-  --radius: 0.125rem;
-  --radius-box: 6px;
-  --shadow-float: 0 64px 80px rgb(0 0 0 / 0.06), 0 17px 18px rgb(0 0 0 / 0.04),
-    0 5px 5px rgb(0 0 0 / 0.02);
+  --radius: 2px;
+  --radius-box: 4px;
+  --shadow-float: 0 24px 48px rgb(0 0 0 / 0.08), 0 4px 10px rgb(0 0 0 / 0.04);
 
   --font-pixel: 'Pixelify Sans Variable', 'Pixelify Sans', ui-monospace, monospace;
-  --font-display: 'Source Serif 4 Variable', 'Source Serif 4', 'Songti SC', 'Noto Serif CJK SC',
-    'Source Han Serif SC', 'PingFang SC', 'Microsoft YaHei', Georgia, serif;
+  --font-display: 'Geist Variable', 'Geist', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', system-ui, sans-serif;
   --font-body: 'Geist Variable', 'Geist', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
     'Noto Sans CJK SC', system-ui, sans-serif;
   --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo,
     Consolas, monospace;
 }
 .dark {
-  --background: 210 16.7% 7.1%; /* #0f1215 */
-  --card: 213 17% 10.4%; /* #161a1f */
-  --muted: 210 18.2% 8.6%; /* #12161a */
-  --band: 210 17.4% 9%;
-  --s1: 210 15.6% 17.6%; /* #262d34 */
-  --s2: 213 14.5% 24.3%; /* #353d47 */
-  --foreground: 210 13.6% 91.4%; /* #e6e9ec */
-  --muted-foreground: 212 10.4% 64.1%; /* #9aa3ad */
-  --faint: 211 8.8% 53.1%; /* #7d8792 */
-  --scarf: 23 84.6% 61.8%; /* #f08a4b */
-  --primary: 23 86.3% 68.6%; /* #f4a06a */
-  --primary-foreground: 210 16.7% 7.1%;
-  --positive: 147 45.5% 56.1%;
-  --warning: 42 74.3% 57.3%;
-  --negative: 5 84% 68.2%;
-  --info: 226 100% 74.5%;
-  --mark: 212 15.8% 81.4%;
+  --background: 60 3% 8.6%; /* #161615 matte obsidian */
+  --card: 60 3% 12.2%; /* #20201e */
+  --muted: 60 3% 10.5%; /* #1b1b1a */
+  --band: 60 3% 10.8%;
+  --s1: 60 2% 20.5%; /* #353533 */
+  --s2: 60 2% 29%; /* #4b4b48 */
+  --foreground: 60 4% 94%; /* #f0f0ef */
+  --muted-foreground: 60 2% 64%; /* #a3a3a0 */
+  --faint: 60 2% 49%; /* #7d7d7a */
+  --scarf: 26 99% 54%; /* #fe7a16 */
+  --primary: 26 99% 60%; /* #ff8e38 */
+  --primary-foreground: 60 3% 8.6%;
+  --positive: 152 100% 42%; /* #00cd6e */
+  --warning: 54 100% 50%; /* #f8e600 */
+  --negative: 5 84% 68%;
+  --info: 226 100% 68%;
+  --mark: 60 4% 90%;
+  --ink-hard: #e5e5e2;
+  --c-l3-ui: #f8e600;
   --shadow-float: 0 24px 48px rgb(0 0 0 / 0.5), 0 4px 8px rgb(0 0 0 / 0.4);
 }
 /* Hairlines on high-density screens: thinner but one step darker so they stay visible */
@@ -197,9 +202,9 @@ a {
 }
 .sec-title {
   font-family: var(--font-body);
-  font-size: clamp(1.4rem, 2.4vw, 1.75rem);
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-size: clamp(1.5rem, 2.4vw, 1.95rem);
+  font-weight: 400;
+  letter-spacing: -0.028em;
   line-height: 1.15;
   margin: 0;
   color: hsl(var(--foreground));
@@ -207,11 +212,11 @@ a {
 }
 .sec-title .zh {
   font-family: var(--font-body);
-  font-size: 0.5em;
-  font-weight: 500;
+  font-size: 0.46em;
+  font-weight: 400;
   letter-spacing: 0;
   color: hsl(var(--muted-foreground));
-  margin-left: 0.5rem;
+  margin-left: 0.6rem;
 }
 .sec-note {
   margin-left: auto;
@@ -225,15 +230,18 @@ a {
 
 /* Page intro used by section pages (Math, Roadmap, About, Projects) */
 .page-intro {
-  padding-block: 2.5rem 2rem;
-  border-bottom: var(--hair) solid hsl(var(--border));
-  margin-bottom: 2.5rem;
+  padding-block: 2.25rem 1.85rem;
+  border-bottom: 1.5px solid var(--ink-hard);
+  margin-bottom: 2.25rem;
 }
 .page-intro .eyebrow {
   color: hsl(var(--muted-foreground));
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 0.75rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .page-intro .eyebrow span + span::before {
   content: '/';
@@ -242,28 +250,40 @@ a {
 }
 .page-intro h1 {
   font-family: var(--font-body);
-  font-size: clamp(2.25rem, 5vw, 3.25rem);
-  font-weight: 600;
-  letter-spacing: -0.035em;
+  font-size: clamp(2.1rem, 4.6vw, 3.1rem);
+  font-weight: 400;
+  letter-spacing: -0.032em;
   line-height: 1.08;
-  margin: 1rem 0 1.125rem;
+  margin: 0.9rem 0 1rem;
   color: hsl(var(--foreground));
 }
 .page-intro h1 small {
   font-family: var(--font-body);
-  font-size: 0.38em;
-  font-weight: 500;
+  font-size: 0.4em;
+  font-weight: 400;
   letter-spacing: 0;
   color: hsl(var(--muted-foreground));
   margin-left: 0.75rem;
-  vertical-align: 0.45em;
+  vertical-align: 0.38em;
 }
 .page-intro .lede {
-  font-size: 1.125rem;
-  line-height: 1.7;
-  max-width: 40em;
+  font-size: 1rem;
+  line-height: 1.72;
+  max-width: 44em;
   color: hsl(var(--muted-foreground));
   margin: 0;
+}
+
+/* Shared color-coded layer square dot */
+.sq-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 0.75px rgba(23, 23, 22, 0.24);
+}
+.dark .sq-dot {
+  box-shadow: none;
 }
 
 /* Surfaces */

@@ -127,14 +127,14 @@ const elsewhere = [
     position: sticky;
     top: 0;
     z-index: 50;
-    background: hsl(var(--background) / 0.86);
+    background: hsl(var(--background) / 0.92);
     backdrop-filter: saturate(140%) blur(10px);
     -webkit-backdrop-filter: saturate(140%) blur(10px);
-    border-bottom: 1px solid transparent;
+    border-bottom: 1px solid hsl(var(--border));
     transition: border-color 0.2s ease;
   }
   .site-header.scrolled {
-    border-bottom-color: hsl(var(--border));
+    border-bottom-color: var(--ink-hard, hsl(var(--border)));
   }
   .site-header.on-dark {
     background: transparent;
@@ -179,10 +179,10 @@ const elsewhere = [
     color: hsl(var(--primary));
   }
   .wordmark {
-    font-family: var(--font-pixel);
-    font-weight: 600;
-    font-size: 1.2rem;
-    letter-spacing: 0.01em;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 0.92rem;
+    letter-spacing: -0.01em;
     transition: color 0.15s ease;
   }
   .nav {
