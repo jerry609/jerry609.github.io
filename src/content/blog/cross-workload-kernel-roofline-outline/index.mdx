@@ -1,17 +1,18 @@
 ---
 title: 'Cross-Workload Kernel Dispatch'
-description: 'Four-dimensional hardware analysis, cross-platform workload distributions, per-family kernels, and continuous-predicate dispatch on H100 GQA and Ascend 910.'
+description: '3D silicon teardown, 4D hardware diagnosis, per-family kernels, and continuous-predicate dispatch on NVIDIA H100 SXM5 and Huawei Ascend 910C.'
 publishDate: '2026-06-08'
 layer: systems
 cover:
   label: 'GQA'
   variant: 'paper'
-tags: ['gqa', 'flashinfer', 'cann-bench', 'roofline', 'h100', 'ascend', 'triton']
+tags: ['gqa', 'flashinfer', 'cann-bench', 'roofline', 'h100', 'ascend-910c', 'teardown', 'triton']
 language: 'zh-CN'
 draft: false
 ---
 
 import ConstraintMatrixFig from '@/components/blog/ConstraintMatrixFig.astro'
+import KernelTeardownFig from '@/components/blog/KernelTeardownFig.astro'
 import WorkloadDistFig from '@/components/blog/WorkloadDistFig.astro'
 import RooflineDispatchFig from '@/components/blog/RooflineDispatchFig.astro'
 
@@ -19,8 +20,8 @@ import RooflineDispatchFig from '@/components/blog/RooflineDispatchFig.astro'
   <div class="tm-takeaways-head">Summary</div>
   <ul>
     <li><strong>物理瓶颈随负载切换</strong>：同一算子跨越输入形状临界点后，主导延迟会在发射地板 $\tau_{\mathrm{launch}}$、带宽屋顶 $\mathrm{Peak}_{\mathrm{bw}}$、算力屋顶 $\mathrm{Peak}_{\mathrm{comp}}$ 与片上容量边界之间迁移。</li>
-    <li><strong>双平台分布实证</strong>：H100 上 FlashInfer-Bench 的 36 个 <code>gqa_decode</code> 用例沿 132 SM 饱和线分裂为三个家族。Ascend 910 上 CANN-Bench v2.1 的 20 个 <code>flash_attention</code> 用例在 192 KB 片上 UB 容量边界两侧形成明显断崖。</li>
-    <li><strong>分族实现与连续路由</strong>：系统将四维画像、独立特化内核与连续物理谓词路由拆为三个模块，在不硬编码用例编号的前提下消除跨负载长尾退化。</li>
+    <li><strong>双平台物理拆解与分布实证</strong>：NVIDIA H100 SXM5（单颗 814 mm² GH100、132 SM、5+1 HBM3）上 FlashInfer-Bench 的 36 个 <code>gqa_decode</code> 用例沿 132 SM 饱和线分裂为三个家族；Huawei Ascend 910C（双芯粒 48 AIC + 96 AIV、8× HBM2e）上 CANN-Bench v2.1 的 20 个 <code>flash_attention</code> 用例在单 AIV 核 192 KB 片上 UB 容量边界两侧形成硬断崖。</li>
+    <li><strong>六步工程阶梯与连续路由</strong>：先锁死硬件物理尺子，再将四维画像、架构级特化内核与连续物理谓词路由拆为三个模块，并配合 <code>ncu</code> / <code>msprof</code> 真机指标定位瓶颈，在不硬编码用例编号的前提下消除跨负载长尾退化。</li>
   </ul>
 </div>
 
@@ -56,21 +57,27 @@ $$
 
 **维度三：负载分布偏度。** 在变长序列注意力或稀疏专家路由中，不同线程块承担的计算量差异显著。全局同步延迟取决于耗时最长的单个线程块。当偏度比 $\mathrm{skew\_ratio} = \max(L_i) / \mathrm{mean}(L_i)$ 超过 1.5 时，静态均分调度会导致大多数核心提前结束并空等长尾块。
 
-**维度四：静态维度与片上容量边界。** 头维度 $D$、地址对齐粒度与片上缓存上限构成硬性物理边界。NVIDIA H100 的单个 SM 拥有 228 KB Shared Memory，对齐粒度为 16 字节。Huawei Ascend 910 的单个 Vector 核仅拥有 192 KB Unified Buffer，且搬运指令要求 32 字节对齐。分块工作集一旦越过上限，在 GPU 上会引发寄存器溢出与占用率骤降，在 Ascend 上则会直接触发片上内存溢出错误。
+**维度四：静态维度与片上容量边界。** 头维度 $D$、地址对齐粒度与片上缓存上限构成硬性物理边界。NVIDIA H100 SXM5 的单个 SM 拥有 228 KB Shared Memory 与 256 KB 寄存器文件，对齐粒度为 16 字节。Huawei Ascend 910C 虽然通过双芯粒封装把总计算阵列扩大到 48 AIC + 96 AIV，但单个 Vector 核仍仅拥有 192 KB Unified Buffer（每 AIC 配 512 KB L1），且 MTE 搬运指令严格要求 32 字节对齐。分块工作集一旦越过上限，在 GPU 上会引发寄存器溢出与占用率骤降，在 Ascend 910C 上则会直接触发片上内存溢出错误。
 
 <aside class="sidenote">
   <span class="sn-num">Note</span>
   在 Horace He 的 <em>Defeating Nondeterminism in LLM Inference</em> 中，随着批次增大出现的周期性锯齿抖动，正是维度二波次量化与分块量化的直接叠加表现。
 </aside>
 
-## 3. H100 GQA Decode Case Study
+## 3. H100 SXM5 vs. Ascend 910C Teardown & GQA Decode
 
-下面我们拆解 NVIDIA H100 80GB SXM5 上 FlashInfer-Bench 的 36 个 `gqa_decode` 用例。下表先将 H100 与 Ascend 910 的关键硬件边界并列对照。
+在进入算子分族前，必须先锁死两颗芯片的物理尺子。同一形状在不同硬件边界下会落入截然不同的家族：例如 `B=2, L=64K` 在 132 SM 的 H100 上严重欠饱和，而 `D=256` 在 228 KB SMEM 的 H100 上合法，在 192 KB UB 的 Ascend 910C 上却会直接溢出。下表并列两者的核心硬件边界与封装拓扑。
 
-| Platform | Operator | BF16 Peak | HBM BW | Cores | On-Chip Limit | Launch Floor | Align |
+| Platform | Die Topology | BF16 Peak | HBM Capacity & BW | Compute Cores | On-Chip Limit | $I_{\mathrm{ridge}}$ | Launch / Align |
 |---|---|---|---|---|---|---|---|
-| NVIDIA H100 SXM5 | `gqa_decode` | 989 TFLOPS | 3,350 GB/s | 132 SMs | 228 KB SMEM | 4 µs | 16 B |
-| Huawei Ascend 910 | `flash_attention` | 320 TFLOPS | 1,200 GB/s | 32 Cores | 192 KB UB | 12 µs | 32 B |
+| **NVIDIA H100 SXM5** (`GH100`) | Monolithic 814 mm² (CoWoS-S) | 989 TFLOPS | 80 GB (5+1 HBM3) · 3,350 GB/s | 8 GPC · 132 SMs | 228 KB SMEM/SM · 50 MB L2 | 295 | 4 µs · 16 B |
+| **Huawei Ascend 910C** (`Da Vinci v2`) | Dual-Die Chiplet (2.5D Bridge) | 800 TFLOPS | 128 GB (8× HBM2e) · 3,200 GB/s | 48 AIC + 96 AIV | 192 KB UB/AIV · 512 KB L1/AIC | 250 | 12 µs · 32 B |
+
+下面可以通过可交互的三维芯片物理拆解视图，直接观察 H100 SXM5（单颗 GH100 主芯片、5 颗有效 + 1 颗熔断屏蔽的 5+1 HBM3、50 MB 分裂式 L2 交叉开关）与 Ascend 910C（双芯粒 2×[24 AIC + 48 AIV]、中央 Die-to-Die 硅桥、双 192 KB UB 脊柱与 8 颗 HBM2e）在不同负载家族下的硅片级行为差异。
+
+<KernelTeardownFig />
+
+接下来我们拆解 NVIDIA H100 80GB SXM5 上 FlashInfer-Bench 的 36 个 `gqa_decode` 用例。
 
 <WorkloadDistFig />
 
@@ -100,15 +107,15 @@ $$
 
 **家族 F3：小批次超长缓存与变长偏度，共 12 个用例。** 该家族的批次大小 $B$ 位于 1 到 8 之间，缓存长度 $L$ 跨越 16K 到 128K，变长批次中的偏度比可达 2.4。如果不沿序列维切分，网格规模仅有 8 到 64 个线程块，超过一半的 SM 处于空闲状态。同时，最长的 128K 请求会阻塞整个批次的结束同步。因此，F3 采用两阶段动态 Split-KV 内核。第一阶段将每个长序列拆为多个并行块，使总块数对齐 132 个 SM。第二阶段再由数值稳定的 Log-Sum-Exp 归约内核合并局部结果。
 
-## 4. Ascend FlashAttention Case Study
+## 4. Ascend 910C FlashAttention Case Study
 
-将目标平台切换为 Huawei Ascend 910 后，CANN-Bench v2.1 的 20 个 `flash_attention` 用例呈现出不同的主导约束。Da Vinci 架构将矩阵计算单元 AIC 与向量计算单元 AIV 物理分离。中间数据须经由 MTE2 与 MTE3 搬运通道显式进出 192 KB 的 Unified Buffer。片上容量上限与 32 字节对齐约束因此成为首要分族依据。
+将目标平台切换为 Huawei Ascend 910C 双芯粒封装（每 Die 含 24 AIC + 48 AIV，整卡合计 48 AIC + 96 AIV、800 TFLOPS BF16 与 8 颗 HBM2e 合计 3,200 GB/s）后，CANN-Bench v2.1 的 20 个 `flash_attention` 用例呈现出截然不同的主导约束。Da Vinci v2 架构将矩阵计算单元 AIC 与向量计算单元 AIV 按 1:2 物理分离，中间数据须经由 MTE2 与 MTE3 搬运通道显式进出单 AIV 仅 192 KB 的 Unified Buffer。片上容量上限、32 字节对齐与双芯粒负载均衡因此成为首要分族依据。
 
-**家族 F1：短序列轻负载，共 7 个用例。** 该家族的序列长度 $S$ 位于 128 到 512 之间，批次大小 $B$ 位于 1 到 4 之间。任务块数低于 32 个核心，且 12 微秒的发射与管线冷启动开销占比偏高。大尺寸分块会加剧核心间负载不均。因此，F1 采用小尺寸分块与单缓冲结构，在单次 UB 驻留循环内完成计算，并把尾部维度对齐到 32 字节。
+**家族 F1：短序列轻负载，共 7 个用例。** 该家族的序列长度 $S$ 位于 128 到 512 之间，批次大小 $B$ 位于 1 到 4 之间。基础任务块数远低于双芯粒 48 AIC / 96 AIV 的满载规模，且 12 微秒的发射与管线冷启动开销占比偏高。大尺寸分块会加剧核心间与双 Die 间负载不均。因此，F1 采用小尺寸分块与单缓冲结构，在单次 UB 驻留循环内完成计算，并把尾部维度对齐到 32 字节。
 
-**家族 F2：UB 双缓冲适用区间，共 7 个用例。** 该家族的序列长度 $S$ 位于 1,024 到 4,096 之间，头维度 $D$ 为 128。在行分块 $B_r = 64$ 与列分块 $B_c = 64$ 的配置下，开启双缓冲 `BUFFER_NUM = 2` 时的片上工作集约为 148 KB，低于 192 KB 硬上限。此时 MTE2 数据预取、AIC 矩阵乘与 AIV 在线 Softmax 可以完全重叠，使算子进入算力受限区间并逼近 320 TFLOPS 算力屋顶。
+**家族 F2：UB 双缓冲 Ping-Pong 区间，共 7 个用例。** 该家族的序列长度 $S$ 位于 1,024 到 4,096 之间，头维度 $D$ 为 128。在行分块 $B_r = 64$ 与列分块 $B_c = 64$ 的配置下，开启双缓冲 `BUFFER_NUM = 2` 时的单 AIV 片上工作集约为 148 KB，稳稳低于 192 KB 硬上限。此时 MTE2 数据预取、AIC 矩阵乘与 AIV 在线 Softmax 可以完全流水重叠，使算子进入算力受限区间并逼近双芯粒 800 TFLOPS BF16 算力屋顶。
 
-**家族 F3：UB 容量溢出悬崖，共 6 个用例。** 该家族包含 8K 到 32K 的长序列或头维度 $D = 256$ 的大通道输入。如果沿用 F2 的双缓冲与 `Bc = 64` 模板，片上工作集超过 192 KB，触发编译或运行期的 UB 溢出错误。因此，F3 必须将模板切换为单缓冲 `BUFFER_NUM = 1`，收窄列分块至 `Bc = 32` 以确保合法性，并沿序列维拆分多核任务以维持 32 核心的并行占用。
+**家族 F3：192 KB UB 容量溢出悬崖，共 6 个用例。** 该家族包含 8K 到 32K 的长序列或头维度 $D = 256$ 的大通道输入。如果沿用 F2 的双缓冲与 `Bc = 64` 模板，单核片上工作集飙升至约 256 KB，直接撞穿 192 KB UB 硬墙并触发编译或运行期的 `UB_ALLOC_OVERFLOW` 错误（如 Figure 2 中红色警报状态所示）。因此，F3 必须将模板切换为单缓冲 `BUFFER_NUM = 1`，收窄列分块至 `Bc = 32` 将工作集压回 112 KB 以内，同时沿序列维执行跨双 Die 的 Split-S 切分以打满 48 AIC / 96 AIV 与 8 颗 HBM2e 通道。
 
 ## 5. Specialized Family Kernels
 
@@ -251,9 +258,9 @@ def gqa_decode_f3_lse_combine(
     tl.store(Out + b * stride_ob + h * stride_oh + offs_d * stride_od, out)
 ```
 
-### 5.2 Ascend C Buffer Specialization
+### 5.2 Ascend 910C Buffer Specialization
 
-在 Ascend 910 上，我们通过编译期模板参数 `BUFFER_NUM`、`BR` 与 `BC` 隔离三个家族的片上资源占用。Host 端切分程序先核算片上字节数不超过 192 KB，再按家族分发到对应实例化二进制。
+在 Ascend 910C 上，我们通过编译期模板参数 `BUFFER_NUM`、`BR` 与 `BC` 隔离三个家族的单 AIV 片上资源占用。Host 端切分程序先核算单核片上字节数不超过 192 KB，并将任务块均匀映射到双芯粒的 48 AIC / 96 AIV，再按家族分发到对应实例化二进制。
 
 ```cpp
 template <int32_t BUFFER_NUM, int32_t BR, int32_t BC>
@@ -378,15 +385,34 @@ def gqa_decode_dispatch(
     return out
 ```
 
-## 7. Verification Plan
+## 7. Engineering Ladder & Real-Hardware Diagnostics
 
-后续实验将按三项正交指标验证跨负载分派的有效性。第一项在 H100 的 36 个 `gqa_decode` 用例上比较单一内核与多家族分派，重点观测分家族加速比与最差 20% 尾部加速比。第二项在 Ascend 910 的 20 个 `flash_attention` 用例上统计编译通过率、Roofline 达峰率与官方 HAP 综合分。该对比用于验证双缓冲与单缓冲分族如何跨越 192 KB 的 UB 容量边界。第三项测量 Host 端连续谓词路由开销，确认纯静态物理量判断在端到端延迟中的占比低于 1 微秒。
+将上述分族方法落地到真实的 H100 SXM5 与 Ascend 910C 优化闭环时，工程迭代须遵循严格的六步阶梯——**先锁死硬件物理尺子，再定宏观架构上限，最后才调 Tile 微参数**：
+
+1. **Step 0 锁死硬件物理边界**：先明确核数、HBM 带宽、算力峰值、拐点 $I_{\mathrm{ridge}}$、SMEM/UB 上限、对齐粒度与发射地板。
+2. **Step 1 四维画像与互斥分族**：用物理尺子度量全部测试负载，按瓶颈类型、波次比、负载偏度与片上容量划出 F1 / F2 / F3。
+3. **Step 2 架构与并行算法决策（决定 70%–80% 上限）**：决定网格切分（常规网格 vs Split-KV / Split-S）、单遍融合 vs 两阶段归约、片上复用与双缓冲深度。当仅有 16/132 个 SM 工作时，枚举任何 `BLOCK_N` 与 `num_warps` 都跨不过 12% 的带宽天花板；调参连续停滞两轮即必须退回此步换架构。
+4. **Step 3 最小合法基线（Feasibility First）**：优先核算 SMEM / UB 不超限、满足 16B / 32B 对齐与边界 mask，跑通编译与精度后存档。
+5. **Step 4 Tile 与微架构调优（榨干最后 20%–30%）**：调节 `BLOCK_M/N/K`、`num_warps`、`num_stages`、向量化加载与 Swizzle 消除 Bank 冲突。
+6. **Step 5 真机 Profile 验收与连续路由组装**：对照下表读取 `ncu` / `nsys` 或 `msprof` 硬件计数器，逼近 Roofline 即冻结当前家族内核并接入连续谓词路由器。
+
+| Hardware Boundary | Bottleneck | NVIDIA H100 (`ncu` / `nsys`) | Ascend 910C (`msprof`) | Structural Fix |
+|---|---|---|---|---|
+| **Core Saturation** | SM / Core Starvation | `sm__warps_active`, `launch__grid_size` | `blockDim` vs `48 AIC / 96 AIV` | Split-KV + LSE / Dual-Die Split-S |
+| **HBM Bandwidth** | Memory-Bound | `dram__throughput.avg.pct_of_peak` | `aic_mte2_ratio`, `hbm_read_bw` | GQA $G\times$ reuse, 128b / 32B bursts |
+| **Matrix Compute** | Compute-Bound | `sm__pipe_tensor_cycles_active` | `aic_mac_ratio`, `aiv_vec_ratio` | Align MMA tiles, Cube⇄Vector Ping-Pong |
+| **On-Chip SRAM** | Capacity / Spill | `launch__registers_per_thread`, `l1tex` | `ub_alloc_bytes ≤ 192 KB`, `mte2_wait` | `BUFFER_NUM=1` + `Bc=32` (F3 Safe) |
+| **Launch Floor** | Host Dispatch Gap | `nsys` kernel duration vs `4 µs` floor | `Task Wait Time` vs `12 µs` cold-start | Single-pass fused kernel (F1) |
+
+## 8. Verification Plan
+
+后续实验将按三项正交指标验证跨负载分派的有效性。第一项在 H100 SXM5 的 36 个 `gqa_decode` 用例上比较单一内核与多家族分派，重点观测分家族加速比与最差 20% 尾部加速比。第二项在 Ascend 910C 的 20 个 `flash_attention` 用例上统计编译通过率、Roofline 达峰率与官方 HAP 综合分，验证双缓冲与单缓冲分族如何跨越 192 KB 的 UB 容量边界并在双芯粒间保持均衡。第三项测量 Host 端连续谓词路由开销，确认纯静态物理量判断在端到端延迟中的占比低于 1 微秒。
 
 | Suite | Platform | Target Metrics | Baseline |
 |---|---|---|---|
 | FlashInfer-Bench `gqa_decode` | NVIDIA H100 SXM5 | Geomean Speedup, Worst-20% Tail, %SoL | FlashInfer |
-| CANN-Bench v2.1 `flash_attention` | Huawei Ascend 910 | Pass Rate, %SoL, Official HAP | CANN-Ops |
-| Dispatch Microbenchmark | H100 & Ascend 910 | Host Routing Latency (µs) | Single Kernel |
+| CANN-Bench v2.1 `flash_attention` | Huawei Ascend 910C | Pass Rate, %SoL, Official HAP | CANN-Ops |
+| Dispatch Microbenchmark | H100 SXM5 & Ascend 910C | Host Routing Latency (µs) | Single Kernel |
 
 ## Citation
 

@@ -7,6 +7,19 @@ export type WorkloadMode = 'prefill' | 'decode' | 'flashattn' | 'allreduce'
 export type CutawayMode = 'assembled' | 'cutaway' | 'exploded' | 'xray'
 export type CameraPreset = 'hero' | 'floorplan' | 'section' | 'hbm' | 'io'
 export type PartId = 'ALL' | 'compute' | 'hbm' | 'interposer' | 'kv' | 'io' | 'thermal' | 'pcb'
+export type HardwareProfile = 'flagship' | 'h100_910c'
+export type DispatchScenario = 'none' | 'f1_launch' | 'f2_stream' | 'f3_unopt' | 'f3_opt'
+
+export interface TeardownEngineOptions {
+  profile?: HardwareProfile
+  initialArch?: ArchMode
+  initialCutaway?: CutawayMode
+  initialScenario?: DispatchScenario
+  initialPrecision?: PrecisionMode
+  initialWorkload?: WorkloadMode
+  initialBatch?: number
+  haloEnabled?: boolean
+}
 
 export interface HardwareTelemetry {
   arch: ArchMode
@@ -25,12 +38,17 @@ export interface HardwareTelemetry {
   tdpWatts: number
   tempC: number
   phaseDeg: number
-  regime: 'COMPUTE-BOUND' | 'MEMORY-BOUND' | 'COMM-BOUND'
+  regime: 'COMPUTE-BOUND' | 'MEMORY-BOUND' | 'COMM-BOUND' | 'LAUNCH-BOUND' | 'UB-OVERFLOW'
   dmaDuty: number
   mmaDuty: number
   vecDuty: number
   commDuty: number
   note: string
+  activeUnitsLabel?: string
+  onChipLabel?: string
+  profilerSignal?: string
+  dispatchAction?: string
+  alertLevel?: 'ok' | 'warn' | 'error'
 }
 
 export interface PartInfo {
@@ -40,6 +58,8 @@ export interface PartInfo {
   blogLayer: string
   blogLabel: string
   color: string
+  profilerCounter?: string
+  kernelKnob?: string
 }
 
 export const PART_CATALOG: Record<ArchMode, Record<Exclude<PartId, 'ALL'>, PartInfo>> = {
@@ -161,13 +181,438 @@ export const PART_CATALOG: Record<ArchMode, Record<Exclude<PartId, 'ALL'>, PartI
   }
 }
 
+export const H100_910C_CATALOG: Record<ArchMode, Record<Exclude<PartId, 'ALL'>, PartInfo>> = {
+  gpu: {
+    thermal: {
+      id: 'thermal',
+      title: 'SXM5 VAPOR COLD PLATE',
+      subtitle: 'Direct-to-Chip Copper Plate · 700W TDP · 814 mm² Die',
+      blogLayer: 'systems',
+      blogLabel: 'THERMAL',
+      color: '#0E9972',
+      profilerCounter: 'nvidia-smi: power.draw · clocks_throttle_reasons',
+      kernelKnob: 'Sustained boost clock gating under 700W envelope'
+    },
+    kv: {
+      id: 'kv',
+      title: '228 KB SMEM/SM · 50 MB L2',
+      subtitle: 'Split L2 Crossbar · TMA Async Tile Staging · 16B Align',
+      blogLayer: 'model',
+      blogLabel: 'ON-CHIP',
+      color: '#7E4F8E',
+      profilerCounter: 'ncu: lts__t_sector_hit_rate · shared_bank_conflicts',
+      kernelKnob: 'num_stages (1–3) · Swizzle layout · Register cap ≤ 256KB/SM'
+    },
+    compute: {
+      id: 'compute',
+      title: 'GH100 MONOLITHIC DIE',
+      subtitle: '8 GPCs · 132 Active SMs · 4th-Gen Tensor · 989 TFLOPS BF16',
+      blogLayer: 'training',
+      blogLabel: 'COMPUTE',
+      color: '#FA6D01',
+      profilerCounter: 'ncu: sm__throughput · sm__warps_active · tensor_pipe',
+      kernelKnob: 'wave_ratio = (B·H_kv)/132 · Split-KV + LSE Combine'
+    },
+    hbm: {
+      id: 'hbm',
+      title: '5+1 HBM3 STACKS (80 GB)',
+      subtitle: '5 Active HBM3 + 1 Fused-Off Dummy · 3.35 TB/s · 5120-bit',
+      blogLayer: 'systems',
+      blogLabel: 'MEMORY',
+      color: '#0E9EE4',
+      profilerCounter: 'ncu: dram__throughput.avg.pct_of_peak_sustained',
+      kernelKnob: 'GQA group reuse (G×) · 128-bit coalesced vector load'
+    },
+    interposer: {
+      id: 'interposer',
+      title: 'CoWoS-S SILICON INTERPOSER',
+      subtitle: 'Passive 2.5D Routing · 5 Active HBM3 Channels + L2 Bus',
+      blogLayer: 'systems',
+      blogLabel: 'PACKAGE',
+      color: '#0E9972',
+      profilerCounter: 'ncu: l1tex__data_pipe_lsu · dram__bytes_read',
+      kernelKnob: 'Align page table & KV strides to 16B / 128B cache lines'
+    },
+    io: {
+      id: 'io',
+      title: 'NVLINK 4.0 · 18 LINKS',
+      subtitle: '900 GB/s Bidirectional · PCIe Gen5 Host Launch (4 µs)',
+      blogLayer: 'runtime',
+      blogLabel: 'HOST / IO',
+      color: '#2B5CFF',
+      profilerCounter: 'nsys: cudaLaunchKernel gap · GPU active ratio',
+      kernelKnob: 'Single-pass F1 kernel avoids +22% 2nd launch tax'
+    },
+    pcb: {
+      id: 'pcb',
+      title: 'H100 SXM5 CARRIER PCB',
+      subtitle: '700W Multi-Phase VRM · Mezzanine Gold BGA Socket',
+      blogLayer: 'systems',
+      blogLabel: 'CARRIER',
+      color: '#108D47',
+      profilerCounter: 'nsys: kernel duration vs host dispatch floor (4 µs)',
+      kernelKnob: 'Step 0 Hardware Ruler locked prior to 4D partitioning'
+    }
+  },
+  npu: {
+    thermal: {
+      id: 'thermal',
+      title: 'OAM DUAL-DIE COLD PLATE',
+      subtitle: 'Dual-Chiplet Vapor Lid · 650W Envelope · Balanced Cooling',
+      blogLayer: 'systems',
+      blogLabel: 'THERMAL',
+      color: '#0E9972',
+      profilerCounter: 'npu-smi: power / temp across Die 0 & Die 1',
+      kernelKnob: 'Symmetric Split-S prevents hot-spot skew across chiplets'
+    },
+    kv: {
+      id: 'kv',
+      title: '192 KB UB/AIV · 512 KB L1/AIC',
+      subtitle: 'Explicit Scratchpad SRAM · Hard Overflow Cliff · 32B Align',
+      blogLayer: 'model',
+      blogLabel: 'ON-CHIP',
+      color: '#E0523B',
+      profilerCounter: 'msprof: ub_alloc_bytes ≤ 192 KB · mte2_wait_ratio',
+      kernelKnob: 'BUFFER_NUM=2 (F2 Ping-Pong) vs BUFFER_NUM=1, Bc=32 (F3 Safe)'
+    },
+    compute: {
+      id: 'compute',
+      title: 'DUAL-DIE DA VINCI v2',
+      subtitle: '2×(24 AIC + 48 AIV) = 48 AIC / 96 AIV · 800 TFLOPS BF16',
+      blogLayer: 'training',
+      blogLabel: 'COMPUTE',
+      color: '#FA6D01',
+      profilerCounter: 'msprof: aic_mac_ratio · aiv_vec_ratio · pipe_stall',
+      kernelKnob: 'Decoupled Cube (QKᵀ, PV) ⇄ Vector (Online Softmax) Ping-Pong'
+    },
+    hbm: {
+      id: 'hbm',
+      title: '8× HBM2E STACKS (128 GB)',
+      subtitle: '4 Stacks per Die · 3.2 TB/s Aggregate · MTE2 Async DMA',
+      blogLayer: 'systems',
+      blogLabel: 'MEMORY',
+      color: '#0E9EE4',
+      profilerCounter: 'msprof: aic_mte2_ratio · hbm_read_bw (GB/s)',
+      kernelKnob: '32B/512B aligned GM → L1/UB bursts hide MTE2 latency'
+    },
+    interposer: {
+      id: 'interposer',
+      title: '2.5D DUAL-DIE SILICON BRIDGE',
+      subtitle: 'Die-to-Die Co-Package Bridge · MTE1/MTE2/MTE3 Fabric',
+      blogLayer: 'systems',
+      blogLabel: 'PACKAGE',
+      color: '#0E9972',
+      profilerCounter: 'msprof: inter-die balance · blockDim vs 48 AIC / 96 AIV',
+      kernelKnob: 'Split-S across both dies eliminates half-chip under-utilization'
+    },
+    io: {
+      id: 'io',
+      title: 'UB / HCCS INTERCONNECT',
+      subtitle: '784 GB/s Bidirectional · 12 µs Launch & Pipeline Cold-Start',
+      blogLayer: 'runtime',
+      blogLabel: 'HOST / IO',
+      color: '#2B5CFF',
+      profilerCounter: 'msprof: Task Wait Time · Kernel Launch Overhead (12 µs)',
+      kernelKnob: 'F1 small-tile single-buffer keeps short-seq latency tight'
+    },
+    pcb: {
+      id: 'pcb',
+      title: 'ASCEND 910C OAM CARRIER',
+      subtitle: 'Dual-Die ABF Organic Substrate · High-Current Busbar',
+      blogLayer: 'systems',
+      blogLabel: 'CARRIER',
+      color: '#108D47',
+      profilerCounter: 'msprof: Timeline end-to-end vs roofline T_ideal(w)',
+      kernelKnob: 'Step 0 Hardware Ruler: 800 TFLOPS / 3.2 TB/s / 192 KB UB'
+    }
+  }
+}
+
 export function computeHardwareTelemetry(
   arch: ArchMode,
   precision: PrecisionMode,
   workload: WorkloadMode,
   batch: number,
-  cycle: number
+  cycle: number,
+  profile: HardwareProfile = 'flagship',
+  scenario: DispatchScenario = 'none'
 ): HardwareTelemetry {
+  if (profile === 'h100_910c') {
+    const osc = 0.96 + 0.04 * Math.sin(cycle * 0.14)
+    if (arch === 'gpu') {
+      const peakTflops = precision === 'fp8' ? 1979 : precision === 'bf16' ? 989 : 67
+      const peakHbmBw = 3.35
+      const peakLinkGbps = 900
+      const ridgePoint = Math.round(peakTflops / peakHbmBw)
+      const sc = scenario === 'none' ? 'f2_stream' : scenario
+      if (sc === 'f1_launch') {
+        const hbmBw = 0.36 * osc
+        const achievedTflops = 2.4 * osc
+        return {
+          arch,
+          precision,
+          workload: 'decode',
+          peakTflops,
+          peakHbmBw,
+          peakLinkGbps,
+          ridgePoint,
+          ai: 4.2,
+          achievedTflops,
+          hbmBw,
+          mfu: (achievedTflops / peakTflops) * 100,
+          l2Hit: 91,
+          linkGbps: 42,
+          tdpWatts: Math.round(235 * osc),
+          tempC: 43,
+          phaseDeg: Math.round((cycle * 6) % 360),
+          regime: 'LAUNCH-BOUND',
+          dmaDuty: 0.16,
+          mmaDuty: 0.12,
+          vecDuty: 0.18,
+          commDuty: 0.08,
+          activeUnitsLabel: '16 / 132 SMs (1-Pass Fused)',
+          onChipLabel: '28 KB / 228 KB SMEM · 4.0 µs Floor',
+          profilerSignal: 'nsys: kernel 4.3 µs ≈ τ_launch 4 µs · 1-launch avoids +22% tax',
+          dispatchAction: 'Route F1: gqa_decode_singlepass (BLOCK_N=32, warps=2, stages=1)',
+          alertLevel: 'ok',
+          note: 'H100 F1 (B=2, L=512)：访存下界 0.30 µs 远低于 4 µs 发射地板，单遍融合消除二次启动税。'
+        }
+      }
+      if (sc === 'f3_unopt') {
+        const hbmBw = 0.41 * osc
+        const achievedTflops = 3.1 * osc
+        return {
+          arch,
+          precision,
+          workload: 'decode',
+          peakTflops,
+          peakHbmBw,
+          peakLinkGbps,
+          ridgePoint,
+          ai: 6.4,
+          achievedTflops,
+          hbmBw,
+          mfu: (achievedTflops / peakTflops) * 100,
+          l2Hit: 34,
+          linkGbps: 68,
+          tdpWatts: Math.round(268 * osc),
+          tempC: 46,
+          phaseDeg: Math.round((cycle * 6) % 360),
+          regime: 'MEMORY-BOUND',
+          dmaDuty: 0.24,
+          mmaDuty: 0.12,
+          vecDuty: 0.15,
+          commDuty: 0.1,
+          activeUnitsLabel: '16 / 132 SMs ACTIVE (88% IDLE!)',
+          onChipLabel: 'wave_ratio = 0.12 · 12% Peak_bw',
+          profilerSignal: 'ncu: dram__throughput 12.2% · sm__warps_active 11.8% (SM Starved)',
+          dispatchAction: 'SINGLE-KERNEL FAILURE: 1-stage grid (B=2, H_kv=8) stalls 116 SMs',
+          alertLevel: 'error',
+          note: 'H100 F3 单核失效 (B=2, L=64K)：仅 16/132 个 SM 工作，5 颗 HBM3 带宽利用率塌方至 12%。'
+        }
+      }
+      if (sc === 'f3_opt') {
+        const hbmBw = 2.86 * osc
+        const achievedTflops = 22.8 * osc
+        return {
+          arch,
+          precision,
+          workload: 'decode',
+          peakTflops,
+          peakHbmBw,
+          peakLinkGbps,
+          ridgePoint,
+          ai: 7.8,
+          achievedTflops,
+          hbmBw,
+          mfu: (achievedTflops / peakTflops) * 100,
+          l2Hit: 82,
+          linkGbps: 118,
+          tdpWatts: Math.round(582 * osc),
+          tempC: 67,
+          phaseDeg: Math.round((cycle * 6) % 360),
+          regime: 'MEMORY-BOUND',
+          dmaDuty: 0.92,
+          mmaDuty: 0.72,
+          vecDuty: 0.68,
+          commDuty: 0.24,
+          activeUnitsLabel: '128 / 132 SMs ACTIVE (S=8 Splits)',
+          onChipLabel: '50 MB L2 LSE Merge · 85% Peak_bw',
+          profilerSignal: 'ncu: dram__throughput 85.4% · sm__throughput 91% · +7.0× Speedup',
+          dispatchAction: 'Route F3: Split-KV Stage1 (S=8) + LSE Combine (wave_ratio → 0.97)',
+          alertLevel: 'ok',
+          note: 'H100 F3 分族路由 (B=2, L=64K)：动态 Split-KV 填满 128/132 SMs，50 MB L2 完成无损 LSE 归约。'
+        }
+      }
+      const hbmBw = 2.98 * osc
+      const achievedTflops = 24.4 * osc
+      return {
+        arch,
+        precision,
+        workload: 'decode',
+        peakTflops,
+        peakHbmBw,
+        peakLinkGbps,
+        ridgePoint,
+        ai: 7.6,
+        achievedTflops,
+        hbmBw,
+        mfu: (achievedTflops / peakTflops) * 100,
+        l2Hit: 79,
+        linkGbps: 110,
+        tdpWatts: Math.round(596 * osc),
+        tempC: 68,
+        phaseDeg: Math.round((cycle * 6) % 360),
+        regime: 'MEMORY-BOUND',
+        dmaDuty: 0.94,
+        mmaDuty: 0.74,
+        vecDuty: 0.56,
+        commDuty: 0.22,
+        activeUnitsLabel: '132 / 132 SMs (wave_ratio = 1.94)',
+        onChipLabel: '116 KB SMEM · 3-Stage TMA · 89% Peak_bw',
+        profilerSignal: 'ncu: dram__throughput 89.0% · lts__hit_rate 79% (G=4 Reuse)',
+        dispatchAction: 'Route F2: gqa_decode_singlepass (BLOCK_N=64, warps=4, stages=3)',
+        alertLevel: 'ok',
+        note: 'H100 F2 流式甜蜜点 (B=32, L=4K)：132 个 SM 满载，5 颗 HBM3 跑出 2.98 TB/s（89% 带宽屋顶）。'
+      }
+    }
+
+    // Ascend 910C Dual-Die (48 AIC + 96 AIV, 800 TFLOPS BF16, 128 GB HBM2e @ 3.2 TB/s)
+    const peakTflops = precision === 'fp32' ? 200 : 800
+    const peakHbmBw = 3.2
+    const peakLinkGbps = 784
+    const ridgePoint = Math.round(peakTflops / peakHbmBw)
+    const sc = scenario === 'none' ? 'f2_stream' : scenario
+    if (sc === 'f1_launch') {
+      const achievedTflops = 112 * osc
+      const hbmBw = 0.52 * osc
+      return {
+        arch,
+        precision: precision === 'fp8' ? 'bf16' : precision,
+        workload: 'flashattn',
+        peakTflops,
+        peakHbmBw,
+        peakLinkGbps,
+        ridgePoint,
+        ai: 64,
+        achievedTflops,
+        hbmBw,
+        mfu: (achievedTflops / peakTflops) * 100,
+        l2Hit: 84,
+        linkGbps: 55,
+        tdpWatts: Math.round(240 * osc),
+        tempC: 44,
+        phaseDeg: Math.round((cycle * 6) % 360),
+        regime: 'LAUNCH-BOUND',
+        dmaDuty: 0.24,
+        mmaDuty: 0.22,
+        vecDuty: 0.26,
+        commDuty: 0.1,
+        activeUnitsLabel: '16 / 48 AIC · 32 / 96 AIV',
+        onChipLabel: '76 KB / 192 KB UB · 12 µs Floor',
+        profilerSignal: 'msprof: Task Wait 12.1 µs > compute · 32B aligned single-buf',
+        dispatchAction: 'Route F1: FlashAttnGqaKernel<1, 32, 64> (low cold-start)',
+        alertLevel: 'ok',
+        note: 'Ascend 910C F1 (B=2, S=256)：12 µs 发射与管线冷启动主导，小块单缓冲降低尾部抖动。'
+      }
+    }
+    if (sc === 'f3_unopt') {
+      return {
+        arch,
+        precision: precision === 'fp8' ? 'bf16' : precision,
+        workload: 'flashattn',
+        peakTflops,
+        peakHbmBw,
+        peakLinkGbps,
+        ridgePoint,
+        ai: 268,
+        achievedTflops: 0,
+        hbmBw: 0,
+        mfu: 0,
+        l2Hit: 0,
+        linkGbps: 0,
+        tdpWatts: 145,
+        tempC: 39,
+        phaseDeg: Math.round((cycle * 6) % 360),
+        regime: 'UB-OVERFLOW',
+        dmaDuty: 0.05,
+        mmaDuty: 0.02,
+        vecDuty: 0.02,
+        commDuty: 0.02,
+        activeUnitsLabel: 'COMPILE / RUNTIME FAULT (0% EXEC)',
+        onChipLabel: '256 KB > 192 KB UB HARD CLIFF!',
+        profilerSignal: 'msprof / ascendc: ERROR UB_ALLOC_OVERFLOW (256 KB > 192 KB/AIV)',
+        dispatchAction: 'F2 TEMPLATE CRASH: BUFFER_NUM=2, Bc=64 overflows 192 KB UB at D=256',
+        alertLevel: 'error',
+        note: 'Ascend 910C F3 UB 溢出悬崖 (S=16K, D=256)：沿用双缓冲模板占用 256 KB，撞穿单 AIV 192 KB 硬上限！'
+      }
+    }
+    if (sc === 'f3_opt') {
+      const achievedTflops = 544 * osc
+      const hbmBw = 2.48 * osc
+      return {
+        arch,
+        precision: precision === 'fp8' ? 'bf16' : precision,
+        workload: 'flashattn',
+        peakTflops,
+        peakHbmBw,
+        peakLinkGbps,
+        ridgePoint,
+        ai: 274,
+        achievedTflops,
+        hbmBw,
+        mfu: (achievedTflops / peakTflops) * 100,
+        l2Hit: 86,
+        linkGbps: 162,
+        tdpWatts: Math.round(548 * osc),
+        tempC: 65,
+        phaseDeg: Math.round((cycle * 6) % 360),
+        regime: 'COMPUTE-BOUND',
+        dmaDuty: 0.84,
+        mmaDuty: 0.82,
+        vecDuty: 0.78,
+        commDuty: 0.28,
+        activeUnitsLabel: '48 / 48 AIC · 96 / 96 AIV (2 Dies)',
+        onChipLabel: '112 KB / 192 KB UB SAFE (Buf=1)',
+        profilerSignal: 'msprof: ub_alloc 112 KB ✓ · aic_mac_ratio 68% · 8× HBM2e 78%',
+        dispatchAction: 'Route F3: FlashAttnGqaKernel<1, 32, 32> + Dual-Die Split-S',
+        alertLevel: 'ok',
+        note: 'Ascend 910C F3 安全分族 (S=16K, D=256)：退回 BUFFER_NUM=1 + Bc=32 守住 192 KB UB，Split-S 打满双 Die 48 AIC / 96 AIV。'
+      }
+    }
+    const achievedTflops = 668 * osc
+    const hbmBw = 2.62 * osc
+    return {
+      arch,
+      precision: precision === 'fp8' ? 'bf16' : precision,
+      workload: 'flashattn',
+      peakTflops,
+      peakHbmBw,
+      peakLinkGbps,
+      ridgePoint,
+      ai: 292,
+      achievedTflops,
+      hbmBw,
+      mfu: (achievedTflops / peakTflops) * 100,
+      l2Hit: 91,
+      linkGbps: 144,
+      tdpWatts: Math.round(585 * osc),
+      tempC: 67,
+      phaseDeg: Math.round((cycle * 6) % 360),
+      regime: 'COMPUTE-BOUND',
+      dmaDuty: 0.88,
+      mmaDuty: 0.92,
+      vecDuty: 0.86,
+      commDuty: 0.22,
+      activeUnitsLabel: '48 / 48 AIC · 96 / 96 AIV (Ping-Pong)',
+      onChipLabel: '148 KB / 192 KB UB (Buf=2 Overlap)',
+      profilerSignal: 'msprof: aic_mac_ratio 84% · mte2_wait < 6% · Dual-Die Balanced',
+      dispatchAction: 'Route F2: FlashAttnGqaKernel<2, 64, 64> (MTE2 ⇄ Cube ⇄ Vec)',
+      alertLevel: 'ok',
+      note: 'Ascend 910C F2 双缓冲区间 (S=2K, D=128)：148 KB ≤ 192 KB UB，MTE2/Cube/Vector 流水重叠逼近 800 TFLOPS 屋顶。'
+    }
+  }
+
   const baseBf16 = arch === 'gpu' ? 1979 : 800
   const precMult = precision === 'fp8' ? 2.0 : precision === 'bf16' ? 1.0 : 0.25
   const peakTflops = Math.round(baseBf16 * precMult)
@@ -286,7 +731,7 @@ export function computeHardwareTelemetry(
 
 /* ---------- Procedural High-Craft PBR Canvas Textures ---------- */
 
-function createPcbTexture(): THREE.CanvasTexture {
+function createPcbTexture(profile: HardwareProfile = 'flagship'): THREE.CanvasTexture {
   const c = document.createElement('canvas')
   c.width = 512
   c.height = 512
@@ -343,8 +788,13 @@ function createPcbTexture(): THREE.CanvasTexture {
   // Silkscreen markings
   g.fillStyle = 'rgba(235,235,230,0.45)'
   g.font = '600 11px ui-monospace, monospace'
-  g.fillText('JERRY609 · SXM5 / OAM CARRIER REV 4.2', 36, 482)
-  g.fillText('2.5D CoWoS-L · 1000W VRM', 320, 482)
+  if (profile === 'h100_910c') {
+    g.fillText('H100 SXM5 / ASCEND 910C OAM CARRIER', 36, 482)
+    g.fillText('CoWoS-S · DUAL-DIE 2.5D', 324, 482)
+  } else {
+    g.fillText('JERRY609 · SXM5 / OAM CARRIER REV 4.2', 36, 482)
+    g.fillText('2.5D CoWoS-L · 1000W VRM', 320, 482)
+  }
 
   const tex = new THREE.CanvasTexture(c)
   tex.colorSpace = THREE.SRGBColorSpace
@@ -408,7 +858,11 @@ function createSiliconTexture(accentHex: string): THREE.CanvasTexture {
   return tex
 }
 
-function createColdPlateTexture(arch: ArchMode, side: 'left' | 'right'): THREE.CanvasTexture {
+function createColdPlateTexture(
+  arch: ArchMode,
+  side: 'left' | 'right',
+  profile: HardwareProfile = 'flagship'
+): THREE.CanvasTexture {
   const c = document.createElement('canvas')
   c.width = 512
   c.height = 512
@@ -434,17 +888,26 @@ function createColdPlateTexture(arch: ArchMode, side: 'left' | 'right'): THREE.C
   g.strokeRect(20, 20, 472, 472)
 
   if (side === 'left') {
-    g.fillStyle = '#FA6D01'
+    g.fillStyle = profile === 'h100_910c' && arch === 'npu' ? '#E0523B' : '#FA6D01'
     g.fillRect(42, 44, 96, 8)
 
     g.fillStyle = '#171716'
     g.font = '700 28px ui-monospace, monospace'
-    g.fillText(arch === 'gpu' ? 'B200-SXM' : 'NPU-910C', 42, 98)
+    if (profile === 'h100_910c') {
+      g.fillText(arch === 'gpu' ? 'H100-SXM5' : 'ASCEND 910C', 42, 98)
+    } else {
+      g.fillText(arch === 'gpu' ? 'B200-SXM' : 'NPU-910C', 42, 98)
+    }
 
     g.fillStyle = 'rgba(23,23,22,0.72)'
     g.font = '600 15px ui-monospace, monospace'
-    g.fillText(arch === 'gpu' ? 'DUAL-RETICLE GPU' : 'DA VINCI AI CORE', 42, 130)
-    g.fillText('JERRY609 LABS', 42, 156)
+    if (profile === 'h100_910c') {
+      g.fillText(arch === 'gpu' ? 'GH100 MONOLITHIC · 132 SMs' : 'DUAL-DIE DA VINCI v2', 42, 130)
+      g.fillText(arch === 'gpu' ? '8 GPC · 228 KB SMEM · 4N' : '48 AIC + 96 AIV · 192KB UB', 42, 156)
+    } else {
+      g.fillText(arch === 'gpu' ? 'DUAL-RETICLE GPU' : 'DA VINCI AI CORE', 42, 130)
+      g.fillText('JERRY609 LABS', 42, 156)
+    }
 
     // Laser-etched industrial alignment crosshair
     g.strokeStyle = 'rgba(23,23,22,0.38)'
@@ -459,16 +922,29 @@ function createColdPlateTexture(arch: ArchMode, side: 'left' | 'right'): THREE.C
 
     g.fillStyle = 'rgba(23,23,22,0.65)'
     g.font = '600 13px ui-monospace, monospace'
-    g.fillText('2.5D CoWoS-L · REV 4.2', 142, 426)
+    if (profile === 'h100_910c') {
+      g.fillText(arch === 'gpu' ? 'CoWoS-S · 814 mm² DIE' : '2.5D BRIDGE · CHIPLET', 142, 426)
+    } else {
+      g.fillText('2.5D CoWoS-L · REV 4.2', 142, 426)
+    }
   } else {
     g.fillStyle = '#171716'
     g.font = '700 22px ui-monospace, monospace'
-    g.fillText(arch === 'gpu' ? '192GB HBM3E' : '128GB HBM3', 42, 86)
+    if (profile === 'h100_910c') {
+      g.fillText(arch === 'gpu' ? '80GB HBM3 (5+1)' : '128GB HBM2E ×8', 42, 86)
+    } else {
+      g.fillText(arch === 'gpu' ? '192GB HBM3E' : '128GB HBM3', 42, 86)
+    }
 
     g.fillStyle = 'rgba(23,23,22,0.72)'
     g.font = '600 15px ui-monospace, monospace'
-    g.fillText(arch === 'gpu' ? '8.0 TB/S · NVLINK 5' : '3.2 TB/S · HCCS OPT', 42, 118)
-    g.fillText('DIRECT LIQUID PLATE', 42, 146)
+    if (profile === 'h100_910c') {
+      g.fillText(arch === 'gpu' ? '3.35 TB/S · NVLINK 4' : '3.2 TB/S · UB / HCCS', 42, 118)
+      g.fillText(arch === 'gpu' ? '989 TFLOPS BF16 · 700W' : '800 TFLOPS BF16 · 650W', 42, 146)
+    } else {
+      g.fillText(arch === 'gpu' ? '8.0 TB/S · NVLINK 5' : '3.2 TB/S · HCCS OPT', 42, 118)
+      g.fillText('DIRECT LIQUID PLATE', 42, 146)
+    }
 
     // Industrial serial barcode
     g.fillStyle = 'rgba(23,23,22,0.78)'
@@ -502,6 +978,7 @@ interface PacketTrack {
   kind: 'hbm' | 'bridge' | 'io'
   offset: number
   speed: number
+  arch?: ArchMode
 }
 
 interface CalloutAnchor {
@@ -554,6 +1031,8 @@ export class AcceleratorTeardownEngine {
   private substrateGroup = new THREE.Group()
   private interposerGroup = new THREE.Group()
   private hbmGroup = new THREE.Group()
+  private hbmGpuGroup = new THREE.Group()
+  private hbmNpuGroup = new THREE.Group()
   private computeGroup = new THREE.Group()
   private gpuDieGroup = new THREE.Group()
   private npuDieGroup = new THREE.Group()
@@ -567,10 +1046,13 @@ export class AcceleratorTeardownEngine {
 
   // Dynamic animated meshes
   private gpuSmTiles: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; ix: number; iz: number; die: number }[] = []
-  private npuCubeTiles: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; idx: number }[] = []
-  private npuVecTiles: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; idx: number }[] = []
+  private npuCubeTiles: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; idx: number; die?: number }[] = []
+  private npuVecTiles: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; idx: number; die?: number }[] = []
   private npuMteTiles: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; idx: number }[] = []
-  private hbmGlowBars: { mat: THREE.MeshStandardMaterial; idx: number }[] = []
+  private npuUbMats: THREE.MeshStandardMaterial[] = []
+  private npuD2dBridgeMat: THREE.MeshStandardMaterial | null = null
+  private gpuL2CrossbarMat: THREE.MeshStandardMaterial | null = null
+  private hbmGlowBars: { mat: THREE.MeshStandardMaterial; idx: number; arch?: ArchMode; dummy?: boolean }[] = []
   private kvBlocks: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; idx: number }[] = []
   private nvBridgeMat!: THREE.MeshStandardMaterial
   private ioBeamMeshes: { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; idx: number }[] = []
@@ -598,6 +1080,8 @@ export class AcceleratorTeardownEngine {
   private pointer = new THREE.Vector2(-10, -10)
 
   // State
+  private profile: HardwareProfile = 'flagship'
+  private scenario: DispatchScenario = 'none'
   private arch: ArchMode = 'gpu'
   private precision: PrecisionMode = 'bf16'
   private workload: WorkloadMode = 'prefill'
@@ -637,10 +1121,47 @@ export class AcceleratorTeardownEngine {
   private themeObs: MutationObserver
   private lastTelemetryTs = 0
 
-  constructor(container: HTMLElement, canvas: HTMLCanvasElement, cb: EngineCallbacks) {
+  constructor(
+    container: HTMLElement,
+    canvas: HTMLCanvasElement,
+    cb: EngineCallbacks,
+    options?: TeardownEngineOptions
+  ) {
     this.container = container
     this.cb = cb
     this.reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (options?.profile) this.profile = options.profile
+    if (options?.initialArch) this.arch = options.initialArch
+    if (options?.initialPrecision) this.precision = options.initialPrecision
+    if (options?.initialWorkload) this.workload = options.initialWorkload
+    if (options?.initialBatch !== undefined) this.batch = options.initialBatch
+    if (options?.initialScenario) this.scenario = options.initialScenario
+    if (options?.haloEnabled !== undefined) this.haloEnabled = options.haloEnabled
+    if (options?.initialCutaway) {
+      this.cutaway = options.initialCutaway
+      if (this.cutaway === 'exploded') {
+        this.explode = 1.0
+        this.tExplode = 1.0
+        this.cutawaySlide = 0.0
+        this.tCutawaySlide = 0.0
+      } else if (this.cutaway === 'cutaway') {
+        this.explode = 0.12
+        this.tExplode = 0.12
+        this.cutawaySlide = 1.0
+        this.tCutawaySlide = 1.0
+      } else if (this.cutaway === 'xray') {
+        this.explode = 0.22
+        this.tExplode = 0.22
+        this.cutawaySlide = 0.0
+        this.tCutawaySlide = 0.0
+      } else {
+        this.explode = 0.0
+        this.tExplode = 0.0
+        this.cutawaySlide = 0.0
+        this.tCutawaySlide = 0.0
+      }
+    }
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -701,10 +1222,10 @@ export class AcceleratorTeardownEngine {
     this.gridHelper.position.y = -2.19
     this.scene.add(this.gridHelper)
 
-    this.coldPlateTexGpuL = createColdPlateTexture('gpu', 'left')
-    this.coldPlateTexGpuR = createColdPlateTexture('gpu', 'right')
-    this.coldPlateTexNpuL = createColdPlateTexture('npu', 'left')
-    this.coldPlateTexNpuR = createColdPlateTexture('npu', 'right')
+    this.coldPlateTexGpuL = createColdPlateTexture('gpu', 'left', this.profile)
+    this.coldPlateTexGpuR = createColdPlateTexture('gpu', 'right', this.profile)
+    this.coldPlateTexNpuL = createColdPlateTexture('npu', 'left', this.profile)
+    this.coldPlateTexNpuR = createColdPlateTexture('npu', 'right', this.profile)
 
     this.scene.add(this.rootGroup)
     this.buildHardwareAssemblies()
@@ -740,8 +1261,12 @@ export class AcceleratorTeardownEngine {
     })
   }
 
+  private getCatalog() {
+    return this.profile === 'h100_910c' ? H100_910C_CATALOG : PART_CATALOG
+  }
+
   private buildHardwareAssemblies() {
-    const pcbTex = createPcbTexture()
+    const pcbTex = createPcbTexture(this.profile)
     const siliconTexGpu = createSiliconTexture('#FA6D01')
     const siliconTexNpu = createSiliconTexture('#DE99FE')
 
@@ -890,29 +1415,81 @@ export class AcceleratorTeardownEngine {
 
     // Build 3D animated packet tracks on interposer surface
     this.packetTracks = []
-    for (let i = 0; i < 4; i++) {
-      const z = -1.35 + i * 0.9
-      // Left HBM <-> Left Die
-      this.packetTracks.push(
-        { from: new THREE.Vector3(-1.82, 0.1, z), to: new THREE.Vector3(-0.78, 0.1, z), kind: 'hbm', offset: i * 0.23, speed: 0.95 },
-        { from: new THREE.Vector3(-0.78, 0.1, z + 0.14), to: new THREE.Vector3(-1.82, 0.1, z + 0.14), kind: 'hbm', offset: i * 0.23 + 0.5, speed: 0.9 }
-      )
-      // Right HBM <-> Right Die
-      this.packetTracks.push(
-        { from: new THREE.Vector3(1.82, 0.1, z), to: new THREE.Vector3(0.78, 0.1, z), kind: 'hbm', offset: i * 0.27 + 0.15, speed: 0.95 },
-        { from: new THREE.Vector3(0.78, 0.1, z - 0.14), to: new THREE.Vector3(1.82, 0.1, z - 0.14), kind: 'hbm', offset: i * 0.27 + 0.65, speed: 0.9 }
-      )
-    }
-    // Die-to-Die central NV-HBI bridge packets
-    for (let i = 0; i < 10; i++) {
-      const z = -1.45 + i * 0.32
-      this.packetTracks.push({
-        from: new THREE.Vector3(-0.26, 0.12, z),
-        to: new THREE.Vector3(0.26, 0.12, z),
-        kind: 'bridge',
-        offset: i * 0.17,
-        speed: 1.4
-      })
+    if (this.profile === 'h100_910c') {
+      // H100 SXM5: 5 active HBM3 channels (3 left + 2 right, skipping fused-off dummy at side=+1, i=0)
+      const h100Z = [-1.18, 0, 1.18]
+      for (let i = 0; i < 3; i++) {
+        const z = h100Z[i]
+        this.packetTracks.push(
+          { from: new THREE.Vector3(-1.82, 0.1, z), to: new THREE.Vector3(-0.78, 0.1, z), kind: 'hbm', offset: i * 0.29, speed: 0.98, arch: 'gpu' },
+          { from: new THREE.Vector3(-0.78, 0.1, z + 0.15), to: new THREE.Vector3(-1.82, 0.1, z + 0.15), kind: 'hbm', offset: i * 0.29 + 0.5, speed: 0.94, arch: 'gpu' }
+        )
+        if (i > 0) {
+          this.packetTracks.push(
+            { from: new THREE.Vector3(1.82, 0.1, z), to: new THREE.Vector3(0.78, 0.1, z), kind: 'hbm', offset: i * 0.31 + 0.12, speed: 0.98, arch: 'gpu' },
+            { from: new THREE.Vector3(0.78, 0.1, z - 0.15), to: new THREE.Vector3(1.82, 0.1, z - 0.15), kind: 'hbm', offset: i * 0.31 + 0.62, speed: 0.94, arch: 'gpu' }
+          )
+        }
+      }
+      // H100 50 MB Split L2 Crossbar / LSE reduction packets
+      for (let i = 0; i < 8; i++) {
+        const z = -1.36 + i * 0.39
+        this.packetTracks.push({
+          from: new THREE.Vector3(-0.65, 0.13, z),
+          to: new THREE.Vector3(0.65, 0.13, z),
+          kind: 'bridge',
+          offset: i * 0.19,
+          speed: 1.35,
+          arch: 'gpu'
+        })
+      }
+      // Ascend 910C: 8 active HBM2e stacks (4 left for Die 0 + 4 right for Die 1)
+      for (let i = 0; i < 4; i++) {
+        const z = -1.35 + i * 0.9
+        this.packetTracks.push(
+          { from: new THREE.Vector3(-1.82, 0.1, z), to: new THREE.Vector3(-0.84, 0.1, z), kind: 'hbm', offset: i * 0.23, speed: 0.92, arch: 'npu' },
+          { from: new THREE.Vector3(-0.84, 0.1, z + 0.14), to: new THREE.Vector3(-1.82, 0.1, z + 0.14), kind: 'hbm', offset: i * 0.23 + 0.5, speed: 0.88, arch: 'npu' },
+          { from: new THREE.Vector3(1.82, 0.1, z), to: new THREE.Vector3(0.84, 0.1, z), kind: 'hbm', offset: i * 0.27 + 0.15, speed: 0.92, arch: 'npu' },
+          { from: new THREE.Vector3(0.84, 0.1, z - 0.14), to: new THREE.Vector3(1.82, 0.1, z - 0.14), kind: 'hbm', offset: i * 0.27 + 0.65, speed: 0.88, arch: 'npu' }
+        )
+      }
+      // Ascend 910C Dual-Die Central Interposer Bridge packets (Die 0 <-> Die 1)
+      for (let i = 0; i < 10; i++) {
+        const z = -1.45 + i * 0.32
+        this.packetTracks.push({
+          from: new THREE.Vector3(-0.28, 0.12, z),
+          to: new THREE.Vector3(0.28, 0.12, z),
+          kind: 'bridge',
+          offset: i * 0.17,
+          speed: 1.35,
+          arch: 'npu'
+        })
+      }
+    } else {
+      for (let i = 0; i < 4; i++) {
+        const z = -1.35 + i * 0.9
+        // Left HBM <-> Left Die
+        this.packetTracks.push(
+          { from: new THREE.Vector3(-1.82, 0.1, z), to: new THREE.Vector3(-0.78, 0.1, z), kind: 'hbm', offset: i * 0.23, speed: 0.95 },
+          { from: new THREE.Vector3(-0.78, 0.1, z + 0.14), to: new THREE.Vector3(-1.82, 0.1, z + 0.14), kind: 'hbm', offset: i * 0.23 + 0.5, speed: 0.9 }
+        )
+        // Right HBM <-> Right Die
+        this.packetTracks.push(
+          { from: new THREE.Vector3(1.82, 0.1, z), to: new THREE.Vector3(0.78, 0.1, z), kind: 'hbm', offset: i * 0.27 + 0.15, speed: 0.95 },
+          { from: new THREE.Vector3(0.78, 0.1, z - 0.14), to: new THREE.Vector3(1.82, 0.1, z - 0.14), kind: 'hbm', offset: i * 0.27 + 0.65, speed: 0.9 }
+        )
+      }
+      // Die-to-Die central NV-HBI bridge packets
+      for (let i = 0; i < 10; i++) {
+        const z = -1.45 + i * 0.32
+        this.packetTracks.push({
+          from: new THREE.Vector3(-0.26, 0.12, z),
+          to: new THREE.Vector3(0.26, 0.12, z),
+          kind: 'bridge',
+          offset: i * 0.17,
+          speed: 1.4
+        })
+      }
     }
     // Edge I/O NVLink/HCCS routing tracks
     for (let i = 0; i < 8; i++) {
@@ -931,54 +1508,164 @@ export class AcceleratorTeardownEngine {
     this.tagPart(this.interposerGroup, 'interposer')
     this.rootGroup.add(this.interposerGroup)
 
-    /* -------- TIER 3: 8× HBM3e 12-Hi Stacked DRAM Towers + Glowing TSVs -------- */
+    /* -------- TIER 3: Stacked HBM Towers + Glowing TSVs -------- */
     const hbmBaseMat = new THREE.MeshStandardMaterial({ color: '#1a2030', metalness: 0.72, roughness: 0.28 })
     const hbmSliceMat = new THREE.MeshStandardMaterial({ color: '#273147', metalness: 0.82, roughness: 0.22 })
-    let hIdx = 0
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < 4; i++) {
-        const stack = new THREE.Group()
-        const z = -1.38 + i * 0.92
-        stack.position.set(side * 1.88, 0, z)
+    const dummyBaseMat = new THREE.MeshStandardMaterial({ color: '#1b1d22', metalness: 0.45, roughness: 0.62 })
+    const dummySliceMat = new THREE.MeshStandardMaterial({ color: '#24272e', metalness: 0.4, roughness: 0.58 })
 
-        // Base buffer die
-        const base = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.09, 0.74), hbmBaseMat)
-        base.position.y = 0.045
-        base.castShadow = true
-        stack.add(base)
+    if (this.profile === 'h100_910c') {
+      // H100 SXM5: 6 physical HBM3 sites (3 left + 3 right) -> 5 active 8-Hi stacks (80 GB) + 1 fused-off dummy stack
+      const h100Z = [-1.18, 0, 1.18]
+      let gIdx = 0
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          const isDummy = side === 1 && i === 0
+          const stack = new THREE.Group()
+          stack.position.set(side * 1.88, 0, h100Z[i])
 
-        // 5 stepped DRAM silicon slices (visualizing 12-Hi vertical stacking)
-        for (let tier = 0; tier < 5; tier++) {
-          const slice = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.058, 0.7), hbmSliceMat)
-          slice.position.y = 0.125 + tier * 0.072
-          slice.castShadow = true
-          stack.add(slice)
+          const base = new THREE.Mesh(
+            new THREE.BoxGeometry(0.68, 0.09, 0.94),
+            isDummy ? dummyBaseMat : hbmBaseMat
+          )
+          base.position.y = 0.045
+          base.castShadow = true
+          stack.add(base)
+
+          for (let tier = 0; tier < 5; tier++) {
+            const slice = new THREE.Mesh(
+              new THREE.BoxGeometry(0.64, 0.058, 0.9),
+              isDummy ? dummySliceMat : hbmSliceMat
+            )
+            slice.position.y = 0.125 + tier * 0.072
+            slice.castShadow = true
+            stack.add(slice)
+          }
+
+          const glowMat = new THREE.MeshStandardMaterial({
+            color: isDummy ? '#3b3e46' : '#0E9EE4',
+            emissive: isDummy ? '#4a3528' : '#0E9EE4',
+            emissiveIntensity: isDummy ? 0.06 : 0.85,
+            roughness: isDummy ? 0.65 : 0.2,
+            metalness: isDummy ? 0.25 : 0.35
+          })
+          const tsvStrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.42, 0.74), glowMat)
+          tsvStrip.position.set(-side * 0.33, 0.25, 0)
+          stack.add(tsvStrip)
+
+          const topCap = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.025, 0.82), glowMat)
+          topCap.position.y = 0.48
+          stack.add(topCap)
+
+          // Crisp crossed fuse mark on the fused-off 6th dummy HBM site
+          if (isDummy) {
+            const xMat = new THREE.MeshStandardMaterial({
+              color: '#6b6f76',
+              emissive: '#E0523B',
+              emissiveIntensity: 0.18,
+              roughness: 0.5
+            })
+            const barA = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.015, 0.05), xMat)
+            barA.position.y = 0.498
+            barA.rotation.y = Math.PI / 4
+            const barB = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.015, 0.05), xMat)
+            barB.position.y = 0.498
+            barB.rotation.y = -Math.PI / 4
+            stack.add(barA, barB)
+          }
+
+          this.hbmGlowBars.push({ mat: glowMat, idx: gIdx++, arch: 'gpu', dummy: isDummy })
+          this.hbmGpuGroup.add(stack)
         }
+      }
 
-        // Glowing TSV vertical bandwidth strip on inner die-facing edge + top cap indicator
-        const glowMat = new THREE.MeshStandardMaterial({
-          color: '#2B5CFF',
-          emissive: '#2B5CFF',
-          emissiveIntensity: 0.85,
-          roughness: 0.2,
-          metalness: 0.3
-        })
-        const tsvStrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.42, 0.56), glowMat)
-        tsvStrip.position.set(-side * 0.33, 0.25, 0)
-        stack.add(tsvStrip)
+      // Ascend 910C: 8 active HBM2e stacks (4 left for Die 0 + 4 right for Die 1 = 128 GB @ 3.2 TB/s)
+      let nIdx = 0
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 4; i++) {
+          const stack = new THREE.Group()
+          const z = -1.38 + i * 0.92
+          stack.position.set(side * 1.88, 0, z)
 
-        const topCap = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.025, 0.62), glowMat)
-        topCap.position.y = 0.48
-        stack.add(topCap)
+          const base = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.09, 0.74), hbmBaseMat)
+          base.position.y = 0.045
+          base.castShadow = true
+          stack.add(base)
 
-        this.hbmGlowBars.push({ mat: glowMat, idx: hIdx++ })
-        this.hbmGroup.add(stack)
+          for (let tier = 0; tier < 5; tier++) {
+            const slice = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.058, 0.7), hbmSliceMat)
+            slice.position.y = 0.125 + tier * 0.072
+            slice.castShadow = true
+            stack.add(slice)
+          }
+
+          const glowMat = new THREE.MeshStandardMaterial({
+            color: '#2B5CFF',
+            emissive: '#2B5CFF',
+            emissiveIntensity: 0.85,
+            roughness: 0.2,
+            metalness: 0.3
+          })
+          const tsvStrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.42, 0.56), glowMat)
+          tsvStrip.position.set(-side * 0.33, 0.25, 0)
+          stack.add(tsvStrip)
+
+          const topCap = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.025, 0.62), glowMat)
+          topCap.position.y = 0.48
+          stack.add(topCap)
+
+          this.hbmGlowBars.push({ mat: glowMat, idx: nIdx++, arch: 'npu', dummy: false })
+          this.hbmNpuGroup.add(stack)
+        }
+      }
+      this.hbmGroup.add(this.hbmGpuGroup, this.hbmNpuGroup)
+    } else {
+      let hIdx = 0
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 4; i++) {
+          const stack = new THREE.Group()
+          const z = -1.38 + i * 0.92
+          stack.position.set(side * 1.88, 0, z)
+
+          // Base buffer die
+          const base = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.09, 0.74), hbmBaseMat)
+          base.position.y = 0.045
+          base.castShadow = true
+          stack.add(base)
+
+          // 5 stepped DRAM silicon slices (visualizing 12-Hi vertical stacking)
+          for (let tier = 0; tier < 5; tier++) {
+            const slice = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.058, 0.7), hbmSliceMat)
+            slice.position.y = 0.125 + tier * 0.072
+            slice.castShadow = true
+            stack.add(slice)
+          }
+
+          // Glowing TSV vertical bandwidth strip on inner die-facing edge + top cap indicator
+          const glowMat = new THREE.MeshStandardMaterial({
+            color: '#2B5CFF',
+            emissive: '#2B5CFF',
+            emissiveIntensity: 0.85,
+            roughness: 0.2,
+            metalness: 0.3
+          })
+          const tsvStrip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.42, 0.56), glowMat)
+          tsvStrip.position.set(-side * 0.33, 0.25, 0)
+          stack.add(tsvStrip)
+
+          const topCap = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.025, 0.62), glowMat)
+          topCap.position.y = 0.48
+          stack.add(topCap)
+
+          this.hbmGlowBars.push({ mat: glowMat, idx: hIdx++ })
+          this.hbmGroup.add(stack)
+        }
       }
     }
     this.tagPart(this.hbmGroup, 'hbm')
     this.rootGroup.add(this.hbmGroup)
 
-    /* -------- TIER 4A: GPU Dual-Reticle Compute Dies (64 SM Clusters + L2 + NV-HBI) -------- */
+    /* -------- TIER 4A: GPU Compute Die -------- */
     const dieSubstrateMat = new THREE.MeshStandardMaterial({
       color: '#1b1f29',
       map: siliconTexGpu,
@@ -1000,82 +1687,148 @@ export class AcceleratorTeardownEngine {
       roughness: 0.22
     })
 
-    // Central 10 TB/s NV-HBI Dual-Die Bridge
-    const nvBridge = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 3.05), this.nvBridgeMat)
-    nvBridge.position.set(0, 0.12, 0)
-    this.gpuDieGroup.add(nvBridge)
+    if (this.profile === 'h100_910c') {
+      // Authentic NVIDIA H100 SXM5 (GH100): Single Monolithic 814 mm² Die + 50 MB Split L2 Crossbar + 8 GPCs (132 SMs)
+      const monoDie = new THREE.Mesh(new THREE.BoxGeometry(2.74, 0.21, 3.38), dieSubstrateMat)
+      monoDie.position.set(0, 0.105, 0)
+      monoDie.castShadow = true
+      monoDie.receiveShadow = true
+      this.gpuDieGroup.add(monoDie)
 
-    for (const die of [0, 1]) {
-      const cx = die === 0 ? -0.76 : 0.76
-      // Reticle die base
-      const baseDie = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.2, 3.35), dieSubstrateMat)
-      baseDie.position.set(cx, 0.1, 0)
-      baseDie.castShadow = true
-      baseDie.receiveShadow = true
-      this.gpuDieGroup.add(baseDie)
+      // Central 50 MB Split L2 Cache Crossbar + 3 horizontal GPC lane dividers (forming 8 distinct GPC zones)
+      const l2CrossMat = new THREE.MeshStandardMaterial({
+        color: '#0e7a56',
+        emissive: '#0E9972',
+        emissiveIntensity: 0.42,
+        metalness: 0.62,
+        roughness: 0.24
+      })
+      this.gpuL2CrossbarMat = l2CrossMat
+      this.nvBridgeMat = l2CrossMat
 
-      // Central L2 SRAM Cache spine running lengthwise through each die
-      const l2Spine = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.06, 3.05), l2SpineMat)
-      l2Spine.position.set(cx, 0.22, 0)
-      this.gpuDieGroup.add(l2Spine)
+      const l2Center = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.065, 3.16), l2CrossMat)
+      l2Center.position.set(0, 0.225, 0)
+      this.gpuDieGroup.add(l2Center)
 
-      // 8 rows × 4 cols = 32 SM / Tensor Core cluster tiles per die (64 total!)
+      for (const rz of [-0.79, 0, 0.79]) {
+        const gpcRib = new THREE.Mesh(new THREE.BoxGeometry(2.54, 0.045, 0.075), l2CrossMat)
+        gpcRib.position.set(0, 0.22, rz)
+        this.gpuDieGroup.add(gpcRib)
+      }
+
+      // 8 rows × 8 cols = 64 SM/TPC Cluster Tiles across 8 GPC quadrants (representing 132 active SMs)
       for (let r = 0; r < 8; r++) {
-        for (let col = 0; col < 4; col++) {
-          const offsetX = col < 2 ? -0.45 + col * 0.24 : 0.21 + (col - 2) * 0.24
+        const gpcRow = Math.floor(r / 2)
+        const zBase = -1.39 + gpcRow * 0.795 + (r % 2) * 0.36
+        for (let col = 0; col < 8; col++) {
+          const isRight = col >= 4
+          const localCol = isRight ? col - 4 : col
+          const xPos = isRight ? 0.27 + localCol * 0.285 : -1.125 + localCol * 0.285
+          const gpcId = gpcRow * 2 + (isRight ? 1 : 0)
           const tileMat = new THREE.MeshStandardMaterial({
-            color: '#2b2d34',
+            color: '#292c34',
             emissive: '#FA6D01',
-            emissiveIntensity: 0.2,
+            emissiveIntensity: 0.22,
             metalness: 0.72,
             roughness: 0.26
           })
-          const tile = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.07, 0.31), tileMat)
-          tile.position.set(cx + offsetX, 0.235, -1.36 + r * 0.39)
+          const tile = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.072, 0.29), tileMat)
+          tile.position.set(xPos, 0.242, zBase)
           this.gpuDieGroup.add(tile)
-          this.gpuSmTiles.push({ mesh: tile, mat: tileMat, ix: die * 4 + col, iz: r, die })
+          this.gpuSmTiles.push({ mesh: tile, mat: tileMat, ix: col, iz: r, die: gpcId })
+        }
+      }
+    } else {
+      // Central 10 TB/s NV-HBI Dual-Die Bridge
+      const nvBridge = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.14, 3.05), this.nvBridgeMat)
+      nvBridge.position.set(0, 0.12, 0)
+      this.gpuDieGroup.add(nvBridge)
+
+      for (const die of [0, 1]) {
+        const cx = die === 0 ? -0.76 : 0.76
+        // Reticle die base
+        const baseDie = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.2, 3.35), dieSubstrateMat)
+        baseDie.position.set(cx, 0.1, 0)
+        baseDie.castShadow = true
+        baseDie.receiveShadow = true
+        this.gpuDieGroup.add(baseDie)
+
+        // Central L2 SRAM Cache spine running lengthwise through each die
+        const l2Spine = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.06, 3.05), l2SpineMat)
+        l2Spine.position.set(cx, 0.22, 0)
+        this.gpuDieGroup.add(l2Spine)
+
+        // 8 rows × 4 cols = 32 SM / Tensor Core cluster tiles per die (64 total!)
+        for (let r = 0; r < 8; r++) {
+          for (let col = 0; col < 4; col++) {
+            const offsetX = col < 2 ? -0.45 + col * 0.24 : 0.21 + (col - 2) * 0.24
+            const tileMat = new THREE.MeshStandardMaterial({
+              color: '#2b2d34',
+              emissive: '#FA6D01',
+              emissiveIntensity: 0.2,
+              metalness: 0.72,
+              roughness: 0.26
+            })
+            const tile = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.07, 0.31), tileMat)
+            tile.position.set(cx + offsetX, 0.235, -1.36 + r * 0.39)
+            this.gpuDieGroup.add(tile)
+            this.gpuSmTiles.push({ mesh: tile, mat: tileMat, ix: die * 4 + col, iz: r, die })
+          }
         }
       }
     }
     this.computeGroup.add(this.gpuDieGroup)
 
-    /* -------- TIER 4B: NPU Da Vinci / Systolic AI Core Die (Cube + Vector + UB SRAM + MTE) -------- */
+    /* -------- TIER 4B: NPU Da Vinci / Systolic AI Core Die -------- */
     const npuBaseMat = new THREE.MeshStandardMaterial({
       color: '#1e1c2b',
       map: siliconTexNpu,
       metalness: 0.86,
       roughness: 0.22
     })
-    const npuDieBase = new THREE.Mesh(new THREE.BoxGeometry(2.84, 0.22, 3.35), npuBaseMat)
-    npuDieBase.position.set(0, 0.11, 0)
-    npuDieBase.castShadow = true
-    this.npuDieGroup.add(npuDieBase)
 
-    // Central cross-shaped L1 Unified Buffer (UB) SRAM Mesh (Emerald)
-    const ubMat = new THREE.MeshStandardMaterial({
-      color: '#00CD6E',
-      emissive: '#00CD6E',
-      emissiveIntensity: 0.45,
-      metalness: 0.6,
-      roughness: 0.25
-    })
-    const ubV = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.07, 3.08), ubMat)
-    ubV.position.set(0, 0.25, 0)
-    this.npuDieGroup.add(ubV)
-    const ubH = new THREE.Mesh(new THREE.BoxGeometry(2.58, 0.07, 0.26), ubMat)
-    ubH.position.set(0, 0.25, 0)
-    this.npuDieGroup.add(ubH)
+    if (this.profile === 'h100_910c') {
+      // Authentic Huawei Ascend 910C: Dual-Die Da Vinci v2 Chiplet Package (2× [24 AIC + 48 AIV] = 48 AIC / 96 AIV)
+      const d2dMat = new THREE.MeshStandardMaterial({
+        color: '#0E9EE4',
+        emissive: '#0E9EE4',
+        emissiveIntensity: 0.85,
+        metalness: 0.55,
+        roughness: 0.22
+      })
+      this.npuD2dBridgeMat = d2dMat
+      const d2dBridge = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 3.06), d2dMat)
+      d2dBridge.position.set(0, 0.12, 0)
+      this.npuDieGroup.add(d2dBridge)
 
-    // 16× Dedicated Cube Matrix Units (4×4 systolic blocks) + 16× Vector Core Strips + 8× MTE DMA blocks
-    let cIdx = 0
-    for (const qx of [-1, 1]) {
-      for (const qz of [-1, 1]) {
-        for (let r = 0; r < 2; r++) {
-          for (let col = 0; col < 2; col++) {
-            const x = qx * (0.48 + col * 0.56)
-            const z = qz * (0.5 + r * 0.72)
+      let cIdx = 0
+      let vIdx = 0
+      for (const die of [0, 1]) {
+        const cx = die === 0 ? -0.76 : 0.76
+        const dieSlab = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.21, 3.36), npuBaseMat)
+        dieSlab.position.set(cx, 0.105, 0)
+        dieSlab.castShadow = true
+        dieSlab.receiveShadow = true
+        this.npuDieGroup.add(dieSlab)
 
-            // Cube Unit (Square 16×16×16 systolic array — Signal Orange)
+        // Dedicated 192 KB Unified Buffer (UB) SRAM Spine down each chiplet (turns crimson on UB Overflow!)
+        const ubMat = new THREE.MeshStandardMaterial({
+          color: '#0E9972',
+          emissive: '#0E9972',
+          emissiveIntensity: 0.55,
+          metalness: 0.58,
+          roughness: 0.24
+        })
+        this.npuUbMats.push(ubMat)
+        const ubSpine = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.068, 3.08), ubMat)
+        ubSpine.position.set(cx, 0.235, 0)
+        this.npuDieGroup.add(ubSpine)
+
+        // 6 rows × 2 cols = 12 AIC Cube blocks per die (24 visual = 48 physical AIC) + 2× AIV Vector strips per Cube (1:2 ratio!)
+        for (let r = 0; r < 6; r++) {
+          const z = -1.26 + r * 0.504
+          for (const sideCol of [-1, 1]) {
+            const xCube = cx + sideCol * 0.34
             const cubeMat = new THREE.MeshStandardMaterial({
               color: '#342722',
               emissive: '#FA6D01',
@@ -1083,44 +1836,122 @@ export class AcceleratorTeardownEngine {
               metalness: 0.68,
               roughness: 0.26
             })
-            const cube = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.42), cubeMat)
-            cube.position.set(x, 0.27, z - 0.08)
+            const cube = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.105, 0.26), cubeMat)
+            cube.position.set(xCube, 0.258, z - 0.055)
             this.npuDieGroup.add(cube)
-            this.npuCubeTiles.push({ mesh: cube, mat: cubeMat, idx: cIdx })
+            this.npuCubeTiles.push({ mesh: cube, mat: cubeMat, idx: cIdx++, die })
 
-            // Vector Core Strip right beside each Cube (Electric Lilac)
-            const vecMat = new THREE.MeshStandardMaterial({
-              color: '#2e2438',
-              emissive: '#DE99FE',
-              emissiveIntensity: 0.4,
-              metalness: 0.65,
-              roughness: 0.28
-            })
-            const vec = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.14), vecMat)
-            vec.position.set(x, 0.255, z + 0.23)
-            this.npuDieGroup.add(vec)
-            this.npuVecTiles.push({ mesh: vec, mat: vecMat, idx: cIdx })
-            cIdx++
+            // Twin AIV Vector strips (2 AIV per 1 AIC, authentic Da Vinci v2 1:2 ratio)
+            for (const sub of [-0.085, 0.085]) {
+              const vecMat = new THREE.MeshStandardMaterial({
+                color: '#2e2438',
+                emissive: '#DE99FE',
+                emissiveIntensity: 0.42,
+                metalness: 0.65,
+                roughness: 0.28
+              })
+              const vec = new THREE.Mesh(new THREE.BoxGeometry(0.145, 0.075, 0.115), vecMat)
+              vec.position.set(xCube + sub, 0.245, z + 0.155)
+              this.npuDieGroup.add(vec)
+              this.npuVecTiles.push({ mesh: vec, mat: vecMat, idx: vIdx++, die })
+            }
           }
         }
       }
-    }
 
-    // 8× Perimeter MTE1/2/3 DMA Engines facing HBM3 stacks (Cobalt)
-    for (let i = 0; i < 8; i++) {
-      const side = i < 4 ? -1 : 1
-      const z = -1.26 + (i % 4) * 0.84
-      const mteMat = new THREE.MeshStandardMaterial({
-        color: '#1b2948',
-        emissive: '#2B5CFF',
-        emissiveIntensity: 0.55,
+      // 8× Perimeter MTE2/MTE3 DMA Engines (4 on outer left of Die 0, 4 on outer right of Die 1 facing 8× HBM2e)
+      for (let i = 0; i < 8; i++) {
+        const side = i < 4 ? -1 : 1
+        const z = -1.26 + (i % 4) * 0.84
+        const mteMat = new THREE.MeshStandardMaterial({
+          color: '#1b2948',
+          emissive: '#2B5CFF',
+          emissiveIntensity: 0.55,
+          metalness: 0.6,
+          roughness: 0.28
+        })
+        const mte = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.088, 0.54), mteMat)
+        mte.position.set(side * 1.36, 0.252, z)
+        this.npuDieGroup.add(mte)
+        this.npuMteTiles.push({ mesh: mte, mat: mteMat, idx: i })
+      }
+    } else {
+      const npuDieBase = new THREE.Mesh(new THREE.BoxGeometry(2.84, 0.22, 3.35), npuBaseMat)
+      npuDieBase.position.set(0, 0.11, 0)
+      npuDieBase.castShadow = true
+      this.npuDieGroup.add(npuDieBase)
+
+      // Central cross-shaped L1 Unified Buffer (UB) SRAM Mesh (Emerald)
+      const ubMat = new THREE.MeshStandardMaterial({
+        color: '#00CD6E',
+        emissive: '#00CD6E',
+        emissiveIntensity: 0.45,
         metalness: 0.6,
-        roughness: 0.28
+        roughness: 0.25
       })
-      const mte = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.54), mteMat)
-      mte.position.set(side * 1.32, 0.26, z)
-      this.npuDieGroup.add(mte)
-      this.npuMteTiles.push({ mesh: mte, mat: mteMat, idx: i })
+      const ubV = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.07, 3.08), ubMat)
+      ubV.position.set(0, 0.25, 0)
+      this.npuDieGroup.add(ubV)
+      const ubH = new THREE.Mesh(new THREE.BoxGeometry(2.58, 0.07, 0.26), ubMat)
+      ubH.position.set(0, 0.25, 0)
+      this.npuDieGroup.add(ubH)
+
+      // 16× Dedicated Cube Matrix Units (4×4 systolic blocks) + 16× Vector Core Strips + 8× MTE DMA blocks
+      let cIdx = 0
+      for (const qx of [-1, 1]) {
+        for (const qz of [-1, 1]) {
+          for (let r = 0; r < 2; r++) {
+            for (let col = 0; col < 2; col++) {
+              const x = qx * (0.48 + col * 0.56)
+              const z = qz * (0.5 + r * 0.72)
+
+              // Cube Unit (Square 16×16×16 systolic array — Signal Orange)
+              const cubeMat = new THREE.MeshStandardMaterial({
+                color: '#342722',
+                emissive: '#FA6D01',
+                emissiveIntensity: 0.45,
+                metalness: 0.68,
+                roughness: 0.26
+              })
+              const cube = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.42), cubeMat)
+              cube.position.set(x, 0.27, z - 0.08)
+              this.npuDieGroup.add(cube)
+              this.npuCubeTiles.push({ mesh: cube, mat: cubeMat, idx: cIdx })
+
+              // Vector Core Strip right beside each Cube (Electric Lilac)
+              const vecMat = new THREE.MeshStandardMaterial({
+                color: '#2e2438',
+                emissive: '#DE99FE',
+                emissiveIntensity: 0.4,
+                metalness: 0.65,
+                roughness: 0.28
+              })
+              const vec = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.14), vecMat)
+              vec.position.set(x, 0.255, z + 0.23)
+              this.npuDieGroup.add(vec)
+              this.npuVecTiles.push({ mesh: vec, mat: vecMat, idx: cIdx })
+              cIdx++
+            }
+          }
+        }
+      }
+
+      // 8× Perimeter MTE1/2/3 DMA Engines facing HBM3 stacks (Cobalt)
+      for (let i = 0; i < 8; i++) {
+        const side = i < 4 ? -1 : 1
+        const z = -1.26 + (i % 4) * 0.84
+        const mteMat = new THREE.MeshStandardMaterial({
+          color: '#1b2948',
+          emissive: '#2B5CFF',
+          emissiveIntensity: 0.55,
+          metalness: 0.6,
+          roughness: 0.28
+        })
+        const mte = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.54), mteMat)
+        mte.position.set(side * 1.32, 0.26, z)
+        this.npuDieGroup.add(mte)
+        this.npuMteTiles.push({ mesh: mte, mat: mteMat, idx: i })
+      }
     }
 
     this.computeGroup.add(this.npuDieGroup)
@@ -1399,6 +2230,10 @@ export class AcceleratorTeardownEngine {
   private applyArchGeometry() {
     this.gpuDieGroup.visible = this.arch === 'gpu'
     this.npuDieGroup.visible = this.arch === 'npu'
+    if (this.profile === 'h100_910c') {
+      this.hbmGpuGroup.visible = this.arch === 'gpu'
+      this.hbmNpuGroup.visible = this.arch === 'npu'
+    }
     this.coldPlateLeftMat.map = this.arch === 'gpu' ? this.coldPlateTexGpuL : this.coldPlateTexNpuL
     this.coldPlateLeftMat.needsUpdate = true
     this.coldPlateRightMat.map = this.arch === 'gpu' ? this.coldPlateTexGpuR : this.coldPlateTexNpuR
@@ -1461,11 +2296,13 @@ export class AcceleratorTeardownEngine {
 
     // KV lattice visibility: keep HALF CUTAWAY clean on silicon unless inspecting KV or Exploded/X-Ray
     const showKv =
-      this.cutaway === 'exploded' ||
-      this.cutaway === 'xray' ||
-      iso === 'kv' ||
-      this.workload === 'decode' ||
-      this.workload === 'flashattn'
+      this.profile === 'h100_910c'
+        ? this.cutaway === 'exploded' || iso === 'kv'
+        : this.cutaway === 'exploded' ||
+          this.cutaway === 'xray' ||
+          iso === 'kv' ||
+          this.workload === 'decode' ||
+          this.workload === 'flashattn'
     this.kvGroup.visible = showKv
   }
 
@@ -1474,6 +2311,10 @@ export class AcceleratorTeardownEngine {
   public setArch(arch: ArchMode) {
     this.arch = arch
     this.applyArchGeometry()
+  }
+  public setScenario(sc: DispatchScenario) {
+    this.scenario = sc
+    this.applyCutawayMaterials()
   }
   public setPrecision(p: PrecisionMode) {
     this.precision = p
@@ -1585,7 +2426,7 @@ export class AcceleratorTeardownEngine {
       // Hover picking
       const hit = this.pickPart()
       if (hit) {
-        this.cb.onHoverPart(PART_CATALOG[this.arch][hit], e.clientX - rect.left, e.clientY - rect.top)
+        this.cb.onHoverPart(this.getCatalog()[this.arch][hit], e.clientX - rect.left, e.clientY - rect.top)
         this.container.style.cursor = 'pointer'
       } else {
         this.cb.onHoverPart(null, 0, 0)
@@ -1698,39 +2539,173 @@ export class AcceleratorTeardownEngine {
 
     // 1. Animate GPU SM / Tensor Core Systolic Diagonal Wave
     const ph = this.cycle * 0.26
+    const sc = this.profile === 'h100_910c' ? (this.scenario === 'none' ? 'f2_stream' : this.scenario) : 'none'
+    const isUbOverflow = this.profile === 'h100_910c' && this.arch === 'npu' && sc === 'f3_unopt'
+
     if (this.arch === 'gpu') {
-      const mmaGain = 0.22 + (hw.mfu / 100) * 1.35
-      for (const t of this.gpuSmTiles) {
-        const wave = 0.5 + 0.5 * Math.sin(ph - (t.ix * 0.65 + t.iz * 0.5))
-        const active = hw.workload === 'decode' ? wave * 0.45 : wave
-        t.mat.emissive.set(
-          hw.workload === 'flashattn' && (t.ix + t.iz) % 3 === 0 ? '#DE99FE' : '#FA6D01'
-        )
-        t.mat.emissiveIntensity = 0.12 + active * mmaGain
+      if (this.profile === 'h100_910c') {
+        for (const t of this.gpuSmTiles) {
+          const wave = 0.5 + 0.5 * Math.sin(ph - (t.ix * 0.55 + t.iz * 0.45))
+          if (sc === 'f3_unopt') {
+            // Only 16 / 132 SMs active (top GPC row: 8 of 64 tiles lit, 88% of GH100 die cold idle!)
+            const isBusy = t.iz === 0
+            t.mat.emissive.set(isBusy ? '#E0523B' : '#2a2224')
+            t.mat.emissiveIntensity = isBusy ? 0.9 + 0.55 * wave : 0.03
+          } else if (sc === 'f1_launch') {
+            // Launch-bound tiny shape: intermittent burst on 16 SMs
+            const burst = Math.pow(Math.max(0, Math.sin(ph * 0.75)), 4)
+            const isBusy = t.iz === 0
+            t.mat.emissive.set(isBusy ? '#7E4F8E' : '#23242b')
+            t.mat.emissiveIntensity = isBusy ? 0.25 + burst * 1.15 : 0.04
+          } else if (sc === 'f3_opt') {
+            // Split-KV Stage 1 + LSE Combine: all 128/132 SMs blazing + L2 crossbar golden-emerald merge!
+            const isLseRing = t.ix === 3 || t.ix === 4
+            t.mat.emissive.set(isLseRing && wave > 0.65 ? '#0E9972' : '#FA6D01')
+            t.mat.emissiveIntensity = 0.35 + wave * 1.15
+          } else {
+            // F2 Stream sweet spot: smooth full-die streaming waves across all 8 GPCs
+            t.mat.emissive.set((t.ix + t.iz) % 4 === 0 ? '#0E9EE4' : '#FA6D01')
+            t.mat.emissiveIntensity = 0.28 + wave * 1.08
+          }
+        }
+        if (this.gpuL2CrossbarMat) {
+          if (sc === 'f3_opt') {
+            this.gpuL2CrossbarMat.color.set('#0E9972')
+            this.gpuL2CrossbarMat.emissive.set('#0E9972')
+            this.gpuL2CrossbarMat.emissiveIntensity = 0.85 + 0.65 * Math.sin(ph * 1.8)
+          } else if (sc === 'f3_unopt') {
+            this.gpuL2CrossbarMat.color.set('#3d4248')
+            this.gpuL2CrossbarMat.emissive.set('#E0523B')
+            this.gpuL2CrossbarMat.emissiveIntensity = 0.14
+          } else {
+            this.gpuL2CrossbarMat.color.set('#0e7a56')
+            this.gpuL2CrossbarMat.emissive.set('#0E9972')
+            this.gpuL2CrossbarMat.emissiveIntensity = 0.38 + 0.32 * Math.sin(ph * 1.1)
+          }
+        }
+      } else {
+        const mmaGain = 0.22 + (hw.mfu / 100) * 1.35
+        for (const t of this.gpuSmTiles) {
+          const wave = 0.5 + 0.5 * Math.sin(ph - (t.ix * 0.65 + t.iz * 0.5))
+          const active = hw.workload === 'decode' ? wave * 0.45 : wave
+          t.mat.emissive.set(
+            hw.workload === 'flashattn' && (t.ix + t.iz) % 3 === 0 ? '#DE99FE' : '#FA6D01'
+          )
+          t.mat.emissiveIntensity = 0.12 + active * mmaGain
+        }
+        this.nvBridgeMat.emissiveIntensity =
+          hw.workload === 'allreduce' ? 1.55 + 0.45 * Math.sin(ph * 1.6) : 0.45 + 0.35 * (hw.mfu / 100)
       }
-      this.nvBridgeMat.emissiveIntensity =
-        hw.workload === 'allreduce' ? 1.55 + 0.45 * Math.sin(ph * 1.6) : 0.45 + 0.35 * (hw.mfu / 100)
     } else {
-      // 2. Animate NPU Da Vinci 3-Stage Pipeline: MTE2 Load -> Cube MMA -> Vector Softmax
-      for (const mte of this.npuMteTiles) {
-        const w = 0.5 + 0.5 * Math.sin(ph - mte.idx * 0.55)
-        mte.mat.emissiveIntensity = 0.2 + w * (0.4 + hw.dmaDuty * 1.2)
-      }
-      for (const cube of this.npuCubeTiles) {
-        const w = 0.5 + 0.5 * Math.sin(ph - 0.9 - cube.idx * 0.35)
-        cube.mat.emissiveIntensity = 0.18 + w * (0.35 + hw.mmaDuty * 1.45)
-      }
-      for (const vec of this.npuVecTiles) {
-        const w = 0.5 + 0.5 * Math.sin(ph - 1.8 - vec.idx * 0.35)
-        vec.mat.emissiveIntensity = 0.15 + w * (0.25 + hw.vecDuty * 1.4)
+      // 2. Animate NPU Da Vinci 3-Stage Pipeline: MTE2 Load -> Cube MMA -> Vector Softmax (+ 192 KB UB Spine!)
+      if (this.profile === 'h100_910c') {
+        const alarmPulse = 0.5 + 0.5 * Math.sin(ph * 2.6)
+        for (const ubMat of this.npuUbMats) {
+          if (isUbOverflow) {
+            ubMat.color.set('#E0523B')
+            ubMat.emissive.set('#E0523B')
+            ubMat.emissiveIntensity = 0.7 + alarmPulse * 1.45
+          } else if (sc === 'f3_opt') {
+            ubMat.color.set('#0E9972')
+            ubMat.emissive.set('#0E9972')
+            ubMat.emissiveIntensity = 0.65 + 0.35 * Math.sin(ph * 1.2)
+          } else if (sc === 'f1_launch') {
+            ubMat.color.set('#7E4F8E')
+            ubMat.emissive.set('#7E4F8E')
+            ubMat.emissiveIntensity = 0.32 + 0.3 * Math.sin(ph)
+          } else {
+            // F2 Ping-Pong double buffer: brisk emerald pulse
+            ubMat.color.set('#00CD6E')
+            ubMat.emissive.set('#00CD6E')
+            ubMat.emissiveIntensity = 0.55 + 0.55 * Math.sin(ph * 1.6)
+          }
+        }
+        if (this.npuD2dBridgeMat) {
+          if (isUbOverflow) {
+            this.npuD2dBridgeMat.emissive.set('#E0523B')
+            this.npuD2dBridgeMat.emissiveIntensity = 0.12
+          } else if (sc === 'f3_opt') {
+            this.npuD2dBridgeMat.emissive.set('#0E9EE4')
+            this.npuD2dBridgeMat.emissiveIntensity = 0.95 + 0.55 * Math.sin(ph * 1.7)
+          } else if (sc === 'f1_launch') {
+            this.npuD2dBridgeMat.emissive.set('#7E4F8E')
+            this.npuD2dBridgeMat.emissiveIntensity = 0.2
+          } else {
+            this.npuD2dBridgeMat.emissive.set('#0E9EE4')
+            this.npuD2dBridgeMat.emissiveIntensity = 0.65 + 0.35 * Math.sin(ph * 1.3)
+          }
+        }
+        for (const mte of this.npuMteTiles) {
+          const w = 0.5 + 0.5 * Math.sin(ph - mte.idx * 0.55)
+          if (isUbOverflow) {
+            mte.mat.emissive.set('#E0523B')
+            mte.mat.emissiveIntensity = 0.08 + 0.12 * alarmPulse
+          } else if (sc === 'f1_launch' && mte.idx >= 2) {
+            mte.mat.emissive.set('#2B5CFF')
+            mte.mat.emissiveIntensity = 0.06
+          } else {
+            mte.mat.emissive.set('#2B5CFF')
+            mte.mat.emissiveIntensity = 0.2 + w * (0.35 + hw.dmaDuty * 1.2)
+          }
+        }
+        for (const cube of this.npuCubeTiles) {
+          const w = 0.5 + 0.5 * Math.sin(ph - 0.85 - cube.idx * 0.32)
+          if (isUbOverflow) {
+            cube.mat.emissive.set('#382022')
+            cube.mat.emissiveIntensity = 0.04
+          } else if (sc === 'f1_launch' && (cube.die === 1 || cube.idx >= 4)) {
+            cube.mat.emissive.set('#FA6D01')
+            cube.mat.emissiveIntensity = 0.05
+          } else {
+            cube.mat.emissive.set('#FA6D01')
+            cube.mat.emissiveIntensity = 0.2 + w * (0.35 + hw.mmaDuty * 1.35)
+          }
+        }
+        for (const vec of this.npuVecTiles) {
+          const w = 0.5 + 0.5 * Math.sin(ph - 1.75 - vec.idx * 0.22)
+          if (isUbOverflow) {
+            vec.mat.emissive.set('#E0523B')
+            vec.mat.emissiveIntensity = 0.08 + 0.22 * alarmPulse
+          } else if (sc === 'f1_launch' && (vec.die === 1 || vec.idx >= 8)) {
+            vec.mat.emissive.set('#DE99FE')
+            vec.mat.emissiveIntensity = 0.05
+          } else {
+            vec.mat.emissive.set('#DE99FE')
+            vec.mat.emissiveIntensity = 0.18 + w * (0.25 + hw.vecDuty * 1.3)
+          }
+        }
+      } else {
+        for (const mte of this.npuMteTiles) {
+          const w = 0.5 + 0.5 * Math.sin(ph - mte.idx * 0.55)
+          mte.mat.emissiveIntensity = 0.2 + w * (0.4 + hw.dmaDuty * 1.2)
+        }
+        for (const cube of this.npuCubeTiles) {
+          const w = 0.5 + 0.5 * Math.sin(ph - 0.9 - cube.idx * 0.35)
+          cube.mat.emissiveIntensity = 0.18 + w * (0.35 + hw.mmaDuty * 1.45)
+        }
+        for (const vec of this.npuVecTiles) {
+          const w = 0.5 + 0.5 * Math.sin(ph - 1.8 - vec.idx * 0.35)
+          vec.mat.emissiveIntensity = 0.15 + w * (0.25 + hw.vecDuty * 1.4)
+        }
       }
     }
 
-    // 3. Animate 8× HBM3e TSV Bandwidth Bars
+    // 3. Animate HBM TSV Bandwidth Bars (skip fused-off dummy stack on H100!)
     const bwRatio = hw.hbmBw / hw.peakHbmBw
     for (const h of this.hbmGlowBars) {
+      if (h.dummy) {
+        h.mat.emissiveIntensity = 0.05
+        continue
+      }
+      if (h.arch && h.arch !== this.arch) continue
       const pulse = 0.55 + 0.45 * Math.sin(ph * 1.3 + h.idx * 0.8)
-      h.mat.emissiveIntensity = 0.25 + bwRatio * 1.35 * pulse
+      if (isUbOverflow) {
+        h.mat.emissive.set('#E0523B')
+        h.mat.emissiveIntensity = 0.08 + 0.12 * Math.sin(ph * 2.6)
+      } else {
+        h.mat.emissive.set(this.profile === 'h100_910c' && this.arch === 'gpu' ? '#0E9EE4' : '#2B5CFF')
+        h.mat.emissiveIntensity = 0.16 + bwRatio * 1.45 * pulse
+      }
     }
 
     // 4. Animate KV Cache Paged Blocks (occupancy scales with Batch Size B!)
@@ -1738,7 +2713,11 @@ export class AcceleratorTeardownEngine {
     for (const kv of this.kvBlocks) {
       const isLit = kv.idx < litCount
       const flashWave = 0.5 + 0.5 * Math.sin(ph * 1.2 - kv.idx * 0.35)
-      if (isLit) {
+      if (isUbOverflow) {
+        kv.mat.emissive.set('#E0523B')
+        kv.mat.emissiveIntensity = 0.65 + 0.65 * Math.sin(ph * 2.6)
+        kv.mat.opacity = 0.9
+      } else if (isLit) {
         kv.mat.emissive.set(hw.workload === 'flashattn' ? '#00CD6E' : '#DE99FE')
         kv.mat.emissiveIntensity = 0.35 + flashWave * (hw.workload === 'decode' ? 1.25 : 0.85)
         kv.mat.opacity = 0.86
@@ -1753,33 +2732,52 @@ export class AcceleratorTeardownEngine {
     for (const b of this.ioBeamMeshes) {
       const w = 0.5 + 0.5 * Math.sin(ph * 1.8 + b.idx * 0.7)
       b.mesh.scale.z = 0.25 + linkRatio * (0.85 + 0.35 * w)
-      b.mat.emissive.set(hw.workload === 'allreduce' ? '#00CD6E' : '#2B5CFF')
+      b.mat.emissive.set(
+        sc === 'f1_launch' ? '#7E4F8E' : hw.workload === 'allreduce' ? '#00CD6E' : '#2B5CFF'
+      )
       b.mat.emissiveIntensity = 0.3 + linkRatio * 1.4 * w
       b.mat.opacity = 0.25 + linkRatio * 0.7
     }
 
     // 6. Animate VRM Power Delivery Rail proportional to TDP
+    this.vrmStripMat.emissive.set(isUbOverflow ? '#E0523B' : '#FA6D01')
     this.vrmStripMat.emissiveIntensity = 0.25 + (hw.tdpWatts / 1000) * 1.15
 
     // 7. Animate 3D Data Bus Packets on CoWoS Interposer
     for (let i = 0; i < this.packetTracks.length; i++) {
       const tr = this.packetTracks[i]
+      if ((tr.arch && tr.arch !== this.arch) || isUbOverflow) {
+        this.dummy.scale.set(0, 0, 0)
+        this.dummy.updateMatrix()
+        this.packetMesh.setMatrixAt(i, this.dummy.matrix)
+        continue
+      }
       const rate =
         tr.kind === 'hbm'
-          ? 0.25 + bwRatio * 1.2
+          ? 0.2 + bwRatio * 1.25
           : tr.kind === 'bridge'
-            ? 0.35 + (hw.mfu / 100) * 1.2
+            ? sc === 'f3_opt'
+              ? 1.35
+              : 0.3 + (hw.mfu / 100) * 1.2
             : 0.2 + linkRatio * 1.4
       const u = ((this.cycle * 0.045 * tr.speed * rate + tr.offset) % 1 + 1) % 1
       this.dummy.position.lerpVectors(tr.from, tr.to, u)
-      const visScale = rate > 0.28 ? 1 : 0.35
+      const visScale = rate > 0.26 ? 1 : 0.35
       this.dummy.scale.set(visScale, visScale, visScale)
       this.dummy.rotation.set(0, tr.kind === 'io' ? Math.PI / 2 : 0, 0)
       this.dummy.updateMatrix()
       this.packetMesh.setMatrixAt(i, this.dummy.matrix)
 
       this.tmpColor.set(
-        tr.kind === 'hbm' ? '#2B5CFF' : tr.kind === 'bridge' ? '#FA6D01' : '#00CD6E'
+        tr.kind === 'hbm'
+          ? this.profile === 'h100_910c' && this.arch === 'gpu'
+            ? '#0E9EE4'
+            : '#2B5CFF'
+          : tr.kind === 'bridge'
+            ? sc === 'f3_opt'
+              ? '#0E9972'
+              : '#FA6D01'
+            : '#00CD6E'
       )
       this.packetMesh.setColorAt(i, this.tmpColor)
     }
@@ -1790,7 +2788,7 @@ export class AcceleratorTeardownEngine {
     if (this.calloutsEnabled) {
       const w = this.container.clientWidth
       const h = this.container.clientHeight
-      const catalog = PART_CATALOG[this.arch]
+      const catalog = this.getCatalog()[this.arch]
       const projected = this.calloutAnchors.map((a) => {
         const worldPos = a.localPos.clone()
         a.group.localToWorld(worldPos)
@@ -1799,10 +2797,25 @@ export class AcceleratorTeardownEngine {
         const sy = (-worldPos.y * 0.5 + 0.5) * h + a.yBias
         const info = catalog[a.id]
         let liveSub = info.subtitle
-        if (a.id === 'compute') liveSub = `${Math.round(hw.achievedTflops)} TFLOPS ${hw.precision.toUpperCase()} · MFU ${hw.mfu.toFixed(0)}%`
-        else if (a.id === 'hbm') liveSub = `${hw.hbmBw.toFixed(2)} / ${hw.peakHbmBw.toFixed(1)} TB/s LIVE`
-        else if (a.id === 'io') liveSub = `${Math.round(hw.linkGbps)} GB/s ${this.arch === 'gpu' ? 'NVLink 5' : 'HCCS'}`
-        else if (a.id === 'thermal') liveSub = `${hw.tdpWatts}W TDP · ${hw.tempC}°C DIE`
+        if (this.profile === 'h100_910c') {
+          if (a.id === 'compute') liveSub = hw.activeUnitsLabel || info.subtitle
+          else if (a.id === 'hbm')
+            liveSub =
+              this.arch === 'gpu'
+                ? `${hw.hbmBw.toFixed(2)} / 3.35 TB/s · 5+1 HBM3`
+                : `${hw.hbmBw.toFixed(2)} / 3.20 TB/s · 8× HBM2e`
+          else if (a.id === 'io')
+            liveSub =
+              this.arch === 'gpu'
+                ? `NVLink 4 (900 GB/s) · τ_launch 4 µs`
+                : `UB/HCCS (784 GB/s) · τ_launch 12 µs`
+          else if (a.id === 'thermal') liveSub = hw.onChipLabel || `${hw.tdpWatts}W · ${hw.tempC}°C`
+        } else {
+          if (a.id === 'compute') liveSub = `${Math.round(hw.achievedTflops)} TFLOPS ${hw.precision.toUpperCase()} · MFU ${hw.mfu.toFixed(0)}%`
+          else if (a.id === 'hbm') liveSub = `${hw.hbmBw.toFixed(2)} / ${hw.peakHbmBw.toFixed(1)} TB/s LIVE`
+          else if (a.id === 'io') liveSub = `${Math.round(hw.linkGbps)} GB/s ${this.arch === 'gpu' ? 'NVLink 5' : 'HCCS'}`
+          else if (a.id === 'thermal') liveSub = `${hw.tdpWatts}W TDP · ${hw.tempC}°C DIE`
+        }
         const ok =
           worldPos.z < 1 &&
           sx > 24 &&
@@ -1818,7 +2831,7 @@ export class AcceleratorTeardownEngine {
           side: a.side,
           title: info.title,
           sub: liveSub,
-          color: info.color,
+          color: hw.alertLevel === 'error' && a.id === 'compute' ? '#E0523B' : info.color,
           visible: ok
         }
       })
@@ -1838,7 +2851,15 @@ export class AcceleratorTeardownEngine {
       this.cycle += 0.42
     }
 
-    const hw = computeHardwareTelemetry(this.arch, this.precision, this.workload, this.batch, this.cycle)
+    const hw = computeHardwareTelemetry(
+      this.arch,
+      this.precision,
+      this.workload,
+      this.batch,
+      this.cycle,
+      this.profile,
+      this.scenario
+    )
     this.updateScene(hw)
     this.renderer.render(this.scene, this.camera)
 

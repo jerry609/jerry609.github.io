@@ -1,0 +1,810 @@
+---
+/**
+ * Interactive Thinking Machines (Connectionism)-styled Figure 2:
+ * Real-time Three.js WebGL PBR 3D Silicon Teardown for NVIDIA H100 SXM5 (GH100)
+ * vs. Huawei Ascend 910C (Dual-Die Da Vinci v2), synchronized with cross-workload
+ * dispatch regimes (F1 Launch, F2 Stream/Ping-Pong, F3 Single-Kernel Fail vs F3 Dispatched)
+ * and real ncu/nsys vs msprof diagnostic counters.
+ */
+---
+
+<figure class='tm-fig' id='fig-teardown'>
+  <div class='kt-box' id='ktBox'>
+    <!-- Top Control Strip Row 1: Architecture + Cutaway / View + Transport -->
+    <div class='kt-bar'>
+      <div class='kt-arch' id='ktArchSwitch' role='group' aria-label='选择硬件架构'>
+        <button class='kt-arch-btn active' data-arch='gpu' type='button'>
+          <span class='kt-dot' style='background:#0E9EE4'></span>
+          H100 SXM5 <em>GH100 · 132 SMs</em>
+        </button>
+        <button class='kt-arch-btn' data-arch='npu' type='button'>
+          <span class='kt-dot' style='background:#E0523B'></span>
+          ASCEND 910C <em>DUAL-DIE · 48 AIC / 96 AIV</em>
+        </button>
+      </div>
+
+      <div class='kt-views' id='ktViewPills' role='group' aria-label='切换拆解视角'>
+        <button class='kt-pill active' data-view='cutaway' type='button'>HALF CUT</button>
+        <button class='kt-pill' data-view='exploded' type='button'>EXPLODED</button>
+        <button class='kt-pill' data-view='xray' type='button'>X-RAY</button>
+        <button class='kt-pill' data-view='floorplan' type='button'>FLOORPLAN</button>
+        <button class='kt-pill' id='ktPauseBtn' type='button' title='Pause / Resume animation'>❚❚</button>
+      </div>
+    </div>
+
+    <!-- Top Control Strip Row 2: Cross-Workload Dispatch Regime Selector -->
+    <div class='kt-subbar'>
+      <span class='kt-bar-k'>REGIME DISPATCH</span>
+      <div class='kt-scenarios' id='ktScenarioPills' role='group' aria-label='选择负载家族场景'>
+        <button class='kt-sc-btn' data-sc='f1_launch' type='button'>
+          <i style='background:#7E4F8E'></i>F1 · Launch Floor
+        </button>
+        <button class='kt-sc-btn' data-sc='f2_stream' type='button'>
+          <i style='background:#0E9EE4'></i>F2 · Stream / Ping-Pong
+        </button>
+        <button class='kt-sc-btn' data-sc='f3_unopt' type='button'>
+          <i style='background:#E0523B'></i>F3 · Single-Kernel Fail
+        </button>
+        <button class='kt-sc-btn active' data-sc='f3_opt' type='button'>
+          <i style='background:#0E9972'></i>F3 · Dispatched Fix
+        </button>
+      </div>
+    </div>
+
+    <!-- 3D WebGL PBR Teardown Viewport -->
+    <div class='kt-stage' id='ktStage'>
+      <canvas id='ktCanvas'></canvas>
+      <svg class='kt-callout-svg' id='ktCalloutSvg' aria-hidden='true'></svg>
+      <div class='kt-callout-layer' id='ktCalloutLayer' aria-hidden='true'></div>
+
+      <div class='kt-hover-tip' id='ktHoverTip' hidden>
+        <div class='kt-tip-k' id='ktTipLayer'>MEMORY</div>
+        <div class='kt-tip-t' id='ktTipTitle'>5+1 HBM3 STACKS</div>
+        <div class='kt-tip-s' id='ktTipSub'>5 Active + 1 Fused-Off Dummy · 3.35 TB/s</div>
+      </div>
+
+      <div class='kt-stage-top'>
+        <div class='kt-status-pill' id='ktStatusPill'>
+          <span class='kt-status-dot' id='ktStatusDot'></span>
+          <span id='ktStatusText'>H100 SXM5 · 128 / 132 SMs ACTIVE · 2.86 / 3.35 TB/s</span>
+        </div>
+        <div class='kt-legend' id='ktLegend'>
+          <span><i style='background:#FA6D01'></i>SM / CUBE</span>
+          <span><i style='background:#0E9EE4'></i>HBM3 / HBM2E</span>
+          <span><i style='background:#0E9972'></i>L2 / 192KB UB</span>
+          <span><i style='background:#DE99FE'></i>AIV / KV</span>
+        </div>
+      </div>
+
+      <div class='kt-stage-bot'>
+        <div class='kt-iso-bar' id='ktIsoBar' role='group' aria-label='隔离硬件层级'>
+          <button class='kt-iso-btn active' data-iso='ALL' type='button'>ALL</button>
+          <button class='kt-iso-btn' data-iso='compute' type='button'>COMPUTE DIE</button>
+          <button class='kt-iso-btn' data-iso='hbm' type='button'>HBM STACKS</button>
+          <button class='kt-iso-btn' data-iso='kv' type='button'>SMEM / UB</button>
+          <button class='kt-iso-btn' data-iso='interposer' type='button'>INTERPOSER</button>
+          <button class='kt-iso-btn' data-iso='io' type='button'>LINK / HOST</button>
+          <button class='kt-iso-btn' data-iso='thermal' type='button'>COLD PLATE</button>
+        </div>
+        <div class='kt-hint'>DRAG TO ORBIT · SCROLL TO ZOOM · CLICK SILICON TO ISOLATE</div>
+      </div>
+    </div>
+
+    <!-- Bottom 4-Cell Hardware & Profiler Diagnostic Strip -->
+    <div class='kt-readout' id='ktReadout'>
+      <div class='kt-metric'>
+        <span id='ktK1'>SILICON TOPOLOGY</span>
+        <strong id='ktV1'>Monolithic GH100 · 8 GPC / 132 SMs · 5+1 HBM3 (80 GB)</strong>
+      </div>
+      <div class='kt-metric'>
+        <span id='ktK2'>LIVE TELEMETRY</span>
+        <strong id='ktV2'>2.86 / 3.35 TB/s (85% SoL) · 128 / 132 SMs</strong>
+      </div>
+      <div class='kt-metric'>
+        <span id='ktK3'>PROFILER SIGNAL (ncu / nsys)</span>
+        <strong id='ktV3'>ncu: dram__throughput 85.4% · sm__throughput 91% · +7.0× Speedup</strong>
+      </div>
+      <div class='kt-metric'>
+        <span id='ktK4'>KERNELBRIDGE DISPATCH</span>
+        <strong id='ktV4'>Route F3: Split-KV Stage1 (S=8) + LSE Combine (wave_ratio → 0.97)</strong>
+      </div>
+    </div>
+  </div>
+
+  <figcaption>
+    <strong>Figure 2: Interactive 3D silicon teardown of NVIDIA H100 SXM5 (GH100) and Huawei Ascend 910C (Dual-Die).</strong>
+    上方可实时切换 H100 SXM5（单颗 814 mm² GH100 主芯片、8 GPC / 132 SM、50 MB 分裂式 L2 交叉开关与 5 颗有效 + 1 颗熔断屏蔽的 5+1 HBM3 堆叠）与 Ascend 910C（双芯粒 2×[24 AIC + 48 AIV] = 48 AIC / 96 AIV、中央 Die-to-Die 硅桥、双 192 KB UB 脊柱与 8 颗 HBM2e 堆叠）。点击 <em>F3 · Single-Kernel Fail</em> 与 <em>F3 · Dispatched Fix</em> 可对比 H100 的 16/132 SM 饥饿 vs Split-KV+LSE 满载，以及 Ascend 910C 的 192 KB UB 溢出红警 vs 单缓冲双芯粒 Split-S 安全收敛。点击任意三维器件或下方层级按钮可隔离查看对应的 <code>ncu</code> / <code>msprof</code> 真机诊断指标。
+  </figcaption>
+</figure>
+
+<script>
+  import {
+    AcceleratorTeardownEngine,
+    H100_910C_CATALOG,
+    type ArchMode,
+    type DispatchScenario,
+    type HardwareTelemetry,
+    type PartId,
+    type PartInfo
+  } from '@/lib/teardown-engine'
+
+  const stage = document.getElementById('ktStage') as HTMLDivElement | null
+  const canvas = document.getElementById('ktCanvas') as HTMLCanvasElement | null
+  const calloutSvg = document.getElementById('ktCalloutSvg') as unknown as SVGSVGElement | null
+  const calloutLayer = document.getElementById('ktCalloutLayer') as HTMLDivElement | null
+  const hoverTip = document.getElementById('ktHoverTip') as HTMLDivElement | null
+  const tipLayer = document.getElementById('ktTipLayer') as HTMLDivElement | null
+  const tipTitle = document.getElementById('ktTipTitle') as HTMLDivElement | null
+  const tipSub = document.getElementById('ktTipSub') as HTMLDivElement | null
+
+  const statusPill = document.getElementById('ktStatusPill') as HTMLDivElement | null
+  const statusDot = document.getElementById('ktStatusDot') as HTMLSpanElement | null
+  const statusText = document.getElementById('ktStatusText') as HTMLSpanElement | null
+  const pauseBtn = document.getElementById('ktPauseBtn') as HTMLButtonElement | null
+
+  const k1 = document.getElementById('ktK1')
+  const v1 = document.getElementById('ktV1')
+  const k2 = document.getElementById('ktK2')
+  const v2 = document.getElementById('ktV2')
+  const k3 = document.getElementById('ktK3')
+  const v3 = document.getElementById('ktV3')
+  const k4 = document.getElementById('ktK4')
+  const v4 = document.getElementById('ktV4')
+
+  if (stage && canvas && calloutSvg && calloutLayer && hoverTip && tipLayer && tipTitle && tipSub) {
+    let curArch: ArchMode = 'gpu'
+    let curScenario: DispatchScenario = 'f3_opt'
+    let curIso: PartId = 'ALL'
+    let paused = false
+
+    const syncIsoUi = (iso: PartId) => {
+      curIso = iso
+      document.querySelectorAll<HTMLButtonElement>('#ktIsoBar button').forEach((b) => {
+        b.classList.toggle('active', b.dataset.iso === iso)
+      })
+    }
+
+    const renderTelemetry = (hw: HardwareTelemetry) => {
+      const isErr = hw.alertLevel === 'error'
+      const dotColor = isErr
+        ? '#E0523B'
+        : curScenario === 'f1_launch'
+          ? '#7E4F8E'
+          : curScenario === 'f3_opt'
+            ? '#0E9972'
+            : '#0E9EE4'
+
+      if (statusDot) statusDot.style.background = dotColor
+      if (statusPill) statusPill.classList.toggle('is-alert', isErr)
+      if (statusText) {
+        const prefix = hw.arch === 'gpu' ? 'H100 SXM5' : 'ASCEND 910C'
+        const metric =
+          hw.arch === 'gpu'
+            ? `${hw.hbmBw.toFixed(2)} / ${hw.peakHbmBw.toFixed(2)} TB/s (${Math.round((hw.hbmBw / hw.peakHbmBw) * 100)}% SoL)`
+            : hw.regime === 'UB-OVERFLOW'
+              ? '256 KB > 192 KB UB CLIFF'
+              : `${Math.round(hw.achievedTflops)} / ${hw.peakTflops} TFLOPS · ${hw.hbmBw.toFixed(2)} TB/s`
+        statusText.textContent = `${prefix} · ${hw.activeUnitsLabel ?? hw.regime} · ${metric}`
+      }
+
+      if (curIso !== 'ALL') {
+        const part: PartInfo = H100_910C_CATALOG[hw.arch][curIso]
+        if (k1) k1.textContent = `ISOLATED LAYER · ${part.blogLabel}`
+        if (v1) v1.textContent = `${part.title} — ${part.subtitle}`
+        if (k2) k2.textContent = 'LIVE HARDWARE STATE'
+        if (v2) {
+          v2.textContent = `${hw.activeUnitsLabel ?? hw.regime} · ${hw.onChipLabel ?? `${hw.tdpWatts}W`}`
+          v2.style.color = isErr ? '#E0523B' : ''
+        }
+        if (k3) k3.textContent = hw.arch === 'gpu' ? 'PROFILER COUNTER (ncu / nsys)' : 'PROFILER COUNTER (msprof)'
+        if (v3) v3.textContent = part.profilerCounter ?? hw.profilerSignal ?? ''
+        if (k4) k4.textContent = 'STRUCTURAL / TILING KNOB'
+        if (v4) {
+          v4.textContent = part.kernelKnob ?? hw.dispatchAction ?? ''
+          v4.style.color = part.color
+        }
+        return
+      }
+
+      if (k1) k1.textContent = 'SILICON TOPOLOGY'
+      if (v1) {
+        v1.textContent =
+          hw.arch === 'gpu'
+            ? 'Monolithic GH100 (814 mm²) · 8 GPC / 132 SMs · 5+1 HBM3 (80 GB) · I_ridge = 295'
+            : 'Dual-Die Da Vinci v2 · 2×(24 AIC + 48 AIV) · 8× HBM2e (128 GB) · I_ridge = 250'
+      }
+      if (k2) k2.textContent = 'LIVE TELEMETRY'
+      if (v2) {
+        const bwPct = Math.round((hw.hbmBw / hw.peakHbmBw) * 100)
+        v2.textContent =
+          hw.arch === 'gpu'
+            ? `${hw.hbmBw.toFixed(2)} / 3.35 TB/s (${bwPct}% SoL) · ${hw.activeUnitsLabel ?? ''}`
+            : hw.regime === 'UB-OVERFLOW'
+              ? '0 TFLOPS · 0 TB/s · UB_ALLOC_OVERFLOW (256 KB > 192 KB)'
+              : `${Math.round(hw.achievedTflops)} / 800 TFLOPS (${Math.round(hw.mfu)}%) · ${hw.hbmBw.toFixed(2)} / 3.20 TB/s`
+        v2.style.color = isErr ? '#E0523B' : ''
+      }
+      if (k3) k3.textContent = hw.arch === 'gpu' ? 'PROFILER SIGNAL (ncu / nsys)' : 'PROFILER SIGNAL (msprof)'
+      if (v3) v3.textContent = hw.profilerSignal ?? ''
+      if (k4) k4.textContent = isErr ? 'FAILURE MECHANISM' : 'KERNELBRIDGE DISPATCH'
+      if (v4) {
+        v4.textContent = hw.dispatchAction ?? ''
+        v4.style.color = dotColor
+      }
+    }
+
+    const renderCallouts = (
+      items: {
+        id: Exclude<PartId, 'ALL'>
+        x: number
+        y: number
+        side: 'left' | 'right'
+        title: string
+        sub: string
+        color: string
+        visible: boolean
+      }[]
+    ) => {
+      const w = stage.clientWidth
+      const h = stage.clientHeight
+      if (!w || !h || w < 560 || !items.length) {
+        calloutSvg.innerHTML = ''
+        calloutLayer.innerHTML = ''
+        return
+      }
+      calloutSvg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+      const isDark = document.documentElement.classList.contains('dark')
+      const lineStroke = isDark ? 'rgba(240,240,239,0.42)' : 'rgba(23,23,22,0.38)'
+      let svgOut = ''
+      let htmlOut = ''
+
+      const leftSlots = [86, Math.max(180, h - 122)]
+      const rightSlots = [92, Math.max(186, h - 118)]
+      let li = 0
+      let ri = 0
+
+      for (const it of items) {
+        if (!it.visible) continue
+        const isLeft = it.side === 'left'
+        const tagY = isLeft ? leftSlots[li++ % leftSlots.length] : rightSlots[ri++ % rightSlots.length]
+        const tagEdgeX = isLeft ? 164 : w - 164
+        const elbowX = isLeft ? tagEdgeX + 12 : tagEdgeX - 12
+
+        svgOut += `
+          <polyline points="${tagEdgeX},${tagY} ${elbowX},${tagY} ${it.x.toFixed(1)},${it.y.toFixed(1)}" fill="none" stroke="${lineStroke}" stroke-width="1"/>
+          <circle cx="${it.x.toFixed(1)}" cy="${it.y.toFixed(1)}" r="3.2" fill="${it.color}" stroke="${isDark ? '#141413' : '#FFFFFF'}" stroke-width="1.2"/>
+        `
+        htmlOut += `
+          <div class="kt-tag ${isLeft ? 'is-left' : 'is-right'}" style="top:${tagY}px;border-left-color:${it.color}">
+            <div class="kt-tag-t">${it.title}</div>
+            <div class="kt-tag-s">${it.sub}</div>
+          </div>
+        `
+      }
+      calloutSvg.innerHTML = svgOut
+      calloutLayer.innerHTML = htmlOut
+    }
+
+    let engine: AcceleratorTeardownEngine | null = null
+    try {
+      engine = new AcceleratorTeardownEngine(
+        stage,
+        canvas,
+        {
+          onTelemetry: renderTelemetry,
+          onCalloutsUpdate: renderCallouts,
+          onHoverPart: (part, x, y) => {
+            if (!part) {
+              hoverTip.hidden = true
+              return
+            }
+            tipLayer.textContent = part.blogLabel
+            tipLayer.style.color = part.color
+            tipTitle.textContent = part.title
+            tipSub.textContent = part.subtitle
+            hoverTip.hidden = false
+            const tipW = 228
+            const left = Math.min(Math.max(10, x + 14), stage.clientWidth - tipW - 10)
+            const top = Math.max(46, Math.min(y - 16, stage.clientHeight - 96))
+            hoverTip.style.left = `${left}px`
+            hoverTip.style.top = `${top}px`
+          },
+          onSelectPart: (partId) => {
+            syncIsoUi(partId)
+          },
+          onUserInteract: () => {}
+        },
+        {
+          profile: 'h100_910c',
+          initialArch: curArch,
+          initialCutaway: 'cutaway',
+          initialScenario: curScenario,
+          initialPrecision: 'bf16',
+          initialWorkload: 'decode',
+          initialBatch: 32,
+          haloEnabled: false
+        }
+      )
+    } catch {
+      stage.innerHTML =
+        '<div style="display:grid;place-items:center;height:100%;font-family:var(--font-mono);font-size:0.75rem;color:hsl(var(--muted-foreground))">WebGL 3D Context Unavailable</div>'
+    }
+
+    if (engine) {
+      const eng = engine
+
+      document.querySelectorAll<HTMLButtonElement>('#ktArchSwitch button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const next = (btn.dataset.arch as ArchMode) || 'gpu'
+          curArch = next
+          eng.setArch(next)
+          document.querySelectorAll<HTMLButtonElement>('#ktArchSwitch button').forEach((b) => {
+            b.classList.toggle('active', b === btn)
+          })
+        })
+      })
+
+      document.querySelectorAll<HTMLButtonElement>('#ktScenarioPills button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const sc = (btn.dataset.sc as DispatchScenario) || 'f3_opt'
+          curScenario = sc
+          eng.setScenario(sc)
+          document.querySelectorAll<HTMLButtonElement>('#ktScenarioPills button').forEach((b) => {
+            b.classList.toggle('active', b === btn)
+          })
+          // Keep top-down floorplan or cutaway clear on failure modes so SM starvation / UB overflow is unmistakable
+          if (sc === 'f3_unopt' && curIso !== 'ALL') {
+            eng.setIsolate('ALL')
+            syncIsoUi('ALL')
+          }
+        })
+      })
+
+      document.querySelectorAll<HTMLButtonElement>('#ktViewPills button[data-view]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const v = (btn.dataset.view as 'cutaway' | 'exploded' | 'xray' | 'floorplan') || 'cutaway'
+          document.querySelectorAll<HTMLButtonElement>('#ktViewPills button[data-view]').forEach((b) => {
+            b.classList.toggle('active', b === btn)
+          })
+          if (v === 'floorplan') {
+            eng.setCutaway('xray')
+            eng.setCameraPreset('floorplan')
+          } else {
+            eng.setCutaway(v)
+            eng.setCameraPreset('hero')
+          }
+        })
+      })
+
+      pauseBtn?.addEventListener('click', () => {
+        paused = !paused
+        eng.setPaused(paused)
+        pauseBtn.textContent = paused ? '▶' : '❚❚'
+        pauseBtn.classList.toggle('active', paused)
+      })
+
+      document.querySelectorAll<HTMLButtonElement>('#ktIsoBar button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const iso = (btn.dataset.iso as PartId) || 'ALL'
+          eng.setIsolate(iso)
+          syncIsoUi(iso)
+        })
+      })
+
+      window.addEventListener('beforeunload', () => eng.dispose())
+    }
+  }
+</script>
+
+<style>
+  .kt-box {
+    background: hsl(var(--card));
+    border: 1.5px solid var(--ink-hard, #171716);
+    overflow: hidden;
+  }
+
+  .kt-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .kt-arch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .kt-arch-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 0.63rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    border: 1px solid hsl(var(--border));
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .kt-arch-btn em {
+    font-style: normal;
+    font-weight: 400;
+    opacity: 0.72;
+    font-size: 0.57rem;
+  }
+
+  .kt-arch-btn:hover {
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--foreground));
+  }
+
+  .kt-arch-btn.active {
+    background: hsl(var(--foreground));
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+
+  .kt-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .kt-views {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .kt-pill {
+    padding: 3px 8px;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    border: 1px solid hsl(var(--border));
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .kt-pill:hover {
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--foreground));
+  }
+
+  .kt-pill.active {
+    background: hsl(var(--foreground));
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+
+  .kt-subbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.85rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--muted) / 0.35);
+  }
+
+  .kt-bar-k {
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: hsl(var(--faint));
+  }
+
+  .kt-scenarios {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .kt-sc-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    font-family: var(--font-mono);
+    font-size: 0.59rem;
+    font-weight: 500;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .kt-sc-btn i {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .kt-sc-btn:hover {
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--foreground));
+  }
+
+  .kt-sc-btn.active {
+    background: hsl(var(--foreground));
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+
+  .kt-stage {
+    position: relative;
+    width: 100%;
+    height: 440px;
+    overflow: hidden;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .kt-stage canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .kt-callout-svg,
+  .kt-callout-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  :global(.kt-tag) {
+    position: absolute;
+    transform: translateY(-50%);
+    width: 152px;
+    padding: 4px 7px;
+    background: hsl(var(--card) / 0.88);
+    backdrop-filter: blur(6px);
+    border: 1px solid hsl(var(--border));
+    border-left-width: 2.5px;
+    font-family: var(--font-mono);
+    line-height: 1.25;
+  }
+
+  :global(.kt-tag.is-left) {
+    left: 10px;
+  }
+
+  :global(.kt-tag.is-right) {
+    right: 10px;
+  }
+
+  :global(.kt-tag-t) {
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: hsl(var(--foreground));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  :global(.kt-tag-s) {
+    font-size: 0.51rem;
+    color: hsl(var(--muted-foreground));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 1px;
+  }
+
+  .kt-hover-tip {
+    position: absolute;
+    z-index: 12;
+    width: 224px;
+    padding: 6px 8px;
+    background: hsl(var(--card) / 0.94);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--ink-hard, #171716);
+    pointer-events: none;
+    font-family: var(--font-mono);
+  }
+
+  .kt-tip-k {
+    font-size: 0.52rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .kt-tip-t {
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+    margin-top: 1px;
+  }
+
+  .kt-tip-s {
+    font-size: 0.54rem;
+    color: hsl(var(--muted-foreground));
+    margin-top: 2px;
+    line-height: 1.35;
+  }
+
+  .kt-stage-top {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    pointer-events: none;
+  }
+
+  .kt-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
+    background: hsl(var(--card) / 0.9);
+    backdrop-filter: blur(6px);
+    border: 1px solid hsl(var(--border));
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: hsl(var(--foreground));
+  }
+
+  .kt-status-pill.is-alert {
+    border-color: #E0523B;
+    color: #E0523B;
+  }
+
+  .kt-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #0E9972;
+    flex-shrink: 0;
+  }
+
+  .kt-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 4px 8px;
+    background: hsl(var(--card) / 0.85);
+    backdrop-filter: blur(6px);
+    border: 1px solid hsl(var(--border));
+    font-family: var(--font-mono);
+    font-size: 0.52rem;
+    letter-spacing: 0.04em;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .kt-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .kt-legend i {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 1px;
+  }
+
+  .kt-stage-bot {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    pointer-events: none;
+  }
+
+  .kt-iso-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 3px;
+    pointer-events: auto;
+  }
+
+  .kt-iso-btn {
+    padding: 3px 7px;
+    font-family: var(--font-mono);
+    font-size: 0.54rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card) / 0.88);
+    backdrop-filter: blur(5px);
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+    transition: all 0.14s ease;
+  }
+
+  .kt-iso-btn:hover {
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--foreground));
+  }
+
+  .kt-iso-btn.active {
+    background: hsl(var(--foreground));
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+
+  .kt-hint {
+    font-family: var(--font-mono);
+    font-size: 0.5rem;
+    letter-spacing: 0.08em;
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--card) / 0.72);
+    padding: 1px 6px;
+  }
+
+  .kt-readout {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 1rem;
+    padding: 0.72rem 0.9rem 0.78rem;
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  .kt-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .kt-metric span {
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: hsl(var(--faint));
+  }
+
+  .kt-metric strong {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 500;
+    color: hsl(var(--foreground));
+    line-height: 1.4;
+  }
+
+  @media (max-width: 680px) {
+    .kt-stage {
+      height: 360px;
+    }
+    .kt-legend {
+      display: none;
+    }
+    .kt-readout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
