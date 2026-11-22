@@ -1,5 +1,5 @@
 ---
-title: "深度复盘：Buck2 在 Antares/Dicfuse 挂载上的构建问题调试全记录"
+title: 'Buck2 × Dicfuse：FUSE 挂载构建故障排查'
 description: "本文详细复盘了 Buck2 在 Antares Overlay FUSE 挂载上构建失败问题的完整调试过程，从问题发现、根因分析到最终解决方案，系统性地总结了 FUSE 文件系统开发中 Layer trait 实现的常见陷阱和最佳实践。"
 publishDate: "2025-12-17"
 layer: systems

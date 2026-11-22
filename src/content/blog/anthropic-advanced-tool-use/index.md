@@ -1,5 +1,5 @@
 ---
-title: 'Anthropic：Claude 高级工具使用详解'
+title: 'Anthropic：Claude 高级工具调用机制'
 description: '翻译自 Anthropic 工程博客，介绍 Claude 的三大高级工具使用特性：工具搜索、编程式工具调用和工具使用示例。'
 publishDate: '2025-12-03'
 layer: agent

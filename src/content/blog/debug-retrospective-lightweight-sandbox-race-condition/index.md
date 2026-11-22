@@ -1,5 +1,5 @@
 ---
-title: '深度复盘：LightweightSandbox 竞态条件调试全记录'
+title: 'LightweightSandbox 竞态排查：共享线程池与 pexpect 空输出'
 description: '一次 heisenbug 的完整调试过程：从 pexpect 空输出到发现全局 ThreadPoolExecutor 共享导致的竞态条件，以及最终的解决方案演进。'
 publishDate: '2025-12-13'
 layer: runtime

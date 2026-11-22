@@ -1,5 +1,5 @@
 ---
-title: '翻译：OpenAI：A Practical Approach to Verifying Code at Scale'
+title: 'OpenAI：大规模代码验证的工程实践'
 description: '翻译自 OpenAI Alignment Blog，探讨如何训练专用的 AI 代码审查器，以及在大规模部署中的实践经验。'
 publishDate: '2025-12-03'
 layer: agent

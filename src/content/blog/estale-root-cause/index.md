@@ -1,5 +1,5 @@
 ---
-title: "ESTALE / StaleNetworkFileHandle Root Cause Analysis"
+title: 'Antares × Dicfuse：ESTALE 句柄失效根因分析'
 description: "深入分析 ESTALE (errno 116, StaleNetworkFileHandle) 错误在 Antares/Dicfuse 虚拟文件系统中的根本原因、触发链路及修复方案。涵盖 libfuse-fs 的 open_by_handle_at 机制、Dicfuse 目录刷新逻辑，以及短期缓解与长期修复策略。"
 publishDate: "2026-01-31"
 layer: systems

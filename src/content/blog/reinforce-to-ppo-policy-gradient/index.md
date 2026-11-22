@@ -1,5 +1,5 @@
 ---
-title: '从 REINFORCE 到 PPO'
+title: '从 REINFORCE 到 PPO：策略梯度、GAE 与 Clip 目标'
 description: '从 MDP 单步概率出发，推导策略梯度、reward-to-go、baseline、advantage、Actor-Critic、GAE，以及 PPO 的 ratio 与 clip。'
 publishDate: '2026-05-14'
 layer: training

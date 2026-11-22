@@ -1,5 +1,5 @@
 ---
-title: 'Transformer / LLM 机制型论文写作素材库'
+title: 'LLM 机制论文写作库：形式化表述与模板索引'
 description: '整理机制解释型 Transformer / LLM 论文的常用叙事、标题、摘要、引言、理论分析、实验验证和结论模板。'
 publishDate: '2026-04-28'
 layer: model

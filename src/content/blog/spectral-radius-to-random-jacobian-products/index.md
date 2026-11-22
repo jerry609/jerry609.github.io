@@ -1,5 +1,5 @@
 ---
-title: '从谱半径到随机 Jacobian 连乘'
+title: '深层梯度动力学：从谱半径到随机 Jacobian 连乘'
 description: '从 Gelfand 谱半径公式、标量随机乘积和 Furstenberg-Kesten 定理出发，把 Transformer 梯度传播写成随机 Jacobian 乘积的指数率问题。'
 publishDate: '2026-05-21'
 layer: model

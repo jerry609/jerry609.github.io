@@ -1,5 +1,5 @@
 ---
-title: 'ast-grep 源码阅读笔记'
+title: 'ast-grep 源码拆解：AST 模式匹配引擎与模块设计'
 description: '花了几天时间把 ast-grep 的源码过了一遍，记录一下核心模块的设计思路和一些有意思的实现细节。'
 publishDate: '2025-12-11'
 layer: systems

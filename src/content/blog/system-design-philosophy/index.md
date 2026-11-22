@@ -1,5 +1,5 @@
 ---
-title: '系统设计哲学'
+title: '系统设计哲学：把系统视为维持不变量的制度'
 description: '把系统当作一套“维持不变量的制度”，而不是一堆“实现功能的代码”。'
 publishDate: '2026-01-06'
 layer: systems

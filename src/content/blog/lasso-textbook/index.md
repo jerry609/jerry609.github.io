@@ -1,5 +1,5 @@
 ---
-title: 'LASSO 教材'
+title: 'LASSO 讲义：从最小二乘到 L1 稀疏与对偶推导'
 description: 'LASSO 教材'
 publishDate: '2026-05-07'
 layer: math

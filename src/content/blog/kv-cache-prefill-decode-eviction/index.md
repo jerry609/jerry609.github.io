@@ -1,5 +1,5 @@
 ---
-title: 'KV Cache 的 Prefill、Decode、驱逐与量化：从缓存追加到误差形态'
+title: 'KV Cache 机制分析：从 Prefill/Decode 到驱逐与量化'
 description: '从历史 KV、query prefill、逐步 decode、KV 驱逐和 KV 量化出发，将 cache 理解为沿序列追加的可见记忆，并区分集合近似与数值近似。'
 publishDate: '2026-05-02'
 layer: model

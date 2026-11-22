@@ -1,5 +1,5 @@
 ---
-title: '我的2025'
+title: '2025 年度回顾：继续做一个务实的理想主义者'
 description: '记录我的2025年'
 publishDate: '2025-12-26'
 layer: notes

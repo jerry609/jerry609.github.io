@@ -1,5 +1,5 @@
 ---
-title: "Claude Agent SDK vs Google ADK: 两种 Agent 开发范式的深度对比"
+title: 'Claude Agent SDK vs Google ADK：两种 Agent 范式对比'
 description: "深入源码对比 Anthropic 的 Claude Agent SDK 与 Google 的 Agent Development Kit (ADK)。从通信架构（IPC vs 直接调用）到沙箱实现（Bash vs Docker），揭示两种截然不同的 Agent 构建哲学。"
 publishDate: "2025-12-06"
 layer: agent

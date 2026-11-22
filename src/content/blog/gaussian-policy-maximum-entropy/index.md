@@ -1,5 +1,5 @@
 ---
-title: '高斯策略'
+title: '高斯策略：连续动作空间的最大熵推导'
 description: '从高斯分布、归一化常数和最大熵原理出发，推导连续动作空间里的高斯策略公式。'
 publishDate: '2026-05-13'
 layer: training

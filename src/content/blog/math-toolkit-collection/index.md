@@ -1,5 +1,5 @@
 ---
-title: '数学工具集合'
+title: '机器学习数学工具图谱：从最小二乘到 KKT 对偶'
 description: '用可推出性串起现代数学总纲，再把最小二乘、Ridge、LASSO、KKT、对偶间隙等工具整理成路线图。'
 publishDate: '2026-05-07'
 layer: math

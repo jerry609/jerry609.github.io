@@ -1,5 +1,5 @@
 ---
-title: "深度复盘：Buck2 SQLite xShmMap 与 OverlayFS Copy-up 故障"
+title: 'Buck2 × OverlayFS：SQLite xShmMap 与 Copy-up 故障'
 description: "一次看似 SQLite xShmMap I/O error 的问题，最终根因是 libfuse-fs 0.1.8 缺少 Layer trait 元数据 API，导致 OverlayFS copy-up 失败。完整复盘触发条件、调用链、根因、修复与验证。"
 publishDate: "2025-12-17"
 layer: systems

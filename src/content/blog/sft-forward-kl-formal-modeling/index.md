@@ -1,5 +1,5 @@
 ---
-title: '形式化建模：SFT 是外部数据分布上的前向 KL 投影'
+title: 'SFT 形式化建模：外部数据分布上的前向 KL 投影'
 description: '把自回归语言模型写成有限时域决策过程，并推导 SFT 目标在外部数据分布上的前向 KL 分解、最优解和 logits 梯度。'
 publishDate: '2026-06-06'
 layer: training

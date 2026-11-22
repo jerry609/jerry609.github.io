@@ -1,5 +1,5 @@
 ---
-title: '年度文章总结'
+title: 'Paul Graham 读书笔记：伟大工作与创业点子'
 description: 'pg'
 publishDate: '2025-12-27'
 layer: notes

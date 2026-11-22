@@ -1,5 +1,5 @@
 ---
-title: 'E2B 源码分析（二）：SDK 设计'
+title: 'E2B 02：多语言 SDK 设计与 ENVD RPC 封装'
 description: '从 SDK 视角拆解 E2B 的 JavaScript/Python 客户端：如何封装 Sandbox/Template 抽象、对接控制平面 API 和 ENVD RPC，并在多语言之间保持对称设计。'
 publishDate: '2025-12-04'
 layer: runtime
