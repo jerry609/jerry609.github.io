@@ -1,0 +1,206 @@
+---
+/**
+ * Thinking Machines (Connectionism)-styled Figure 2:
+ * Dual-Platform Workload Case Distribution & Physical Family Partition Map:
+ * Left:  NVIDIA H100 80GB SXM5 — FlashInfer-Bench GQA Decode (36 cases across F1/F2/F3)
+ * Right: Huawei Ascend 910 — CANN-Bench v2.1 FlashAttention GQA (20 cases across F1/F2/F3 + 192KB UB Cliff)
+ */
+
+// Deterministic representative workload points matching the 3-family distributions (36 H100 + 20 Ascend)
+const h100Cases = [
+  // F1: Small-B / Short-KV (12 cases, Launch & SM under-utilization)
+  { x: 46, y: 158, f: 'F1' }, { x: 58, y: 150, f: 'F1' }, { x: 72, y: 156, f: 'F1' }, { x: 84, y: 146, f: 'F1' },
+  { x: 52, y: 138, f: 'F1' }, { x: 66, y: 132, f: 'F1' }, { x: 80, y: 134, f: 'F1' }, { x: 96, y: 142, f: 'F1' },
+  { x: 62, y: 120, f: 'F1' }, { x: 78, y: 118, f: 'F1' }, { x: 94, y: 124, f: 'F1' }, { x: 108, y: 130, f: 'F1' },
+  // F2: Mid/Large-B, Mid-KV (12 cases, Peak_bw streaming sweet spot)
+  { x: 118, y: 92, f: 'F2' }, { x: 134, y: 84, f: 'F2' }, { x: 152, y: 94, f: 'F2' }, { x: 168, y: 78, f: 'F2' },
+  { x: 126, y: 68, f: 'F2' }, { x: 146, y: 60, f: 'F2' }, { x: 164, y: 66, f: 'F2' }, { x: 184, y: 72, f: 'F2' },
+  { x: 138, y: 48, f: 'F2' }, { x: 160, y: 44, f: 'F2' }, { x: 182, y: 52, f: 'F2' }, { x: 196, y: 86, f: 'F2' },
+  // F3: Small-B (B <= 8 < 16), Ultra-Long or Ragged Skewed KV (12 cases, Split-KV + LSE)
+  { x: 204, y: 156, f: 'F3' }, { x: 222, y: 150, f: 'F3' }, { x: 242, y: 158, f: 'F3' }, { x: 262, y: 148, f: 'F3' },
+  { x: 212, y: 138, f: 'F3' }, { x: 234, y: 134, f: 'F3' }, { x: 254, y: 140, f: 'F3' }, { x: 274, y: 130, f: 'F3' },
+  { x: 218, y: 120, f: 'F3' }, { x: 240, y: 116, f: 'F3' }, { x: 260, y: 122, f: 'F3' }, { x: 278, y: 114, f: 'F3' }
+] as const
+
+const ascendCases = [
+  // F1: Short-seq / launch-sensitive (7 cases)
+  { x: 48, y: 148, f: 'F1' }, { x: 64, y: 134, f: 'F1' }, { x: 78, y: 152, f: 'F1' },
+  { x: 56, y: 114, f: 'F1' }, { x: 74, y: 120, f: 'F1' }, { x: 88, y: 136, f: 'F1' }, { x: 92, y: 98, f: 'F1' },
+  // F2: UB Double-Buffer sweet spot (7 cases, <= 192KB UB)
+  { x: 124, y: 122, f: 'F2' }, { x: 142, y: 104, f: 'F2' }, { x: 158, y: 118, f: 'F2' },
+  { x: 132, y: 82, f: 'F2' }, { x: 150, y: 74, f: 'F2' }, { x: 170, y: 92, f: 'F2' }, { x: 184, y: 106, f: 'F2' },
+  // F3: UB Overflow Cliff (6 cases, > 192KB UB if BUFFER_NUM=2)
+  { x: 216, y: 128, f: 'F3' }, { x: 234, y: 96, f: 'F3' }, { x: 250, y: 116, f: 'F3' },
+  { x: 226, y: 66, f: 'F3' }, { x: 256, y: 74, f: 'F3' }, { x: 274, y: 58, f: 'F3' }
+] as const
+
+const famColor = (f: 'F1' | 'F2' | 'F3') =>
+  f === 'F1' ? '#7E4F8E' : f === 'F2' ? '#0E9EE4' : '#E0523B'
+---
+
+<figure class='tm-fig' id='fig-case-dist'>
+  <div class='wd-grid'>
+    <!-- Left Panel: NVIDIA H100 FlashInfer-Bench GQA Decode -->
+    <div class='wd-panel'>
+      <div class='wd-head'>
+        <span class='wd-plat'>H100 · FLASHINFER</span>
+        <span class='wd-op'>GQA Decode (36)</span>
+      </div>
+      <svg viewBox='0 0 306 200' width='100%' role='img' aria-label='H100 GQA Decode 36 cases distribution across F1, F2, F3'>
+        <!-- Soft matte regime zones -->
+        <rect x='36' y='104' width='80' height='68' fill='#7E4F8E' fill-opacity='0.11' />
+        <rect x='108' y='32' width='96' height='72' fill='#0E9EE4' fill-opacity='0.10' />
+        <rect x='196' y='104' width='94' height='68' fill='#E0523B' fill-opacity='0.11' />
+
+        <!-- Hairline grid -->
+        {[64, 104, 144].map((gy) => (
+          <line x1='36' y1={gy} x2='290' y2={gy} stroke='currentColor' stroke-opacity='0.10' stroke-width='0.8' />
+        ))}
+        {[116, 196].map((gx) => (
+          <line x1={gx} y1='26' x2={gx} y2='172' stroke='currentColor' stroke-opacity='0.16' stroke-dasharray='3 3' />
+        ))}
+
+        <!-- SM saturation contour: B * H_kv = 132 SMs (B ≈ 16 for H_kv=8) -->
+        <line x1='36' y1='104' x2='290' y2='104' stroke='#0E9972' stroke-width='1.1' stroke-dasharray='4 2.5' />
+        <text x='286' y='99' text-anchor='end' class='wd-serif' fill='#0E9972'>B·H<tspan dy='2' font-size='6.5'>kv</tspan><tspan dy='-2'> = 132 SMs</tspan></text>
+
+        <!-- Axes -->
+        <line x1='36' y1='172' x2='290' y2='172' stroke='currentColor' stroke-opacity='0.5' stroke-width='1' />
+        <line x1='36' y1='26' x2='36' y2='172' stroke='currentColor' stroke-opacity='0.5' stroke-width='1' />
+
+        <!-- Case scatter dots -->
+        {h100Cases.map((p) => (
+          <circle cx={p.x} cy={p.y} r='3.2' fill={famColor(p.f)} fill-opacity='0.88' />
+        ))}
+
+        <!-- Direct serif family callouts -->
+        <text x='76' y='115' text-anchor='middle' class='wd-serif' fill='#7E4F8E'>F1 · Launch/Warp</text>
+        <text x='156' y='42' text-anchor='middle' class='wd-serif' fill='#0E9EE4'>F2 · Stream Peak<tspan dy='2' font-size='6.5'>bw</tspan></text>
+        <text x='243' y='167' text-anchor='middle' class='wd-serif' fill='#E0523B'>F3 · Split-KV + LSE</text>
+
+        <!-- Axis ticks -->
+        <text x='46' y='184' class='wd-tick'>128</text>
+        <text x='116' y='184' text-anchor='middle' class='wd-tick'>1K</text>
+        <text x='196' y='184' text-anchor='middle' class='wd-tick'>16K</text>
+        <text x='286' y='184' text-anchor='end' class='wd-tick'>128K</text>
+        <text x='163' y='196' text-anchor='middle' class='wd-axis'>KV SeqLen L (log)</text>
+
+        <text x='30' y='162' text-anchor='end' class='wd-tick'>1</text>
+        <text x='30' y='107' text-anchor='end' class='wd-tick'>16</text>
+        <text x='30' y='44' text-anchor='end' class='wd-tick'>64</text>
+        <text x='11' y='100' text-anchor='middle' transform='rotate(-90 11 100)' class='wd-axis'>Batch B</text>
+      </svg>
+    </div>
+
+    <!-- Right Panel: Huawei Ascend 910 CANN-Bench v2.1 FlashAttention -->
+    <div class='wd-panel'>
+      <div class='wd-head'>
+        <span class='wd-plat'>ASCEND 910 · CANN v2.1</span>
+        <span class='wd-op'>FlashAttn GQA (20)</span>
+      </div>
+      <svg viewBox='0 0 306 200' width='100%' role='img' aria-label='Ascend 910 FlashAttention 20 cases distribution and 192KB UB overflow cliff'>
+        <!-- Soft matte regime zones -->
+        <rect x='36' y='32' width='70' height='140' fill='#7E4F8E' fill-opacity='0.10' />
+        <rect x='106' y='32' width='94' height='140' fill='#0E9EE4' fill-opacity='0.10' />
+        <rect x='200' y='32' width='90' height='140' fill='#E0523B' fill-opacity='0.12' />
+
+        <!-- Hairline grid -->
+        {[68, 108, 148].map((gy) => (
+          <line x1='36' y1={gy} x2='290' y2={gy} stroke='currentColor' stroke-opacity='0.10' stroke-width='0.8' />
+        ))}
+        <line x1='106' y1='26' x2='106' y2='172' stroke='currentColor' stroke-opacity='0.18' stroke-dasharray='3 3' />
+
+        <!-- Hard 192KB UB Overflow Cliff -->
+        <line x1='200' y1='24' x2='200' y2='172' stroke='#E0523B' stroke-width='1.6' stroke-dasharray='4 2' />
+        <text x='196' y='21' text-anchor='end' class='wd-serif' fill='#E0523B'>192 KB UB Cliff (Buf=2) →</text>
+
+        <!-- Axes -->
+        <line x1='36' y1='172' x2='290' y2='172' stroke='currentColor' stroke-opacity='0.5' stroke-width='1' />
+        <line x1='36' y1='26' x2='36' y2='172' stroke='currentColor' stroke-opacity='0.5' stroke-width='1' />
+
+        <!-- Case scatter dots -->
+        {ascendCases.map((p) => (
+          <circle cx={p.x} cy={p.y} r='3.5' fill={famColor(p.f)} fill-opacity='0.88' />
+        ))}
+
+        <!-- Direct serif family callouts -->
+        <text x='71' y='46' text-anchor='middle' class='wd-serif' fill='#7E4F8E'>F1 · Short</text>
+        <text x='153' y='46' text-anchor='middle' class='wd-serif' fill='#0E9EE4'>F2 · Ping-Pong</text>
+        <text x='245' y='46' text-anchor='middle' class='wd-serif' fill='#E0523B'>F3 · Buf=1 Split-S</text>
+
+        <!-- Axis ticks -->
+        <text x='46' y='184' class='wd-tick'>256</text>
+        <text x='106' y='184' text-anchor='middle' class='wd-tick'>1K</text>
+        <text x='200' y='184' text-anchor='middle' class='wd-tick'>8K</text>
+        <text x='286' y='184' text-anchor='end' class='wd-tick'>32K</text>
+        <text x='163' y='196' text-anchor='middle' class='wd-axis'>Sequence Length S (log)</text>
+
+        <text x='30' y='152' text-anchor='end' class='wd-tick'>64</text>
+        <text x='30' y='108' text-anchor='end' class='wd-tick'>128</text>
+        <text x='30' y='64' text-anchor='end' class='wd-tick'>256</text>
+        <text x='11' y='100' text-anchor='middle' transform='rotate(-90 11 100)' class='wd-axis'>Head Dim D</text>
+      </svg>
+    </div>
+  </div>
+
+  <figcaption>
+    <strong>Figure 2: 双平台真实算子的 Workload Case 分布与物理分区边界。</strong>
+    左图展示 H100 上 FlashInfer-Bench <code>gqa_decode</code> 的 36 个 case 如何沿 <code>B·H_kv = 132 SMs</code> 饱和线与长序列轴自然分裂为 <code>F1 / F2 / F3</code>；右图展示 Ascend 910 上 CANN-Bench v2.1 <code>flash_attention</code> 的 20 个 case 在 <code>192 KB UB</code> 双缓冲硬容量墙两侧发生合法性与性能断崖。
+  </figcaption>
+</figure>
+
+<style>
+  .wd-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .wd-panel {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    padding: 0.7rem 0.8rem 0.55rem;
+  }
+  .wd-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .wd-plat {
+    font-family: var(--font-mono);
+    font-size: 0.57rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--c-l6, #fa6d01);
+    white-space: nowrap;
+  }
+  .wd-op {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: hsl(var(--foreground));
+    white-space: nowrap;
+  }
+  .wd-serif {
+    font-family: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
+    font-style: italic;
+    font-size: 8.8px;
+  }
+  .wd-tick {
+    font-family: var(--font-mono);
+    font-size: 7.5px;
+    fill: hsl(var(--muted-foreground));
+  }
+  .wd-axis {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    fill: hsl(var(--faint));
+  }
+  @media (max-width: 680px) {
+    .wd-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
