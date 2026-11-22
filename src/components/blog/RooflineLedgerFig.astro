@@ -1,0 +1,555 @@
+---
+/**
+ * Peak Design-inspired Figure 1:
+ * Interactive Three-Term Execution Ledger (Launch / Memory / Compute)
+ * comparing NVIDIA H100 SXM5 (GH100) vs Huawei Ascend 910C (Dual-Die)
+ * under varying GQA workload shapes (B, L, D, G).
+ */
+---
+
+<figure class='tm-fig' id='fig-ledger'>
+  <div class='pd-frame' id='rlBox'>
+    <!-- Machined Spec Header -->
+    <div class='pd-head'>
+      <div class='pd-head-l'>
+        <span class='pd-cross'>+</span>
+        <span class='pd-spec-id'>SPEC 01 · THREE-TERM LATENCY LEDGER</span>
+      </div>
+      <div class='pd-seg' id='rlArchSeg' role='group' aria-label='选择硬件平台'>
+        <button class='pd-seg-btn active' data-arch='h100' type='button'>H100 SXM5</button>
+        <button class='pd-seg-btn' data-arch='910c' type='button'>ASCEND 910C</button>
+      </div>
+    </div>
+
+    <!-- Tactile Parameter Controls -->
+    <div class='rl-controls'>
+      <label class='rl-ctrl'>
+        <div class='rl-ctrl-top'><span>BATCH B</span><strong id='rlBVal'>16</strong></div>
+        <input id='rlB' type='range' min='0' max='6' step='1' value='4' />
+      </label>
+      <label class='rl-ctrl'>
+        <div class='rl-ctrl-top'><span>KV LENGTH L</span><strong id='rlLVal'>4,096</strong></div>
+        <input id='rlL' type='range' min='0' max='7' step='1' value='4' />
+      </label>
+      <label class='rl-ctrl'>
+        <div class='rl-ctrl-top'><span>QUERY TOKENS Q_LEN</span><strong id='rlQVal'>1 (Decode)</strong></div>
+        <input id='rlQ' type='range' min='0' max='4' step='1' value='0' />
+      </label>
+      <label class='rl-ctrl'>
+        <div class='rl-ctrl-top'><span>HEAD DIM D</span><strong id='rlDVal'>128</strong></div>
+        <input id='rlD' type='range' min='0' max='2' step='1' value='1' />
+      </label>
+    </div>
+
+    <!-- Main Proportional Bar & Roofline Gauge Body -->
+    <div class='rl-body'>
+      <div class='rl-bars'>
+        <div class='rl-bars-head'>
+          <span>IDEAL LOWER BOUND · T_ideal = max(τ_launch, T_mem, T_comp)</span>
+          <span class='rl-dom-pill' id='rlDomPill'>MEMORY-BOUND</span>
+        </div>
+
+        <div class='rl-row'>
+          <div class='rl-row-meta'>
+            <span class='rl-k'>01 · LAUNCH FLOOR</span>
+            <strong class='rl-v' id='rlLaunchUs'>4.00 µs</strong>
+          </div>
+          <div class='rl-track'><div class='rl-fill' id='rlLaunchBar' style='background:#7A6F66'></div></div>
+        </div>
+
+        <div class='rl-row'>
+          <div class='rl-row-meta'>
+            <span class='rl-k'>02 · HBM MEMORY (T_mem)</span>
+            <strong class='rl-v' id='rlMemUs'>19.56 µs</strong>
+          </div>
+          <div class='rl-track'><div class='rl-fill' id='rlMemBar' style='background:#1E7CB8'></div></div>
+        </div>
+
+        <div class='rl-row'>
+          <div class='rl-row-meta'>
+            <span class='rl-k'>03 · MATRIX COMPUTE (T_comp)</span>
+            <strong class='rl-v' id='rlCompUs'>0.27 µs</strong>
+          </div>
+          <div class='rl-track'><div class='rl-fill' id='rlCompBar' style='background:#D85A26'></div></div>
+        </div>
+      </div>
+
+      <!-- Right Hardware Gate Checks -->
+      <div class='rl-gates'>
+        <div class='rl-gate'>
+          <span class='rl-gate-k'>ARITHMETIC INTENSITY vs I_ridge</span>
+          <strong class='rl-gate-v' id='rlAiVal'>4.0 / 295 FLOPs/B</strong>
+          <div class='rl-mini-track'><div class='rl-mini-fill' id='rlAiBar'></div></div>
+        </div>
+        <div class='rl-gate'>
+          <span class='rl-gate-k'>CORE SATURATION (wave_ratio)</span>
+          <strong class='rl-gate-v' id='rlWaveVal'>0.97 (128 / 132 SMs)</strong>
+          <div class='rl-mini-track'><div class='rl-mini-fill' id='rlWaveBar'></div></div>
+        </div>
+        <div class='rl-gate'>
+          <span class='rl-gate-k' id='rlSramKey'>ON-CHIP WORKSET (228 KB SMEM)</span>
+          <strong class='rl-gate-v' id='rlSramVal'>116 / 228 KB · SAFE</strong>
+          <div class='rl-mini-track'><div class='rl-mini-fill' id='rlSramBar'></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Machined Diagnosis Footer -->
+    <div class='pd-foot'>
+      <span class='pd-foot-tag' id='rlActionTag'>DISPATCH VERDICT</span>
+      <span class='pd-foot-txt' id='rlActionTxt'>访存下界主导，波次接近满核，采用多级异步流式读取逼近 3.35 TB/s 带宽屋顶。</span>
+    </div>
+  </div>
+
+  <figcaption>
+    <strong>Figure 1: Three-term latency ledger and hardware gate check on H100 SXM5 and Ascend 910C.</strong>
+    固定配置为 GQA <code>H_q = 32, H_kv = 8 (G = 4), BF16</code>。拖动批次 <code>B</code>、缓存长度 <code>L</code>、查询长度 <code>Q_len</code> 与头维 <code>D</code>，可以直接观察主导时间如何在发射地板、HBM 搬运与矩阵计算之间迁移，以及波次占用率与片上容量（H100 228 KB SMEM vs 910C 192 KB UB）何时触发约束告警。
+  </figcaption>
+</figure>
+
+<script>
+  const box = document.getElementById('rlBox')
+  if (box) {
+    const B_STEPS = [1, 2, 4, 8, 16, 32, 64]
+    const L_STEPS = [128, 512, 1024, 2048, 4096, 8192, 32768, 65536]
+    const Q_STEPS = [1, 16, 64, 256, 1024]
+    const D_STEPS = [64, 128, 256]
+
+    const HW = {
+      h100: {
+        name: 'H100 SXM5',
+        peakTflops: 989,
+        peakBwGbs: 3350,
+        launchUs: 4.0,
+        cores: 132,
+        coreUnit: 'SMs',
+        sramCapKb: 228,
+        sramLabel: 'ON-CHIP WORKSET (228 KB SMEM)'
+      },
+      '910c': {
+        name: 'Ascend 910C',
+        peakTflops: 800,
+        peakBwGbs: 3200,
+        launchUs: 12.0,
+        cores: 48,
+        coreUnit: 'AIC Groups',
+        sramCapKb: 192,
+        sramLabel: 'PER-AIV WORKSET (192 KB UB)'
+      }
+    } as const
+
+    let arch: 'h100' | '910c' = 'h100'
+
+    const elB = document.getElementById('rlB') as HTMLInputElement
+    const elL = document.getElementById('rlL') as HTMLInputElement
+    const elQ = document.getElementById('rlQ') as HTMLInputElement
+    const elD = document.getElementById('rlD') as HTMLInputElement
+
+    const vB = document.getElementById('rlBVal')!
+    const vL = document.getElementById('rlLVal')!
+    const vQ = document.getElementById('rlQVal')!
+    const vD = document.getElementById('rlDVal')!
+
+    const launchUsEl = document.getElementById('rlLaunchUs')!
+    const memUsEl = document.getElementById('rlMemUs')!
+    const compUsEl = document.getElementById('rlCompUs')!
+    const launchBar = document.getElementById('rlLaunchBar') as HTMLDivElement
+    const memBar = document.getElementById('rlMemBar') as HTMLDivElement
+    const compBar = document.getElementById('rlCompBar') as HTMLDivElement
+    const domPill = document.getElementById('rlDomPill')!
+
+    const aiVal = document.getElementById('rlAiVal')!
+    const aiBar = document.getElementById('rlAiBar') as HTMLDivElement
+    const waveVal = document.getElementById('rlWaveVal')!
+    const waveBar = document.getElementById('rlWaveBar') as HTMLDivElement
+    const sramKey = document.getElementById('rlSramKey')!
+    const sramVal = document.getElementById('rlSramVal')!
+    const sramBar = document.getElementById('rlSramBar') as HTMLDivElement
+    const actionTag = document.getElementById('rlActionTag')!
+    const actionTxt = document.getElementById('rlActionTxt')!
+
+    const fmtUs = (u: number) => (u >= 1000 ? `${(u / 1000).toFixed(2)} ms` : `${u.toFixed(2)} µs`)
+
+    const update = () => {
+      const hw = HW[arch]
+      const B = B_STEPS[Number(elB.value)]
+      const L = L_STEPS[Number(elL.value)]
+      const Q = Q_STEPS[Number(elQ.value)]
+      const D = D_STEPS[Number(elD.value)]
+      const H_q = 32
+      const H_kv = 8
+
+      vB.textContent = String(B)
+      vL.textContent = L.toLocaleString()
+      vQ.textContent = Q === 1 ? '1 (Decode)' : `${Q} (Prefill)`
+      vD.textContent = String(D)
+
+      // Bytes read from HBM (Q + K + V + O in BF16 = 2 bytes)
+      const bytesQ = B * H_q * Q * D * 2
+      const bytesKV = 2 * B * H_kv * L * D * 2
+      const bytesOut = bytesQ
+      const totalBytes = bytesQ + bytesKV + bytesOut
+
+      // FLOPs for QK^T and P*V: 4 * B * H_q * Q * L * D
+      const totalFlops = 4 * B * H_q * Q * L * D
+
+      const tLaunch = hw.launchUs
+      const tMem = (totalBytes / (hw.peakBwGbs * 1e9)) * 1e6
+      const tComp = (totalFlops / (hw.peakTflops * 1e12)) * 1e6
+      const maxT = Math.max(tLaunch, tMem, tComp, 1e-3)
+
+      launchUsEl.textContent = fmtUs(tLaunch)
+      memUsEl.textContent = fmtUs(tMem)
+      compUsEl.textContent = fmtUs(tComp)
+
+      const pct = (val: number) => `${Math.max(4, Math.min(100, (val / maxT) * 100)).toFixed(1)}%`
+      launchBar.style.width = pct(tLaunch)
+      memBar.style.width = pct(tMem)
+      compBar.style.width = pct(tComp)
+
+      const ai = totalFlops / Math.max(1, totalBytes)
+      const ridge = Math.round((hw.peakTflops * 1000) / hw.peakBwGbs)
+      aiVal.textContent = `${ai >= 100 ? Math.round(ai) : ai.toFixed(1)} / ${ridge} FLOPs/B`
+      aiBar.style.width = `${Math.min(100, (ai / (ridge * 1.4)) * 100).toFixed(1)}%`
+      aiBar.style.background = ai >= ridge ? '#D85A26' : '#1E7CB8'
+
+      const qBlocks = Math.max(1, Math.ceil(Q / 64))
+      const baseBlocks = B * H_kv * qBlocks
+      const wave = baseBlocks / hw.cores
+      waveVal.textContent = `${wave.toFixed(2)} (${baseBlocks} blk / ${hw.cores} ${hw.coreUnit})`
+      waveBar.style.width = `${Math.min(100, wave * 100).toFixed(1)}%`
+      waveBar.style.background = wave < 0.5 ? '#C94032' : '#1F7A61'
+
+      // Estimated double-buffered on-chip working set (Buf=2, BR=64, BC=64)
+      const sramKb =
+        arch === '910c'
+          ? Math.round(68 + (D / 128) * 80 + (Q >= 64 ? 16 : 0))
+          : Math.round(52 + (D / 128) * 64 + (Q >= 64 ? 20 : 0))
+      const overflow = sramKb > hw.sramCapKb
+      sramKey.textContent = hw.sramLabel
+      sramVal.textContent = overflow
+        ? `${sramKb} / ${hw.sramCapKb} KB · OVERFLOW!`
+        : `${sramKb} / ${hw.sramCapKb} KB · SAFE`
+      sramVal.style.color = overflow ? '#C94032' : ''
+      sramBar.style.width = `${Math.min(100, (sramKb / hw.sramCapKb) * 100).toFixed(1)}%`
+      sramBar.style.background = overflow ? '#C94032' : '#1F7A61'
+
+      if (overflow && arch === '910c') {
+        domPill.textContent = 'UB OVERFLOW CLIFF'
+        domPill.style.background = '#C94032'
+        domPill.style.color = '#FFFFFF'
+        actionTag.textContent = 'CAPACITY FAULT'
+        actionTag.style.color = '#C94032'
+        actionTxt.textContent =
+          'Ascend 910C 单 AIV 仅 192 KB UB，D=256 开启双缓冲会直接触发 UB_ALLOC_OVERFLOW；必须切换 F3 单缓冲 (BUFFER_NUM=1, Bc=32) 并沿序列 Split-S。'
+      } else if (tMem <= 2 * tLaunch && tComp <= 2 * tLaunch) {
+        domPill.textContent = 'LAUNCH-BOUND (F1)'
+        domPill.style.background = '#7A6F66'
+        domPill.style.color = '#FFFFFF'
+        actionTag.textContent = 'ROUTE F1 · FUSE'
+        actionTag.style.color = '#7A6F66'
+        actionTxt.textContent = `总计算与搬运时间低于 2× 发射地板（${hw.launchUs} µs），禁止拆成两阶段内核，应采用单遍融合内核把唤醒次数压到 1 次。`
+      } else if (tComp >= tMem) {
+        domPill.textContent = 'COMPUTE-BOUND'
+        domPill.style.background = '#D85A26'
+        domPill.style.color = '#FFFFFF'
+        actionTag.textContent = 'COMPUTE ROOF'
+        actionTag.style.color = '#D85A26'
+        actionTxt.textContent =
+          arch === 'h100'
+            ? `算术强度达到 ${Math.round(ai)} OP/B（≥ 拐点 ${ridge}），应采用大块 MMA 与多级 TMA 异步预取逼近 989 TFLOPS 算力屋顶。`
+            : `算术强度达到 ${Math.round(ai)} OP/B（≥ 拐点 ${ridge}），应开启 BUFFER_NUM=2 三级乒乓流水并配平 1 AIC : 2 AIV 逼近 800 TFLOPS。`
+      } else if (wave < 0.5 && L >= 4096) {
+        domPill.textContent = 'SM / CORE STARVED (F3)'
+        domPill.style.background = '#C94032'
+        domPill.style.color = '#FFFFFF'
+        actionTag.textContent = 'ROUTE F3 · SPLIT-KV'
+        actionTag.style.color = '#C94032'
+        actionTxt.textContent = `常规网格仅启动 ${baseBlocks} 个块（波次比 ${wave.toFixed(2)}），大量核心空等；需沿 KV 长度做 Split-KV + LSE Combine 填满全部 ${hw.cores} 个计算单元。`
+      } else {
+        domPill.textContent = 'MEMORY-BOUND (F2)'
+        domPill.style.background = '#1E7CB8'
+        domPill.style.color = '#FFFFFF'
+        actionTag.textContent = 'ROUTE F2 · STREAM'
+        actionTag.style.color = '#1E7CB8'
+        actionTxt.textContent = `HBM 搬运主导（${fmtUs(tMem)}），核心接近满载；单阶段 GQA 组内复用 4× KV 并开启异步预取即可逼近 ${(hw.peakBwGbs / 1000).toFixed(2)} TB/s 带宽屋顶。`
+      }
+    }
+
+    document.querySelectorAll<HTMLButtonElement>('#rlArchSeg button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        arch = (btn.dataset.arch as 'h100' | '910c') || 'h100'
+        document.querySelectorAll<HTMLButtonElement>('#rlArchSeg button').forEach((b) => {
+          b.classList.toggle('active', b === btn)
+        })
+        update()
+      })
+    })
+
+    ;[elB, elL, elQ, elD].forEach((el) => el.addEventListener('input', update))
+    update()
+  }
+</script>
+
+<style>
+  .pd-frame {
+    background: hsl(var(--card));
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .pd-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.58rem 0.9rem;
+    border-bottom: 1.5px solid var(--ink-hard, #171716);
+    background: hsl(var(--muted) / 0.45);
+  }
+
+  .pd-head-l {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    color: hsl(var(--foreground));
+  }
+
+  .pd-cross {
+    color: #D85A26;
+    font-weight: 700;
+  }
+
+  .pd-seg {
+    display: inline-flex;
+    border: 1px solid var(--ink-hard, #171716);
+    background: hsl(var(--card));
+  }
+
+  .pd-seg-btn {
+    padding: 4px 11px;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    border: 0;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+
+  .pd-seg-btn + .pd-seg-btn {
+    border-left: 1px solid var(--ink-hard, #171716);
+  }
+
+  .pd-seg-btn.active {
+    background: var(--ink-hard, #171716);
+    color: #F6F5F0;
+  }
+
+  :global(.dark) .pd-seg-btn.active {
+    background: #F0EFEA;
+    color: #171716;
+  }
+
+  .rl-controls {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
+    padding: 0.75rem 0.9rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .rl-ctrl {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    cursor: pointer;
+  }
+
+  .rl-ctrl-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    letter-spacing: 0.06em;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .rl-ctrl-top strong {
+    font-size: 0.66rem;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rl-ctrl input[type='range'] {
+    width: 100%;
+    height: 4px;
+    accent-color: #D85A26;
+    cursor: pointer;
+  }
+
+  .rl-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .rl-bars {
+    padding: 0.85rem 0.95rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.68rem;
+    border-right: 1px solid hsl(var(--border));
+  }
+
+  .rl-bars-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.55rem;
+    letter-spacing: 0.06em;
+    color: hsl(var(--faint));
+  }
+
+  .rl-dom-pill {
+    padding: 2px 7px;
+    font-size: 0.56rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border-radius: 2px;
+  }
+
+  .rl-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .rl-row-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: var(--font-mono);
+  }
+
+  .rl-k {
+    font-size: 0.58rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .rl-v {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: hsl(var(--foreground));
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rl-track {
+    width: 100%;
+    height: 11px;
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    overflow: hidden;
+  }
+
+  .rl-fill {
+    height: 100%;
+    transition: width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .rl-gates {
+    padding: 0.85rem 0.95rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .rl-gate {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .rl-gate-k {
+    font-family: var(--font-mono);
+    font-size: 0.54rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: hsl(var(--faint));
+  }
+
+  .rl-gate-v {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rl-mini-track {
+    width: 100%;
+    height: 6px;
+    background: hsl(var(--muted));
+    overflow: hidden;
+  }
+
+  .rl-mini-fill {
+    height: 100%;
+    transition: width 0.2s ease, background 0.2s ease;
+  }
+
+  .pd-foot {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    padding: 0.62rem 0.9rem;
+    background: hsl(var(--muted) / 0.3);
+  }
+
+  .pd-foot-tag {
+    font-family: var(--font-mono);
+    font-size: 0.57rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  .pd-foot-txt {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: hsl(var(--foreground));
+  }
+
+  @media (max-width: 720px) {
+    .rl-controls {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .rl-body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .rl-bars {
+      border-right: 0;
+      border-bottom: 1px solid hsl(var(--border));
+    }
+    .pd-foot {
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+  }
+</style>

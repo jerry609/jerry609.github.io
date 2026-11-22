@@ -1,0 +1,353 @@
+---
+/**
+ * Peak Design-inspired Figure 2:
+ * Interactive Ping-Pong Pipeline Overlap Visualizer comparing:
+ *  1) Single Buffer (BUFFER_NUM=1 / stages=1): T_total = T_DMA + T_Comp
+ *  2) Buffer Ping-Pong (BUFFER_NUM=2 / stages=2-3): Slot A <-> B hides DMA
+ *  3) Inter-Core CV / WarpGroup Ping-Pong (1 AIC <-> 2 AIV): Eliminates Cube-waits-Vector bubbles
+ */
+---
+
+<figure class='tm-fig' id='fig-pingpong'>
+  <div class='pp-frame' id='ppBox'>
+    <div class='pp-head'>
+      <div class='pp-head-l'>
+        <span class='pp-cross'>+</span>
+        <span>SPEC 02 · PING-PONG OVERLAP MECHANICS</span>
+      </div>
+      <div class='pp-seg' id='ppModeSeg' role='group' aria-label='切换 Ping-Pong 调度模式'>
+        <button class='pp-seg-btn' data-mode='single' type='button'>01 · SINGLE BUF</button>
+        <button class='pp-seg-btn active' data-mode='double' type='button'>02 · BUFFER PING-PONG</button>
+        <button class='pp-seg-btn' data-mode='cv' type='button'>03 · CV PING-PONG</button>
+      </div>
+    </div>
+
+    <div class='pp-canvas-wrap'>
+      <svg id='ppSvg' viewBox='0 0 700 226' width='100%' role='img' aria-label='单缓冲、双缓冲乒乓与核间 CV 乒乓时序甘特图'></svg>
+    </div>
+
+    <div class='pp-foot'>
+      <div class='pp-stat'>
+        <span>LATENCY FORMULA</span>
+        <strong id='ppFormula'>T_total ≈ max(T_DMA, T_Comp)</strong>
+      </div>
+      <div class='pp-stat'>
+        <span>ON-CHIP SRAM COST</span>
+        <strong id='ppSram'>2× Buffer Slots (Ping A + Pong B)</strong>
+      </div>
+      <div class='pp-stat'>
+        <span>HARDWARE MECHANISM</span>
+        <strong id='ppMech'>H100 num_stages=2–3 · Ascend BUFFER_NUM=2</strong>
+      </div>
+    </div>
+  </div>
+
+  <figcaption>
+    <strong>Figure 2: Pipeline timeline comparison across single buffering, slot Ping-Pong, and inter-core CV Ping-Pong.</strong>
+    单缓冲只有一块片上槽位，搬运与计算严格串行；双缓冲通过 Ping（A 槽）与 Pong（B 槽）交替倒手，将 DMA 搬运藏在计算周期内；核间 CV Ping-Pong 进一步让 1 个 AIC 在两个配对 AIV（AIV-0 与 AIV-1）之间交替投喂矩阵块，消除 Cube 等待 Vector 的气泡。
+  </figcaption>
+</figure>
+
+<script>
+  const ppBox = document.getElementById('ppBox')
+  const ppSvg = document.getElementById('ppSvg')
+  const ppFormula = document.getElementById('ppFormula')
+  const ppSram = document.getElementById('ppSram')
+  const ppMech = document.getElementById('ppMech')
+
+  if (ppBox && ppSvg && ppFormula && ppSram && ppMech) {
+    type PpMode = 'single' | 'double' | 'cv'
+    let active: PpMode = 'double'
+
+    const META: Record<PpMode, { formula: string; sram: string; mech: string; badge: string; accent: string }> = {
+      single: {
+        formula: 'T_total = T_DMA + T_Comp (搬运暴露)',
+        sram: '1× Slot A (单槽安全 · 适合 F3 防爆 UB)',
+        mech: 'H100 num_stages=1 · Ascend BUFFER_NUM=1',
+        badge: 'SERIAL · ~50% CORE DUTY',
+        accent: '#7A6F66'
+      },
+      double: {
+        formula: 'T_total ≈ max(T_DMA, T_Comp) (搬运隐身)',
+        sram: '2× Slots (Ping A + Pong B · 占用翻倍)',
+        mech: 'H100 TMA stages=2–3 · Ascend BUFFER_NUM=2',
+        badge: 'OVERLAPPED · ~92% CORE DUTY',
+        accent: '#1F7A61'
+      },
+      cv: {
+        formula: 'Cube ⇄ 2×AIV 交替咬合 (零等待气泡)',
+        sram: 'AIC 512KB L1 + 2×AIV 192KB UB + L2 Ping/Pong',
+        mech: 'Ascend 910C 1 AIC : 2 AIV · H100 FA3 WarpGroup',
+        badge: 'INTER-CORE · ~96% CUBE DUTY',
+        accent: '#D85A26'
+      }
+    }
+
+    const draw = () => {
+      const isDark = document.documentElement.classList.contains('dark')
+      const fg = isDark ? '#F0EFEA' : '#171716'
+      const muted = isDark ? '#9E9D97' : '#6E6C66'
+      const border = isDark ? '#32322E' : '#D8D6CE'
+      const surface = isDark ? '#1A1A19' : '#F6F5F0'
+      const bubbleFill = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(23,23,22,0.035)'
+      const m = META[active]
+
+      const DMA = '#1E7CB8'
+      const COMP = '#D85A26'
+      const VEC0 = '#1F7A61'
+      const VEC1 = '#7E57A6'
+
+      const x0 = 112
+      const trackW = 564
+      const unitW = trackW / 9
+
+      let out = ''
+      out += `<rect x="0" y="0" width="700" height="226" fill="${surface}"/>`
+
+      // Time gridlines & cycle ticks
+      for (let t = 0; t <= 9; t++) {
+        const gx = x0 + t * unitW
+        out += `<line x1="${gx.toFixed(1)}" y1="28" x2="${gx.toFixed(1)}" y2="196" stroke="${border}" stroke-width="0.9" stroke-dasharray="${t === 0 ? '' : '2 3'}"/>`
+        if (t < 9) {
+          out += `<text x="${(gx + unitW / 2).toFixed(1)}" y="212" text-anchor="middle" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="8.5" fill="${muted}">T${t}</text>`
+        }
+      }
+
+      // Header annotation pill
+      out += `<text x="16" y="19" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="8.5" font-weight="700" letter-spacing="0.06em" fill="${muted}">HARDWARE PIPE</text>`
+      out += `<text x="676" y="19" text-anchor="end" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="8.5" font-weight="700" letter-spacing="0.06em" fill="${m.accent}">${m.badge}</text>`
+
+      const drawBlock = (rowY: number, rowH: number, start: number, span: number, color: string, label: string, sub?: string) => {
+        const bx = x0 + start * unitW + 2
+        const bw = span * unitW - 4
+        out += `<rect x="${bx.toFixed(1)}" y="${rowY}" width="${bw.toFixed(1)}" height="${rowH}" rx="1.5" fill="${color}" fill-opacity="${isDark ? 0.24 : 0.14}" stroke="${color}" stroke-width="1.4"/>`
+        out += `<text x="${(bx + bw / 2).toFixed(1)}" y="${rowY + (sub ? 15 : 19)}" text-anchor="middle" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="9" font-weight="700" fill="${fg}">${label}</text>`
+        if (sub) {
+          out += `<text x="${(bx + bw / 2).toFixed(1)}" y="${rowY + 26}" text-anchor="middle" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="7.5" fill="${muted}">${sub}</text>`
+        }
+      }
+
+      const drawBubble = (rowY: number, rowH: number, start: number, span: number, txt: string) => {
+        const bx = x0 + start * unitW + 2
+        const bw = span * unitW - 4
+        out += `<rect x="${bx.toFixed(1)}" y="${rowY}" width="${bw.toFixed(1)}" height="${rowH}" rx="1.5" fill="${bubbleFill}" stroke="${border}" stroke-dasharray="3 2" stroke-width="1"/>`
+        out += `<text x="${(bx + bw / 2).toFixed(1)}" y="${rowY + 19}" text-anchor="middle" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="8" fill="${muted}">${txt}</text>`
+      }
+
+      if (active === 'single') {
+        const rows = [
+          { label: 'DMA (TMA/MTE2)', sub: 'Slot A Only', y: 42, color: DMA },
+          { label: 'COMPUTE', sub: 'Cube / Tensor', y: 98, color: COMP },
+          { label: 'ON-CHIP SLOT', sub: '1× Capacity', y: 154, color: VEC0 }
+        ]
+        for (const r of rows) {
+          out += `<text x="16" y="${r.y + 13}" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="9" font-weight="700" fill="${r.color}">${r.label}</text>`
+          out += `<text x="16" y="${r.y + 25}" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="7.8" fill="${muted}">${r.sub}</text>`
+        }
+        // Serial alternating blocks
+        for (let k = 0; k < 4; k++) {
+          const t = k * 2
+          drawBlock(42, 32, t, 1, DMA, `Load k${k}`, '→ Slot A')
+          drawBubble(42, 32, t + 1, 1, 'WAIT')
+          drawBubble(98, 32, t, 1, 'STALL')
+          drawBlock(98, 32, t + 1, 1, COMP, `Calc k${k}`, 'Read A')
+          drawBlock(154, 32, t, 2, VEC0, `Slot A [k${k}]`, 'Lock 2T')
+        }
+        drawBubble(42, 32, 8, 1, '...')
+        drawBubble(98, 32, 8, 1, '...')
+      } else if (active === 'double') {
+        const rows = [
+          { label: 'DMA (TMA/MTE2)', sub: 'Prefetch k+1', y: 42, color: DMA },
+          { label: 'COMPUTE', sub: 'Cube / Tensor', y: 98, color: COMP },
+          { label: 'SLOT A / B', sub: 'Ping ⇄ Pong', y: 154, color: VEC0 }
+        ]
+        for (const r of rows) {
+          out += `<text x="16" y="${r.y + 13}" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="9" font-weight="700" fill="${r.color}">${r.label}</text>`
+          out += `<text x="16" y="${r.y + 25}" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="7.8" fill="${muted}">${r.sub}</text>`
+        }
+        drawBubble(98, 32, 0, 1, 'WARMUP')
+        for (let k = 0; k < 8; k++) {
+          const isA = k % 2 === 0
+          const slotTag = isA ? 'Ping A' : 'Pong B'
+          const slotCol = isA ? VEC0 : VEC1
+          drawBlock(42, 32, k, 1, DMA, `Load k${k}`, `→ ${isA ? 'A' : 'B'}`)
+          drawBlock(98, 32, k + 1, 1, COMP, `Calc k${k}`, `Use ${isA ? 'A' : 'B'}`)
+          drawBlock(154, 32, k, 1, slotCol, slotTag, `k${k}`)
+        }
+        drawBlock(154, 32, 8, 1, VEC0, 'Ping A', 'k8')
+      } else {
+        // Inter-core CV Ping-Pong (1 AIC + AIV-0 + AIV-1)
+        const rows = [
+          { label: '1× AIC (Cube)', sub: 'QKᵀ / P·V', y: 42, color: COMP },
+          { label: 'AIV-0 (Vec 0)', sub: 'Task 0 · 192KB', y: 98, color: VEC0 },
+          { label: 'AIV-1 (Vec 1)', sub: 'Task 1 · 192KB', y: 154, color: VEC1 }
+        ]
+        for (const r of rows) {
+          out += `<text x="16" y="${r.y + 13}" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="9" font-weight="700" fill="${r.color}">${r.label}</text>`
+          out += `<text x="16" y="${r.y + 25}" font-family="Geist Mono Variable, ui-monospace, monospace" font-size="7.8" fill="${muted}">${r.sub}</text>`
+        }
+        const aicSeq = [
+          { t: 0, l: 'T0 QKᵀ', s: '→ L2' },
+          { t: 1, l: 'T1 QKᵀ', s: '→ L2' },
+          { t: 2, l: 'T0 P·V', s: 'Read P0' },
+          { t: 3, l: 'T1 P·V', s: 'Read P1' },
+          { t: 4, l: 'T2 QKᵀ', s: '→ L2' },
+          { t: 5, l: 'T3 QKᵀ', s: '→ L2' },
+          { t: 6, l: 'T2 P·V', s: 'Read P2' },
+          { t: 7, l: 'T3 P·V', s: 'Read P3' },
+          { t: 8, l: 'T4 QKᵀ', s: '→ L2' }
+        ]
+        for (const b of aicSeq) drawBlock(42, 32, b.t, 1, COMP, b.l, b.s)
+
+        drawBubble(98, 32, 0, 1, 'WAIT')
+        drawBlock(98, 32, 1, 1, VEC0, 'T0 SM', 'UB 0')
+        drawBubble(98, 32, 2, 1, 'L2→AIC')
+        drawBlock(98, 32, 3, 1, VEC0, 'T0 Acc', 'O+=PV')
+        drawBubble(98, 32, 4, 1, 'SYNC')
+        drawBlock(98, 32, 5, 1, VEC0, 'T2 SM', 'UB 0')
+        drawBubble(98, 32, 6, 1, 'L2→AIC')
+        drawBlock(98, 32, 7, 1, VEC0, 'T2 Acc', 'O+=PV')
+        drawBubble(98, 32, 8, 1, 'SYNC')
+
+        drawBubble(154, 32, 0, 2, 'WAIT T1')
+        drawBlock(154, 32, 2, 1, VEC1, 'T1 SM', 'UB 1')
+        drawBubble(154, 32, 3, 1, 'L2→AIC')
+        drawBlock(154, 32, 4, 1, VEC1, 'T1 Acc', 'O+=PV')
+        drawBubble(154, 32, 5, 1, 'SYNC')
+        drawBlock(154, 32, 6, 1, VEC1, 'T3 SM', 'UB 1')
+        drawBubble(154, 32, 7, 1, 'L2→AIC')
+        drawBlock(154, 32, 8, 1, VEC1, 'T3 Acc', 'O+=PV')
+      }
+
+      ppSvg.innerHTML = out
+      ppFormula.textContent = m.formula
+      ppFormula.style.color = m.accent
+      ppSram.textContent = m.sram
+      ppMech.textContent = m.mech
+    }
+
+    document.querySelectorAll<HTMLButtonElement>('#ppModeSeg button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        active = (btn.dataset.mode as PpMode) || 'double'
+        document.querySelectorAll<HTMLButtonElement>('#ppModeSeg button').forEach((b) => {
+          b.classList.toggle('active', b === btn)
+        })
+        draw()
+      })
+    })
+
+    draw()
+    new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+  }
+</script>
+
+<style>
+  .pp-frame {
+    background: hsl(var(--card));
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .pp-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.58rem 0.9rem;
+    border-bottom: 1.5px solid var(--ink-hard, #171716);
+    background: hsl(var(--muted) / 0.45);
+  }
+
+  .pp-head-l {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    color: hsl(var(--foreground));
+  }
+
+  .pp-cross {
+    color: #D85A26;
+    font-weight: 700;
+  }
+
+  .pp-seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    border: 1px solid var(--ink-hard, #171716);
+    background: hsl(var(--card));
+  }
+
+  .pp-seg-btn {
+    padding: 4px 9px;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    border: 0;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+
+  .pp-seg-btn + .pp-seg-btn {
+    border-left: 1px solid var(--ink-hard, #171716);
+  }
+
+  .pp-seg-btn.active {
+    background: var(--ink-hard, #171716);
+    color: #F6F5F0;
+  }
+
+  :global(.dark) .pp-seg-btn.active {
+    background: #F0EFEA;
+    color: #171716;
+  }
+
+  .pp-canvas-wrap {
+    border-bottom: 1px solid hsl(var(--border));
+    line-height: 0;
+  }
+
+  .pp-foot {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding: 0.68rem 0.9rem;
+    background: hsl(var(--muted) / 0.25);
+  }
+
+  .pp-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .pp-stat span {
+    font-family: var(--font-mono);
+    font-size: 0.54rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    color: hsl(var(--faint));
+  }
+
+  .pp-stat strong {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: hsl(var(--foreground));
+    line-height: 1.4;
+  }
+
+  @media (max-width: 680px) {
+    .pp-foot {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

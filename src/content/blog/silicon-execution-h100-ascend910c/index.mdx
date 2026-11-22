@@ -1,0 +1,175 @@
+---
+title: 'H100 & Ascend 910C Execution Model'
+description: 'First-principles guide to Launch, Memory, Compute, DMA, 96×192KB UB, Ping-Pong pipelines, GQA dataflow, and JIT/AOT compilation on H100 and Ascend 910C.'
+publishDate: '2026-06-09'
+layer: systems
+cover:
+  label: 'SILICON'
+  variant: 'paper'
+tags: ['h100', 'ascend-910c', 'gqa', 'dma', 'ping-pong', 'cann', 'triton', 'jit']
+language: 'zh-CN'
+draft: false
+---
+
+import RooflineLedgerFig from '@/components/blog/RooflineLedgerFig.astro'
+import PingPongGanttFig from '@/components/blog/PingPongGanttFig.astro'
+import DualArchGqaFig from '@/components/blog/DualArchGqaFig.astro'
+
+<div class="tm-takeaways">
+  <div class="tm-takeaways-head">Summary</div>
+  <ul>
+    <li><strong>三笔时间账</strong>：Kernel Launch 按整个核函数触发一次硬件唤醒，不是逐条指令唤醒。算子理想延迟由发射地板 $\tau_{\mathrm{launch}}$、HBM 搬运时间 $T_{\mathrm{mem}}$ 与矩阵计算时间 $T_{\mathrm{comp}}$ 三者最大值决定。</li>
+    <li><strong>双平台物理拓扑</strong>：NVIDIA H100 SXM5 在单个 SM 内统一共享 228 KB SMEM 与 256 KB 寄存器。Huawei Ascend 910C 采用双芯粒 CV 分离设计，整卡包含 48 个 AIC（每核 512 KB L1）与 96 个 AIV（每核 192 KB 私有 UB，整卡共 96 块 UB），AIC 与 AIV 经由共享 L2 Workspace 交接数据。</li>
+    <li><strong>流水重叠与编译分工</strong>：DMA 与 Ping-Pong 双缓冲把搬运隐藏在计算背后。编译器沿数据流做纵向融合以减少 HBM 往返，沿负载形状做横向特化编译成多份正交二进制，运行期仅挑选命中的一份发起一次 Launch。</li>
+  </ul>
+</div>
+
+<blockquote class="epigraph">
+  在上一篇 <a href="/blog/cross-workload-kernel-roofline-outline">Cross-Workload Kernel Dispatch</a> 中，我们用四维诊断把算子拆成了互斥的物理家族。本文进一步掀开芯片顶盖，追踪同一组张量在 H100 SXM5 与 Ascend 910C 的片上存储、DMA 引擎与编译器之间如何完成端到端执行。
+</blockquote>
+
+## 1. Execution Latency Bounds
+
+当 PyTorch 调用一个自定义算子时，CPU 并不会逐条指令去唤醒 GPU 或 NPU。CPU 仅需将核函数地址、网格规模与张量设备指针打包为一条任务描述符，写入硬件命令队列并敲响一次门铃（Doorbell）。这一趟固定握手耗时在 H100 SXM5 上约为 4 µs，在 Ascend 910C 上约为 12 µs。硬件调度器收到信号后接管全部线程块，核函数内部成千上万条算术与访存指令完全由加速卡自主执行。
+
+因此，任意输入形状 $w$ 的理想执行时间由三笔独立的物理账共同卡死：
+
+$$
+T_{\mathrm{ideal}}(w) = \max\!\left(\underbrace{\tau_{\mathrm{launch}}}_{\text{唤醒地板}},\;\; \underbrace{\frac{\mathrm{Bytes}(w)}{\mathrm{Peak}_{\mathrm{bw}}}}_{\text{HBM 搬运 } T_{\mathrm{mem}}},\;\; \underbrace{\frac{\mathrm{FLOPs}(w)}{\mathrm{Peak}_{\mathrm{comp}}}}_{\text{矩阵计算 } T_{\mathrm{comp}}}\right)
+$$
+
+算术强度定义为 $\mathrm{AI}(w) = \mathrm{FLOPs}(w) / \mathrm{Bytes}(w)$，硬件拐点定义为 $I_{\mathrm{ridge}} = \mathrm{Peak}_{\mathrm{comp}} / \mathrm{Peak}_{\mathrm{bw}}$。在 H100 SXM5 上，BF16 峰值算力为 989 TFLOPS，HBM3 峰值带宽为 3.35 TB/s，硬件拐点为 295 FLOPs/Byte。在 Ascend 910C 上，双芯粒 BF16 峰值算力为 800 TFLOPS，8 颗 HBM2e 总带宽为 3.2 TB/s，硬件拐点为 250 FLOPs/Byte。
+
+三笔账中最大的一项决定了当前用例的主导瓶颈。当 $T_{\mathrm{mem}}$ 与 $T_{\mathrm{comp}}$ 均落入两倍发射地板以内时，算子处于发射受限区，此时必须单遍融合以消除二次启动开销。当 $\mathrm{AI}(w) \ll I_{\mathrm{ridge}}$ 且数据量较大时，算子处于访存受限区，核心目标是减少 HBM 往返并拉满片外带宽。当 $\mathrm{AI}(w) \ge I_{\mathrm{ridge}}$ 时，算子进入算力受限区，核心目标是用大块矩阵喂满脉动阵列并用异步预取掩盖搬运。
+
+<RooflineLedgerFig />
+
+## 2. Unified SM Topology
+
+NVIDIA H100 SXM5 基于单颗 814 mm² 的 GH100 主芯片，经由 CoWoS-S 硅中介层连接 6 个物理 HBM3 焊位。出厂时其中 5 颗 HBM3 有效工作，提供 80 GB 容量与 3.35 TB/s 带宽，另 1 颗角位堆叠在封装层面被熔断屏蔽。芯片中央贯穿着 50 MB 分裂式 L2 交叉开关，将 132 个有效 SM 均匀划分为 8 个 GPC 象限。
+
+H100 最关键的微架构特征是**统一核内共享**。4th-Gen Tensor Core 与 CUDA SIMT 标量向量单元位于同一个 SM 内部，二者直接共享 228 KB Shared Memory 与 256 KB 寄存器文件。当 Tensor Core 算完注意力分数 $S = QK^\top$ 后，结果直接留在当前线程组的寄存器中。紧接着 CUDA SIMT 与特殊函数单元直接在原地执行 Online Softmax，全程无需把中间矩阵写回 L2 或 HBM。
+
+这种统一架构使 H100 对片上容量具有较强的软容错能力。当某个内核声明过多局部变量导致单线程寄存器越界时，编译器会自动触发 Register Spill，将溢出数据换出到 L1 与 HBM 对应的本地内存。程序仍然可以合法运行并产出正确结果，代价是执行速度大幅下降。
+
+## 3. Separated CV Topology
+
+Huawei Ascend 910C 采用双芯粒 Da Vinci v2 封装，通过中央 2.5D Die-to-Die 硅桥将两颗独立计算芯粒合封在同一张加速卡内。每颗芯粒包含 24 个矩阵核心 AIC 与 48 个向量核心 AIV，外挂 4 颗 HBM2e。双芯粒整卡合计提供 **48 个 AIC、96 个 AIV 与 8 颗 HBM2e（128 GB, 3.2 TB/s）**。
+
+工程实践中最容易混淆的一点是片上缓存的归属。在 910C 的 1:2 分离架构中，**192 KB 的 Unified Buffer（UB）是每个 AIV 独享的私有 SRAM，不属于 AIC**。因此单颗芯粒拥有 48 块 192 KB UB，双芯粒整卡一共拥有 **96 块独立的 192 KB UB**（总计约 18 MB）。每个 AIC 则独享一套 **512 KB L1 缓存与 L0A / L0B / L0C 专用矩阵缓冲**，整卡合计 48 套。
+
+| Architectural Property | NVIDIA H100 SXM5 (`GH100`) | Huawei Ascend 910C (`Da Vinci v2`) |
+|---|---|---|
+| **Die & HBM Package** | 单颗 814 mm² · 5+1 HBM3 (80 GB, 3.35 TB/s) | 双芯粒合封 · 8× HBM2e (128 GB, 3.2 TB/s) |
+| **Compute Units** | 132 Unified SMs (Tensor + SIMT 同核) | 48 AIC (Cube) + 96 AIV (Vector, 1:2 分离) |
+| **On-Chip Scratchpad** | 228 KB SMEM + 256 KB Reg / SM | 512 KB L1 / AIC · 192 KB UB / AIV (共 96 块) |
+| **Matrix ⇄ Vector Handoff** | 同 SM 寄存器原地直连，零 L2 往返 | 物理无直连，经共享 L2 Workspace + `CrossCoreFlag` |
+| **Capacity Overflow Behavior** | Register Spill 降速苟活，通常不崩溃 | 无硬件换出，超 192 KB 直接报 `UB_ALLOC_OVERFLOW` |
+
+因为 AIC 与 AIV 物理分离，二者之间没有直连寄存器通道。在 910C 上，矩阵乘与向量规约的数据交接必须经由一块共享的 GM Workspace 完成：AIC 将结果写入 Workspace，AIV 再把数据搬进自己的 UB。只要单个中间分块保持在数十 KB 量级并及时被配对 AIV 消费，该 Workspace 几乎全部命中片上共享 L2 Cache，不会触发慢速片外 HBM 读写。与此同时，写完即可读的同步通知走硬件专用旗标通道（`CrossCoreSetFlag` 与 `CrossCoreWaitFlag`），开销极低。
+
+决定一段计算落在 AIC 还是 AIV 由两层机制共同控制。在物理能力上，大块矩阵乘只能在具备 `16×16×16` 脉动阵列的 AIC 上执行，而 `exp`、`max`、`sum`、`sqrt` 等非线性与规约指令只存在于 AIV。在编程层面，手写 Ascend C 混合算子通过 `if (ASCEND_IS_AIC)` 与 `if (ASCEND_IS_AIV)` 显式划分核内分支。使用 `Triton-Ascend` 时，编译器则自动分析计算图，将 `tl.dot` 下沉到 AIC，将其余向量操作切给 AIV 并自动插入 L2 搬运与同步指令。
+
+## 4. DMA Engines
+
+HBM 显存的访问延迟通常高达数百个时钟周期。如果让计算单元亲自同步执行逐条 Load 指令，矩阵与向量流水线就会在搬运期间完全停摆。**DMA（Direct Memory Access）** 正是独立于计算核心之外的专用异步搬运引擎：计算单元只需下发一条轻量级搬运描述符，DMA 引擎便在后台全速传输整块张量，释放计算核心同步处理已有数据。
+
+两代硬件为 DMA 提供了形态不同但职责一致的通道。在 H100 上，**TMA（Tensor Memory Accelerator）** 与 `cp.async` 指令允许单个线程发起多维张量块搬运，数据直接绕过寄存器从 HBM 进入 228 KB SMEM，要求地址与步长满足 16 B 或 128 B 对齐。在 Ascend 910C 上，DMA 拆分为四条显式流水线：
+
+- **`MTE2`**：入库通道，负责把输入张量从 HBM 或共享 L2 搬进 AIC 的 512 KB L1 或 AIV 的 192 KB UB。
+- **`MTE1`**：AIC 内部通道，负责把矩阵块从 L1 按分形格式搬进 L0A 与 L0B 喂给 Cube 阵列。
+- **`FixPipe`**：AIC 出库通道，负责把 Cube 算完的 L0C 结果顺路完成格式重排与 FP32 到 BF16 转换，再写回 L2 Workspace。
+- **`MTE3`**：AIV 出库通道，负责把向量计算结果从 UB 写回 L2 Workspace 或最终 HBM 输出。
+
+在 Ascend 910C 上，UB 的数据全部经由 AIV 自身的 `MTE2` 从 L2 或 HBM 搬入，管理好 192 KB UB 的水位直接决定算子成败。一旦声明的队列总字节数超过 192 KB，软件显式管理的 SRAM 没有硬件换出页表，程序会在 Tiling 校验或运行期直接报错停机。相反，如果 UB 占用率过低（例如仅使用 30 KB），程序虽然合法，却会导致外层循环次数暴增、DMA 突发传输颗粒度过碎以及同步气泡放大。工程实践通常将单 AIV 的 UB 占用率控制在 **75% 至 90%（约 145 至 175 KB）** 之间，兼顾吞吐效率与安全余量。
+
+## 5. Ping-Pong Pipelines
+
+有了后台 DMA 引擎之后，消除等待气泡的核心排班技术是 **Ping-Pong（乒乓缓冲与乒乓调度）**。该技术在算子优化中存在两个递进层面。
+
+第一层是**片上缓冲双槽乒乓（Buffer Ping-Pong）**。在单缓冲（`BUFFER_NUM = 1` 或 `num_stages = 1`）下，片上只有一块槽位 A，搬运与计算必须串行，总耗时为 $T_{\mathrm{DMA}} + T_{\mathrm{Comp}}$。开启双缓冲后，片上内存一分为二为 Ping（A 槽）与 Pong（B 槽）：当计算单元处理 A 槽中的第 $k$ 块时，DMA 在后台同时将第 $k+1$ 块预取至 B 槽，下一拍二者互换槽位。只要搬运时间不超过计算时间，总耗时便收敛为 $\max(T_{\mathrm{DMA}}, T_{\mathrm{Comp}})$。双缓冲的直接代价是片上内存占用翻倍，这正是 910C 在大头维下撞穿 192 KB UB 悬崖的根源。
+
+第二层是**核间阶段乒乓（CV / WarpGroup Ping-Pong）**。在 Ascend 910C 的 1:2 融合算子中，如果 1 个 AIC 算完 $QK^\top$ 后停机等待 AIV 完成 Softmax，矩阵算力就会白白流失。核间 CV Ping-Pong 让 1 个 AIC 交替服务配对的 2 个 AIV：AIC 把任务 0 交给 AIV-0 计算 Softmax 后，立刻为 AIV-1 计算任务 1 的 $QK^\top$。待任务 1 交给 AIV-1 时，AIV-0 的结果刚好写回 L2，AIC 无缝接手计算任务 0 的 $P \cdot V$。H100 在 FlashAttention-3 中采用的 WarpGroup Ping-Pong 遵循同一物理原理。
+
+<PingPongGanttFig />
+
+## 6. End-to-End GQA Execution
+
+下面用同一组典型的分组查询注意力配置追踪两块芯片的完整数据流：查询头数 $H_q = 32$，键值头数 $H_{kv} = 8$，分组比 $G = 4$，数值精度 BF16，头维度 $D$ 在 128 与 256 之间切换。GQA 节省访存的关键在于将共享同一份 KV 缓存的 4 个查询头捆绑在同一计算单元内，使每次从 HBM 搬入的 $K$ 与 $V$ 在片上被复用 4 次。
+
+在 **NVIDIA H100 SXM5** 上，一个线程块把同组 4 个查询头常驻在 256 KB 寄存器文件中，随后通过 `num_stages = 3` 的 TMA 异步预取沿 KV 序列流式扫描。4th-Gen Tensor Core 与 CUDA SIMT 在同一 SM 内直接通过寄存器接力完成 $QK^\top$、Online Softmax 与 $P \cdot V$ 累加，全程不经 L2 中转。但在小批次超长序列（如 `B = 2, L = 64K`）下，常规网格仅启动 16 个线程块，132 个 SM 中有 116 个完全闲置，实测带宽塌方至 12%。此时必须拆分为两阶段 **Split-KV + LSE Combine**，先在第一阶段把长序列切分至 128 个 SM，再在第二阶段经由 50 MB Split L2 完成无损 Log-Sum-Exp 归约，将带宽拉回 85%。
+
+在 **Huawei Ascend 910C** 上，整卡逻辑上编排为 48 组 Mix 核心组（每组 1 个 AIC 配 2 个 AIV），在一个 `BR = 64, BC = 64` 分块内完成四步接力：
+
+1. **AIC 算 $S = QK^\top$**：`MTE2` 从 HBM 将 `Q` 与 `K` 块搬入 512 KB L1（GQA 同组 4 头复用同一份 `K`），经 `MTE1` 送入 `16×16×16` Cube 计算分数矩阵 $S$，再由 `FixPipe` 写入共享 L2 Workspace 并发出跨核同步信号。
+2. **2 个 AIV 对半切行算 Softmax**：AIV-0 领取前 32 行，AIV-1 领取后 32 行，各自经 `MTE2` 从 L2 拉取半块分数至私有 192 KB UB，原地融合完成缩放、掩码与 Online Softmax，随后由 `MTE3` 将概率块 $P$ 写回 L2。
+3. **AIC 算局部输出 $P \cdot V$**：AIC 经 `MTE2` 从 L2 取回 $P$、从 HBM 拉取 `V` 块，计算局部输出并由 `FixPipe` 写回 L2。
+4. **2 个 AIV 在 UB 内累加**：两个 AIV 在各自 UB 内执行重加权累加 $O \leftarrow \alpha O + O_{\mathrm{cur}}$，直至整条序列扫描结束，最后由 `MTE3` 一次性将最终输出写回 HBM。
+
+当 $D = 128$ 时，单个 AIV 在双缓冲 `BUFFER_NUM = 2` 下的工作集约为 148 KB，稳稳落在 192 KB 以内，三条流水线完全乒乓重叠。一旦输入切换至 $D = 256$，累加器与双缓冲槽位飙升至约 256 KB，立刻触发 `UB_ALLOC_OVERFLOW`。此时算子必须切换为单缓冲 `BUFFER_NUM = 1` 与窄分块 `BC = 32` 将工作集压回 112 KB，同时沿序列做跨双芯粒 Split-S 以填满全部 48 AIC 与 96 AIV。
+
+<DualArchGqaFig />
+
+<aside class="sidenote">
+  <span class="sn-num">Decode Note</span>
+  对于单步解码 GQA Decode（$L_q = 1, G = 4$），每个 KV 组仅有 4 行查询向量，远小于 Cube 的 16 行脉动高度且算术强度仅为 4–8 FLOPs/Byte。910C 上通常有两种策略：将 4 行补零至 16 行喂给 AIC（因为瓶颈在 HBM 带宽，多余的 Cube 算力几乎免费），或在极短/变长场景直接调用全部 96 个 AIV 执行纯向量 Split-KV 榨干 3.2 TB/s 带宽。
+</aside>
+
+## 7. Compiler Fusion
+
+理解了硬件之后，就容易看清编译器面对多核函数时采取的两种方向相反的变换：**纵向融合**与**横向特化**。
+
+当模型代码中出现 10 个串行执行的小算子（例如 `scale → mask → softmax → dropout → cast`）时，未融合执行不仅要支付 10 次 Launch 门铃开销，更致命的是每个算子结束都要将中间张量写回 HBM，下一个算子再重新读出。现代图编译器（`torch.compile`、XLA、CANN 图引擎）执行**纵向融合**：将 10 个串行循环合并进同一个核函数，中间变量全部驻留寄存器或片上 SRAM，最终只输出 1 份融合二进制并仅 Launch 1 次。自动融合存在三道边界：遇到必须全局归约的同步点时编译器无法自动推导 Online Softmax 这类数学重写；融合链路过长导致寄存器溢出或 UB 超 192 KB 时成本模型必须主动切开；上下游访存布局冲突时也无法共享同一网格切分。
+
+与之相反，面向跨负载分族准备的 10 个互斥特化版本绝不能用 `if / else` 写进同一个核函数里。GPU 的寄存器配额与 Ascend 的 UB 缓冲深度均在编译期静态锁死。如果强行塞进单个核函数，编译器必须按 10 条分支中资源占用最高的一条预留配额，导致轻量路径的并发度暴跌甚至在 Ascend 上直接编译失败。因此编译器在这里执行**横向特化**：借助 Triton 的 `tl.constexpr` 或 Ascend C 的模板参数 `template <int BUFFER_NUM, int BR, int BC>`，对每个家族做常量折叠与死代码消除，单独生成互不拖累的瘦身二进制。运行期 CPU 路由器花不到 1 µs 计算物理特征，只挑选命中的 1 份函数指针敲响 1 次门铃，其余 9 份零开销。
+
+## 8. Compilation Paradigms
+
+在具体工程落地上，JIT（即时编译）与 AOT（离线预编译）在两套软件栈中呈现出清晰的互补格局。
+
+JIT 在运行期看到真实输入形状后现场编译并缓存，能够针对静态常量做极致裁剪，但如果直接把动态序列长度当作编译期常量，推理阶段便会遭遇重编译风暴。在 GPU 生态中，Triton（`@triton.jit`）与 FlashInfer 采用“少量有限形状桶 + 磁盘 Hash 缓存”的策略平衡灵活性与冷启动耗时。
+
+在华为昇腾 CANN 生态中，编译体系同样同时覆盖了 AOT 与 JIT。早期 CANN 通过 `torch_npu.npu.set_compile_mode(jit_compile=True)` 提供在线图编译。在 910B 与 910C 的现代生产部署中，官方默认推荐二进制模式（`jit_compile=False`），配合 Ascend C 的 **`tiling_key` AOT 机制**将不同模板分支离线编入算子库，运行期由 Host 端 Tiling 函数微秒级分派，彻底消除动态形状卡顿。
+
+当我们需要在快速迭代中**同时拥有 Python JIT 灵活性与完整 CANN 原生 API 控制力**时，工程上有两条直接落地的路径。第一条路径是在 Python 侧用约 30 行 Hash 缓存封装调用 CANN 内置的 `bisheng` 编译器，将单文件 Ascend C 源码按需编译为 `.so`，在 Host 包装函数中复用 `torch_npu` 的显存指针与当前 `aclrtStream`，通过 CANN 8.0+ 提供的 **`ACLRT_LAUNCH_KERNEL` 核函数直调宏**直接下发，免去繁琐的 `msopgen` 打包流程。第二条路径则是使用 **`Triton-Ascend`** 编写 `@triton.jit` 内核，并通过 `triton.language.extra.cann` 调用昇腾多缓冲与片上扩展原语，底层经 MLIR 对接 BiSheng 后端完成 JIT 编译。
+
+```cpp
+// Ascend C 单文件直调骨架：兼得 Python Hash-JIT 体验与 100% 原生 CANN API
+#include "kernel_operator.h"
+#include "acl/acl.h"
+
+extern "C" __global__ __aicore__ void gqa_f3_kernel(
+    GM_ADDR q, GM_ADDR k, GM_ADDR v, GM_ADDR out, uint32_t seqLen) {
+    // 完整调用 AscendC::TPipe / TQue / DataCopy / Matmul / CrossCoreFlag
+}
+
+extern "C" int launch_gqa_f3(
+    void* q, void* k, void* v, void* out,
+    uint32_t seqLen, uint32_t blockDim, void* stream) {
+    ACLRT_LAUNCH_KERNEL(gqa_f3_kernel)(
+        blockDim, reinterpret_cast<aclrtStream>(stream),
+        q, k, v, out, seqLen
+    );
+    return 0;
+}
+```
+
+| Layer | NVIDIA H100 SXM5 | Huawei Ascend 910C |
+|---|---|---|
+| **Production AOT Library** | `cuBLAS` / `cuDNN` / FlashInfer AOT | `aclnn` Binary (`jit_compile=False`) + `tiling_key` |
+| **Native Low-Level JIT** | `load_inline` / NVRTC + CUDA C++ | Python Hash Cache + `bisheng` + `ACLRT_LAUNCH_KERNEL` |
+| **High-Level Python JIT** | OpenAI Triton (`@triton.jit`) | `Triton-Ascend` + `triton.language.extra.cann` |
+
+至此，从单次 Doorbell 唤醒到 HBM 搬运、从统一 SM 到 48 AIC / 96 AIV 分离架构、从双缓冲乒乓到横向特化编译，两块芯片的底层物理约束已经全部对齐。回到本系列第一篇 [Cross-Workload Kernel Dispatch](/blog/cross-workload-kernel-roofline-outline)，便能直接理解为何跨负载算子优化必须先锁硬件尺子、再划互斥家族，并以极轻量的连续物理谓词统一路由。
+
+## Citation
+
+```bibtex
+@article{zhang2026siliconexec,
+  author  = {Jerry Zhang},
+  title   = {H100 & Ascend 910C Execution Model},
+  journal = {jerry609 Research Notes},
+  year    = {2026},
+  url     = {https://jerry609.github.io/blog/silicon-execution-h100-ascend910c}
+}
+```

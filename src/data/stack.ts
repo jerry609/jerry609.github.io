@@ -105,6 +105,16 @@ export const SERIES = [
     ]
   },
   {
+    id: 'kernel-silicon',
+    layer: 'systems',
+    title: '跨平台算子分派与落硅执行',
+    desc: '从四维跨负载分派与连续路由出发，深入 H100 SXM5 与 Ascend 910C 的片上微架构、DMA、Ping-Pong 流水与编译范式。',
+    slugs: [
+      'cross-workload-kernel-roofline-outline',
+      'silicon-execution-h100-ascend910c'
+    ]
+  },
+  {
     id: 'fuse',
     layer: 'systems',
     title: 'FUSE × Buck2 深度复盘',

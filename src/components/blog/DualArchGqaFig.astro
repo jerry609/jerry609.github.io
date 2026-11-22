@@ -1,0 +1,1260 @@
+---
+/**
+ * Peak Design-inspired Figure 3 (Centerpiece):
+ * Interactive 2D Microarchitecture & GQA Execution Visualizer for BOTH:
+ *  - NVIDIA H100 SXM5 (GH100 Monolithic · 132 Unified SMs · 5+1 HBM3 · 50 MB L2)
+ *  - Huawei Ascend 910C (Dual-Die · 48 AIC + 96 AIV / 96×192 KB UB · 8× HBM2e · L2 Workspace)
+ * Pure HiDPI 2D Canvas (no 3D), full light/dark theme sync, step-through & live pipeline modes.
+ */
+---
+
+<figure class='tm-fig' id='fig-dual-gqa'>
+  <div class='dg-frame' id='dgBox'>
+    <!-- Row 1: Peak Design Anodized Spec Header + Platform Switch -->
+    <div class='dg-head'>
+      <div class='dg-head-l'>
+        <span class='dg-cross'>+</span>
+        <span id='dgSpecId'>SPEC 03 · H100 SXM5 vs ASCEND 910C · GQA MICROARCHITECTURE</span>
+      </div>
+      <div class='dg-arch-seg' id='dgArchSeg' role='group' aria-label='切换 GPU 与 NPU 架构'>
+        <button class='dg-seg-btn active' data-arch='910c' type='button'>
+          <i style='background:#D85A26'></i>ASCEND 910C <em>48 AIC · 96 AIV</em>
+        </button>
+        <button class='dg-seg-btn' data-arch='h100' type='button'>
+          <i style='background:#1E7CB8'></i>H100 SXM5 <em>132 UNIFIED SMs</em>
+        </button>
+      </div>
+    </div>
+
+    <!-- Row 2: Scenario Switch + Step-Through Controls -->
+    <div class='dg-subbar'>
+      <div class='dg-scenarios' id='dgScSeg' role='group' aria-label='选择运行场景'>
+        <button class='dg-sc-btn active' data-sc='f2' type='button'>
+          <span class='dg-sc-dot' style='background:#1F7A61'></span>
+          <span id='dgScLabelF2'>F2 · Ping-Pong (D=128)</span>
+        </button>
+        <button class='dg-sc-btn' data-sc='f3_fail' type='button'>
+          <span class='dg-sc-dot' style='background:#C94032'></span>
+          <span id='dgScLabelFail'>F3 · 爆 UB (D=256, Buf=2)</span>
+        </button>
+        <button class='dg-sc-btn' data-sc='f3_fix' type='button'>
+          <span class='dg-sc-dot' style='background:#1E7CB8'></span>
+          <span id='dgScLabelFix'>F3 · 救活 (Buf=1, Split-S)</span>
+        </button>
+      </div>
+
+      <div class='dg-steps' id='dgStepSeg' role='group' aria-label='单步高亮 GQA 阶段'>
+        <button class='dg-step-btn active' data-step='0' type='button'>▶ 全流水</button>
+        <button class='dg-step-btn' data-step='1' type='button'>1·LOAD</button>
+        <button class='dg-step-btn' data-step='2' type='button'>2·QKᵀ</button>
+        <button class='dg-step-btn' data-step='3' type='button'>3·SOFTMAX</button>
+        <button class='dg-step-btn' data-step='4' type='button'>4·PV&amp;ACC</button>
+        <button class='dg-step-btn' id='dgPauseBtn' type='button' title='Pause / Resume'>❚❚</button>
+      </div>
+    </div>
+
+    <!-- Main 2D Peak Design Drafting Canvas -->
+    <div class='dg-stage'>
+      <canvas id='dgCanvas'></canvas>
+    </div>
+
+    <!-- Machined 4-Cell Technical Spec Footer -->
+    <div class='dg-spec-grid'>
+      <div class='dg-cell'>
+        <span>01 · ARCHITECTURE</span>
+        <strong id='dgC1'>Dual-Die Da Vinci v2 · 48 AIC + 96 AIV (1:2)</strong>
+      </div>
+      <div class='dg-cell'>
+        <span>02 · DMA &amp; HANDOFF</span>
+        <strong id='dgC2'>MTE2/MTE1/FixPipe/MTE3 · AIC ⇄ AIV via Shared L2</strong>
+      </div>
+      <div class='dg-cell'>
+        <span>03 · ON-CHIP MEMORY</span>
+        <strong id='dgC3'>48×512KB L1 (AIC) · 96×192KB UB (AIV) · 148/192KB</strong>
+      </div>
+      <div class='dg-cell'>
+        <span>04 · ACTIVE GQA TRACE</span>
+        <strong id='dgC4'>F2 Ping-Pong：MTE2(k+2) ‖ Cube(k+1) ‖ 2×AIV(k)</strong>
+      </div>
+    </div>
+  </div>
+
+  <figcaption>
+    <strong>Figure 3: Interactive 2D microarchitecture and GQA dataflow on Huawei Ascend 910C and NVIDIA H100 SXM5.</strong>
+    上方可一键切换 <strong>Ascend 910C（双芯粒 CV 分离架构，1 AIC 配 2 AIV，经共享 L2 Workspace 交接）</strong> 与 <strong>NVIDIA H100 SXM5（单颗 GH100 统一 SM 架构，Tensor Core 与 SIMT 在同 SM 内直连共享 228 KB SMEM / 256 KB 寄存器）</strong>。切换三种场景或单步按钮，可直观对比两份硬件在 GQA 下的 DMA 搬运路径、H100 16/132 SM 饥饿 vs Split-KV+LSE 满载，以及 910C 192 KB UB 溢出红警 vs 单缓冲双 Die 满载。
+  </figcaption>
+</figure>
+
+<script>
+  const dgBox = document.getElementById('dgBox')
+  const dgCanvas = document.getElementById('dgCanvas') as HTMLCanvasElement | null
+
+  if (dgBox && dgCanvas) {
+    const ctx = dgCanvas.getContext('2d')!
+    type Arch = '910c' | 'h100'
+    type Sc = 'f2' | 'f3_fail' | 'f3_fix'
+
+    let arch: Arch = '910c'
+    let sc: Sc = 'f2'
+    let stepFocus = 0
+    let paused = false
+    let tick = 0
+    let visible = true
+
+    const lblF2 = document.getElementById('dgScLabelF2')!
+    const lblFail = document.getElementById('dgScLabelFail')!
+    const lblFix = document.getElementById('dgScLabelFix')!
+    const c1 = document.getElementById('dgC1')!
+    const c2 = document.getElementById('dgC2')!
+    const c3 = document.getElementById('dgC3')!
+    const c4 = document.getElementById('dgC4')!
+    const pauseBtn = document.getElementById('dgPauseBtn') as HTMLButtonElement
+
+    const LABELS = {
+      '910c': {
+        f2: 'F2 · Ping-Pong (D=128)',
+        f3_fail: 'F3 · 爆 UB (D=256, Buf=2)',
+        f3_fix: 'F3 · 救活 (Buf=1, Split-S)'
+      },
+      h100: {
+        f2: 'F2 · TMA 3-Stage Stream',
+        f3_fail: 'F3 · 16/132 SM 饥饿 (12% BW)',
+        f3_fix: 'F3 · Split-KV + LSE (85% BW)'
+      }
+    } as const
+
+    const STEP_NOTES: Record<Arch, Record<number, string>> = {
+      '910c': {
+        1: 'Step 1 (MTE2)：从 8×HBM2e 搬 Q/K/V 进 AIC 512KB L1，GQA G=4 复用 K/V 省 4× 带宽',
+        2: 'Step 2 (AIC Cube)：MTE1 送入 L0A/B，16×16×16 Cube 算 QKᵀ → FixPipe 写入共享 L2 Workspace',
+        3: 'Step 3 (2×AIV)：AIV-0 领前32行、AIV-1 领后32行，MTE2 读 L2 进各自 192KB UB 算 Online Softmax',
+        4: 'Step 4 (PV & Acc)：MTE3 写 P 回 L2 → AIC 算 P·V → AIV 在 UB 内累加 O，序列结束一次性 MTE3 写回 HBM'
+      },
+      h100: {
+        1: 'Step 1 (TMA)：cp.async 异步从 5 颗有效 HBM3 拉 K/V 块进 SM 228KB SMEM，G=4 头片上复用 4×',
+        2: 'Step 2 (Tensor Core)：4th-Gen Tensor Core 在 SM 内部直接读取 Q(Reg) 与 K(SMEM) 计算 QKᵀ，不走 L2',
+        3: 'Step 3 (SIMT/SFU)：同一 SM 内直接对寄存器中的 S 做 Online Softmax（max/exp/sum），零跨核搬运',
+        4: 'Step 4 (P·V & LSE)：同 SM 内累加 P·V 至寄存器 O；F3 模式在 50MB Split L2 完成无损 LSE Combine 归约'
+      }
+    }
+
+    const syncUiText = () => {
+      lblF2.textContent = LABELS[arch].f2
+      lblFail.textContent = LABELS[arch].f3_fail
+      lblFix.textContent = LABELS[arch].f3_fix
+
+      if (arch === '910c') {
+        c1.textContent = 'Dual-Die Da Vinci v2 · 48 AIC + 96 AIV (1:2) · 800 TFLOPS'
+        c2.textContent = 'MTE2 / MTE1 / FixPipe / MTE3 · AIC ⇄ AIV 经共享 L2 + CrossCoreFlag'
+        if (sc === 'f3_fail') {
+          c3.textContent = '单 AIV 需 256 KB > 192 KB 硬墙 · UB_ALLOC_OVERFLOW 停机'
+          c3.style.color = '#C94032'
+          c4.textContent = 'D=256 沿用 BUFFER_NUM=2, Bc=64 撞穿 192 KB UB，无硬件 Spill 兜底'
+          c4.style.color = '#C94032'
+        } else if (sc === 'f3_fix') {
+          c3.textContent = '48×512KB L1 · 96×192KB UB · 实占 112 / 192 KB (Buf=1 SAFE)'
+          c3.style.color = '#1F7A61'
+          c4.textContent =
+            stepFocus > 0
+              ? STEP_NOTES['910c'][stepFocus]
+              : '切 F3 单缓冲 (BUFFER_NUM=1, Bc=32) 保合法，Split-S 铺满双 Die 48 AIC / 96 AIV'
+          c4.style.color = ''
+        } else {
+          c3.textContent = '48×512KB L1 · 96×192KB UB · 实占 148 / 192 KB (Buf=2 ✓)'
+          c3.style.color = '#1F7A61'
+          c4.textContent =
+            stepFocus > 0
+              ? STEP_NOTES['910c'][stepFocus]
+              : 'F2 三级 Ping-Pong：MTE2(搬k+2) ‖ AIC Cube(算k+1) ‖ 2×AIV(算k)，搬运彻底隐身'
+          c4.style.color = ''
+        }
+      } else {
+        c1.textContent = 'Monolithic GH100 (814 mm²) · 8 GPC / 132 SMs · 989 TFLOPS'
+        c2.textContent = 'TMA (cp.async) 进 SMEM · Tensor Core ⇄ SIMT 同 SM 共享寄存器（免 L2 中转）'
+        if (sc === 'f3_fail') {
+          c3.textContent = '仅 16 / 132 SMs 干活 (wave_ratio=0.12) · 5 颗 HBM3 仅跑出 12% 带宽'
+          c3.style.color = '#C94032'
+          c4.textContent = 'B=2, L=64K 单阶段网格只有 16 个 CTA，88% SM 空等，调 Tile 永远跨不过 12% 上限'
+          c4.style.color = '#C94032'
+        } else if (sc === 'f3_fix') {
+          c3.textContent = '128 / 132 SMs 满载 (S=8) · 228KB SMEM + 50MB L2 完成 LSE 归约'
+          c3.style.color = '#1F7A61'
+          c4.textContent =
+            stepFocus > 0
+              ? STEP_NOTES.h100[stepFocus]
+              : 'F3 Split-KV Stage1 铺满 128 SMs，Stage2 在 50MB L2 做无损 LSE Combine，带宽跃升至 85%'
+          c4.style.color = ''
+        } else {
+          c3.textContent = '132 / 132 SMs · 228KB SMEM/SM + 256KB Reg · 5+1 HBM3 (2.98 TB/s)'
+          c3.style.color = '#1F7A61'
+          c4.textContent =
+            stepFocus > 0
+              ? STEP_NOTES.h100[stepFocus]
+              : 'F2 TMA 3-Stage 异步流式读取：Q 驻留寄存器，每块 KV 复用 4×，跑出 89% HBM3 带宽'
+          c4.style.color = ''
+        }
+      }
+    }
+
+    const pal = () => {
+      const isDark = document.documentElement.classList.contains('dark')
+      return {
+        isDark,
+        bg: isDark ? '#161615' : '#F6F5F0',
+        card: isDark ? '#1E1E1C' : '#FFFFFF',
+        subtle: isDark ? '#242421' : '#ECEAE2',
+        dot: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(23,23,22,0.075)',
+        ink: isDark ? '#F0EFEA' : '#171716',
+        muted: isDark ? '#9B9A93' : '#6A6862',
+        border: isDark ? '#353531' : '#CECCC4',
+        hardBorder: isDark ? '#585750' : '#171716',
+        orange: '#D85A26',
+        ocean: '#1E7CB8',
+        kelp: '#1F7A61',
+        plum: '#7E57A6',
+        ibis: '#C94032'
+      }
+    }
+
+    const rr = (x: number, y: number, w: number, h: number, r = 2) => {
+      ctx.beginPath()
+      ctx.moveTo(x + r, y)
+      ctx.arcTo(x + w, y, x + w, y + h, r)
+      ctx.arcTo(x + w, y + h, x, y + h, r)
+      ctx.arcTo(x, y + h, x, y, r)
+      ctx.arcTo(x, y, x + w, y, r)
+      ctx.closePath()
+    }
+
+    const arrow = (
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number,
+      color: string,
+      active: boolean,
+      label: string,
+      lxOff: number,
+      lyOff: number,
+      phase: number,
+      isErr: boolean
+    ) => {
+      ctx.save()
+      ctx.strokeStyle = color
+      ctx.globalAlpha = active ? 0.94 : 0.2
+      ctx.lineWidth = active ? 2 : 1.15
+      ctx.beginPath()
+      ctx.moveTo(x1, y1)
+      ctx.lineTo(x2, y2)
+      ctx.stroke()
+
+      const ang = Math.atan2(y2 - y1, x2 - x1)
+      const hl = 6.5
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.moveTo(x2, y2)
+      ctx.lineTo(x2 - hl * Math.cos(ang - 0.38), y2 - hl * Math.sin(ang - 0.38))
+      ctx.lineTo(x2 - hl * Math.cos(ang + 0.38), y2 - hl * Math.sin(ang + 0.38))
+      ctx.closePath()
+      ctx.fill()
+
+      if (active && !isErr) {
+        for (let i = 0; i < 2; i++) {
+          const u = ((phase + i * 0.5) % 1 + 1) % 1
+          const px = x1 + (x2 - x1) * u
+          const py = y1 + (y2 - y1) * u
+          ctx.beginPath()
+          ctx.arc(px, py, 3, 0, Math.PI * 2)
+          ctx.fillStyle = color
+          ctx.fill()
+        }
+      }
+
+      if (label) {
+        const mx = (x1 + x2) / 2 + lxOff
+        const my = (y1 + y2) / 2 + lyOff
+        ctx.font = '700 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+        const tw = ctx.measureText(label).width
+        ctx.globalAlpha = active ? 0.95 : 0.45
+        ctx.fillStyle = pal().bg
+        ctx.fillRect(mx - tw / 2 - 3, my - 8, tw + 6, 11)
+        ctx.fillStyle = color
+        ctx.textAlign = 'center'
+        ctx.fillText(label, mx, my + 0.5)
+      }
+      ctx.restore()
+    }
+
+    const drawDraftingDots = (W: number, H: number, dotCol: string) => {
+      ctx.fillStyle = dotCol
+      for (let x = 12; x < W; x += 18) {
+        for (let y = 12; y < H; y += 18) {
+          ctx.fillRect(x, y, 1.2, 1.2)
+        }
+      }
+    }
+
+    const drawTimeline = (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      title: string,
+      tracks: { name: string; color: string; off: number }[],
+      isErr: boolean,
+      errText: string,
+      duty: number,
+      footer: string,
+      alarm: number
+    ) => {
+      const P = pal()
+      rr(x, y, w, h, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = isErr ? P.ibis : P.border
+      ctx.lineWidth = isErr ? 1.4 : 1.1
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = '700 10px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isErr ? P.ibis : P.ink
+      ctx.fillText(title, x + 10, y + 18)
+
+      const tx0 = x + 52
+      const tw = w - 62
+      const slotW = tw / 4
+      const scroll = isErr ? 0 : (tick * 0.016) % 1
+
+      tracks.forEach((tr, ti) => {
+        const ty = y + 30 + ti * 31
+        ctx.font = '700 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+        ctx.fillStyle = tr.color
+        ctx.textAlign = 'left'
+        ctx.fillText(tr.name, x + 10, ty + 14)
+
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(tx0, ty, tw, 20)
+        ctx.clip()
+
+        if (isErr) {
+          rr(tx0, ty + 2, tw, 16, 1.5)
+          ctx.fillStyle = `rgba(201,64,50,${0.18 + 0.14 * alarm})`
+          ctx.fill()
+          ctx.strokeStyle = P.ibis
+          ctx.lineWidth = 0.9
+          ctx.stroke()
+          ctx.font = '700 8.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+          ctx.fillStyle = P.ibis
+          ctx.textAlign = 'center'
+          ctx.fillText(ti === 2 ? errText : 'STALLED / IDLE', tx0 + tw / 2, ty + 13)
+        } else {
+          for (let b = -1; b < 5; b++) {
+            const bx = tx0 + (b + scroll) * slotW
+            const kNum = ((4 - b + tr.off) % 4) + 1
+            rr(bx + 2, ty + 2, slotW * duty - 3, 16, 1.5)
+            ctx.fillStyle = tr.color
+            ctx.globalAlpha = P.isDark ? 0.28 : 0.16
+            ctx.fill()
+            ctx.globalAlpha = 0.95
+            ctx.strokeStyle = tr.color
+            ctx.lineWidth = 1.1
+            ctx.stroke()
+            ctx.font = '700 8.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+            ctx.fillStyle = P.ink
+            ctx.textAlign = 'center'
+            ctx.fillText(`k+${kNum}`, bx + (slotW * duty) / 2, ty + 13)
+          }
+        }
+        ctx.restore()
+      })
+
+      ctx.textAlign = 'left'
+      ctx.font = '600 8.8px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText(footer, x + 10, y + h - 8)
+    }
+
+    const draw910C = (W: number, H: number, ph: number, alarm: number) => {
+      const P = pal()
+      const isErr = sc === 'f3_fail'
+      const ubUsed = sc === 'f3_fail' ? 256 : sc === 'f3_fix' ? 112 : 148
+      const bufNum = sc === 'f3_fix' ? 1 : 2
+
+      const s1 = !isErr && (stepFocus === 0 || stepFocus === 1)
+      const s2 = !isErr && (stepFocus === 0 || stepFocus === 2)
+      const s3 = !isErr && (stepFocus === 0 || stepFocus === 3)
+      const s4 = !isErr && (stepFocus === 0 || stepFocus === 4)
+
+      const leftW = Math.floor(W * 0.68)
+      const rightX = leftW + 12
+      const rightW = W - rightX - 10
+
+      /* Top Band: 8× HBM2e + Shared L2 Cache Workspace */
+      const hbm = { x: 10, y: 10, w: leftW * 0.44, h: 52 }
+      const l2 = { x: hbm.x + hbm.w + 18, y: 10, w: leftW - (hbm.w + 38), h: 52 }
+
+      rr(hbm.x, hbm.y, hbm.w, hbm.h, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = isErr ? P.ibis : P.ocean
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isErr ? P.ibis : P.ocean
+      ctx.fillText('8× HBM2e · GM (128 GB)', hbm.x + 10, hbm.y + 18)
+      ctx.font = '500 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('3.2 TB/s · 4 Stacks/Die', hbm.x + 10, hbm.y + 32)
+      // 8 tiny HBM stack bricks
+      const bW = (hbm.w - 28) / 8
+      for (let i = 0; i < 8; i++) {
+        ctx.fillStyle = isErr ? P.ibis : P.ocean
+        ctx.globalAlpha = isErr ? 0.25 : 0.78
+        ctx.fillRect(hbm.x + 10 + i * (bW + 1.2), hbm.y + 40, bW - 1, 6)
+      }
+      ctx.globalAlpha = 1
+
+      rr(l2.x, l2.y, l2.w, l2.h, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = isErr ? P.border : P.hardBorder
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.fillText('SHARED L2 WORKSPACE', l2.x + 10, l2.y + 18)
+      ctx.font = '500 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('AIC ⇄ AIV 无直连 · 经此中转 S / P / O_cur', l2.x + 10, l2.y + 33)
+      ctx.font = '700 8.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.kelp
+      ctx.fillText('✓ 命中片上 L2（不落 HBM）', l2.x + 10, l2.y + 46)
+
+      arrow(hbm.x + hbm.w, hbm.y + 26, l2.x, l2.y + 26, P.ocean, s1 || s4, '', 0, 0, ph, isErr)
+
+      /* Core Row: 1 AIC (Left) + 2 Paired AIVs (Right) */
+      const coreY = 104
+      const coreH = H - coreY - 10
+      const aic = { x: 10, y: coreY, w: leftW * 0.45, h: coreH }
+      const aiv = { x: aic.x + aic.w + 16, y: coreY, w: leftW - (aic.w + 36), h: coreH }
+
+      // AIC Container
+      rr(aic.x, aic.y, aic.w, aic.h, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = s2 || s4 ? P.orange : P.border
+      ctx.lineWidth = s2 || s4 ? 1.6 : 1.1
+      ctx.stroke()
+      ctx.fillStyle = P.orange
+      ctx.fillRect(aic.x, aic.y, aic.w, 3)
+
+      ctx.textAlign = 'left'
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.orange
+      ctx.fillText('1× AIC · CUBE CORE (整卡 48)', aic.x + 10, aic.y + 21)
+
+      const l1 = { x: aic.x + 10, y: aic.y + 32, w: aic.w - 20, h: 48 }
+      rr(l1.x, l1.y, l1.w, l1.h, 2)
+      ctx.fillStyle = P.subtle
+      ctx.fill()
+      ctx.strokeStyle = s1 ? P.ocean : P.border
+      ctx.lineWidth = 1.1
+      ctx.stroke()
+      ctx.font = '700 10px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.fillText('L1 BUFFER · 512 KB / AIC', l1.x + 8, l1.y + 18)
+      ctx.font = '500 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('GQA G=4 复用 K/V · HBM 读省 4×', l1.x + 8, l1.y + 35)
+
+      const l0 = { x: aic.x + 10, y: l1.y + l1.h + 24, w: aic.w - 20, h: 32 }
+      rr(l0.x, l0.y, l0.w, l0.h, 2)
+      ctx.fillStyle = P.subtle
+      ctx.fill()
+      ctx.strokeStyle = P.border
+      ctx.stroke()
+      ctx.font = '700 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.textAlign = 'center'
+      ctx.fillText('L0A (64KB)  +  L0B (64KB)', l0.x + l0.w / 2, l0.y + 20)
+
+      arrow(l1.x + l1.w * 0.5, l1.y + l1.h, l0.x + l0.w * 0.5, l0.y, P.orange, s2 || s4, 'MTE1', 26, 2, ph + 0.25, isErr)
+
+      const cube = { x: aic.x + 10, y: l0.y + l0.h + 14, w: aic.w - 20, h: 66 }
+      rr(cube.x, cube.y, cube.w, cube.h, 2)
+      ctx.fillStyle = s2 || s4 ? (P.isDark ? 'rgba(216,90,38,0.22)' : 'rgba(216,90,38,0.12)') : P.subtle
+      ctx.fill()
+      ctx.strokeStyle = s2 || s4 ? P.orange : P.border
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+      ctx.font = '700 11px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.orange
+      ctx.fillText('16×16×16 CUBE MMA', cube.x + cube.w / 2, cube.y + 24)
+      ctx.font = '600 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      const cOp = stepFocus === 4 ? 'Step 4: 算 P·V → L0C' : stepFocus === 2 ? 'Step 2: 算 QKᵀ → L0C' : 'QKᵀ & P·V → L0C (128KB)'
+      ctx.fillText(cOp, cube.x + cube.w / 2, cube.y + 44)
+      ctx.font = '500 8.8px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('FixPipe: 格式重排 + 精度转换 → L2', cube.x + cube.w / 2, cube.y + 59)
+
+      ctx.font = '600 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('if (ASCEND_IS_AIC) { ... }', aic.x + aic.w / 2, aic.y + aic.h - 10)
+
+      // 2 Paired AIVs Container
+      rr(aiv.x, aiv.y, aiv.w, aiv.h, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = isErr ? P.ibis : s3 || s4 ? P.plum : P.border
+      ctx.lineWidth = isErr || s3 || s4 ? 1.6 : 1.1
+      ctx.stroke()
+      ctx.fillStyle = isErr ? P.ibis : P.plum
+      ctx.fillRect(aiv.x, aiv.y, aiv.w, 3)
+
+      ctx.textAlign = 'left'
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isErr ? P.ibis : P.plum
+      ctx.fillText('2× AIV · VECTOR (1:2 · 整卡 96 块 UB)', aiv.x + 10, aiv.y + 21)
+
+      const subH = (aiv.h - 52) / 2 - 4
+      for (let i = 0; i < 2; i++) {
+        const sy = aiv.y + 30 + i * (subH + 8)
+        const sx = aiv.x + 10
+        const sw = aiv.w - 20
+        rr(sx, sy, sw, subH, 2)
+        ctx.fillStyle = isErr ? `rgba(201,64,50,${0.08 + 0.1 * alarm})` : P.subtle
+        ctx.fill()
+        ctx.strokeStyle = isErr ? P.ibis : P.border
+        ctx.lineWidth = isErr ? 1.4 : 1
+        ctx.stroke()
+
+        ctx.textAlign = 'left'
+        ctx.font = '700 10px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+        ctx.fillStyle = P.ink
+        ctx.fillText(i === 0 ? 'AIV-0 · 前 32 行 (Rows 0–31)' : 'AIV-1 · 后 32 行 (Rows 32–63)', sx + 8, sy + 18)
+
+        // UB Capacity Bar
+        const bx = sx + 8
+        const by = sy + 28
+        const bw = sw - 16
+        const bh = 22
+        rr(bx, by, bw, bh, 1.5)
+        ctx.fillStyle = P.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(23,23,22,0.07)'
+        ctx.fill()
+        ctx.strokeStyle = P.border
+        ctx.lineWidth = 0.8
+        ctx.stroke()
+
+        const fillW = Math.max(10, bw * Math.min(1, ubUsed / 192))
+        rr(bx, by, fillW, bh, 1.5)
+        ctx.fillStyle = isErr ? `rgba(201,64,50,${0.72 + 0.25 * alarm})` : P.kelp
+        ctx.globalAlpha = isErr ? 1 : P.isDark ? 0.8 : 0.78
+        ctx.fill()
+        ctx.globalAlpha = 1
+
+        ctx.font = '700 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+        ctx.fillStyle = '#FFFFFF'
+        ctx.textAlign = 'center'
+        ctx.fillText(
+          isErr ? `UB OVERFLOW! ${ubUsed} / 192 KB` : `独享 UB: ${ubUsed} / 192 KB (Buf=${bufNum})`,
+          bx + bw / 2,
+          by + 14.5
+        )
+
+        ctx.textAlign = 'left'
+        ctx.font = '500 9.3px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+        ctx.fillStyle = P.muted
+        ctx.fillText(
+          stepFocus === 4 ? 'Vector SIMD: O ← α·O + O_cur 累加' : 'Vector SIMD: scale · mask · max · exp · sum',
+          sx + 8,
+          sy + subH - 11
+        )
+      }
+      ctx.textAlign = 'center'
+      ctx.font = '600 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('if (ASCEND_IS_AIV) { ... }', aiv.x + aiv.w / 2, aiv.y + aiv.h - 10)
+
+      // 4 DMA Conduits
+      arrow(hbm.x + 36, hbm.y + hbm.h, aic.x + 36, aic.y, P.ocean, s1, 'MTE2(Q/K/V)', 44, 0, ph, isErr)
+      arrow(aic.x + aic.w - 28, aic.y, l2.x + 26, l2.y + l2.h, P.orange, s2 || s4, 'FixPipe(S,O)', -40, 0, ph + 0.35, isErr)
+      arrow(l2.x + l2.w * 0.4, l2.y + l2.h, aiv.x + aiv.w * 0.28, aiv.y, P.kelp, s3 || s4, 'MTE2(读L2)', -36, 0, ph + 0.15, isErr)
+      arrow(aiv.x + aiv.w * 0.84, aiv.y, l2.x + l2.w * 0.84, l2.y + l2.h, P.plum, s3 || s4, 'MTE3(写P/O)', -40, 0, ph + 0.55, isErr)
+
+      // CrossCoreFlag Vertical Tag
+      ctx.save()
+      ctx.translate(aic.x + aic.w + 8, coreY + coreH * 0.5)
+      ctx.rotate(-Math.PI / 2)
+      ctx.font = '700 8.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isErr ? P.ibis : P.muted
+      ctx.textAlign = 'center'
+      ctx.fillText('CrossCoreFlag 同步', 0, 3)
+      ctx.restore()
+
+      /* Right Top: Dual-Die Floorplan (48 AIC + 96 AIV / 96 UB) */
+      const mapH = 186
+      rr(rightX, 10, rightW, mapH, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = P.border
+      ctx.lineWidth = 1.1
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = '700 10px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.fillText('910C DUAL-DIE FLOORPLAN', rightX + 10, 28)
+      ctx.font = '500 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('48 AIC + 96 AIV = 96 块 192KB UB', rightX + 10, 42)
+
+      const dieW = (rightW - 32) / 2
+      const dieY = 52
+      const dieH = 112
+      for (let d = 0; d < 2; d++) {
+        const dx = rightX + 10 + d * (dieW + 12)
+        rr(dx, dieY, dieW, dieH, 2)
+        ctx.fillStyle = P.subtle
+        ctx.fill()
+        ctx.strokeStyle = isErr ? P.ibis : P.border
+        ctx.lineWidth = 1
+        ctx.stroke()
+
+        ctx.textAlign = 'center'
+        ctx.font = '700 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+        ctx.fillStyle = P.ink
+        ctx.fillText(`DIE ${d}`, dx + dieW / 2, dieY + 13)
+
+        const cols = 4
+        const rows = 6
+        const cw = (dieW - 10) / cols
+        const ch = (dieH - 34) / rows
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const cx = dx + 5 + c * cw + cw * 0.5
+            const cy = dieY + 20 + r * ch + ch * 0.5
+            const wv = 0.5 + 0.5 * Math.sin(tick * 0.08 - (d * 4 + r + c) * 0.45)
+            ctx.fillStyle = isErr ? P.ibis : P.orange
+            ctx.globalAlpha = isErr ? 0.25 : 0.45 + 0.5 * wv
+            ctx.fillRect(cx - 5, cy - 3.5, 4.5, 7)
+            ctx.fillStyle = isErr ? P.ibis : P.kelp
+            ctx.fillRect(cx + 0.5, cy - 3.5, 3.8, 3)
+            ctx.fillRect(cx + 0.5, cy + 0.5, 3.8, 3)
+          }
+        }
+        ctx.globalAlpha = 1
+        ctx.font = '600 8.2px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+        ctx.fillStyle = P.muted
+        ctx.fillText('24 AIC · 48 UB', dx + dieW / 2, dieY + dieH - 5)
+      }
+      // D2D Bridge bar
+      ctx.fillStyle = isErr ? P.ibis : P.ocean
+      ctx.globalAlpha = isErr ? 0.35 : 0.85
+      ctx.fillRect(rightX + 10 + dieW + 4, dieY + 18, 4, dieH - 36)
+      ctx.globalAlpha = 1
+
+      ctx.textAlign = 'left'
+      ctx.font = '600 8.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('■ AIC(512KB L1)  ▪ 2×AIV(192KB UB)', rightX + 10, 10 + mapH - 8)
+
+      /* Right Bottom: 3-Pipe Timeline */
+      drawTimeline(
+        rightX,
+        10 + mapH + 10,
+        rightW,
+        H - (10 + mapH + 20),
+        isErr ? 'PIPE HALT (UB OVERFLOW)' : sc === 'f3_fix' ? 'SAFE PIPE (BUF=1)' : '3-PIPE PING-PONG (BUF=2)',
+        [
+          { name: 'MTE2', color: P.ocean, off: 0 },
+          { name: 'Cube', color: P.orange, off: 1 },
+          { name: '2×AIV', color: P.plum, off: 2 }
+        ],
+        isErr,
+        'UB_ALLOC_OVERFLOW',
+        sc === 'f3_fix' ? 0.62 : 0.88,
+        sc === 'f3_fix' ? 'BR=32 BC=32 D=256 · Split-S' : 'BR=64 BC=64 D=128 · G=4',
+        alarm
+      )
+    }
+
+    const drawH100 = (W: number, H: number, ph: number, alarm: number) => {
+      const P = pal()
+      const isErr = sc === 'f3_fail'
+      const isLse = sc === 'f3_fix'
+
+      const s1 = !isErr && (stepFocus === 0 || stepFocus === 1)
+      const s2 = !isErr && (stepFocus === 0 || stepFocus === 2)
+      const s3 = !isErr && (stepFocus === 0 || stepFocus === 3)
+      const s4 = !isErr && (stepFocus === 0 || stepFocus === 4)
+
+      const leftW = Math.floor(W * 0.68)
+      const rightX = leftW + 12
+      const rightW = W - rightX - 10
+
+      /* Top Band: 5+1 HBM3 + 50 MB Split L2 Crossbar */
+      const hbm = { x: 10, y: 10, w: leftW * 0.47, h: 52 }
+      const l2 = { x: hbm.x + hbm.w + 18, y: 10, w: leftW - (hbm.w + 38), h: 52 }
+
+      rr(hbm.x, hbm.y, hbm.w, hbm.h, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = isErr ? P.ibis : P.ocean
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isErr ? P.ibis : P.ocean
+      ctx.fillText('5+1 HBM3 STACKS (80 GB)', hbm.x + 10, hbm.y + 18)
+      ctx.font = '500 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText(isErr ? '仅跑出 0.41 / 3.35 TB/s (12%)' : '5 有效 + 1 熔断屏蔽 · 3.35 TB/s', hbm.x + 10, hbm.y + 32)
+      // Draw 5 active HBM3 bricks + 1 matte fused-off dummy brick!
+      const bW = (hbm.w - 28) / 6
+      for (let i = 0; i < 6; i++) {
+        const bx = hbm.x + 10 + i * (bW + 1.6)
+        if (i === 5) {
+          ctx.fillStyle = P.subtle
+          ctx.fillRect(bx, hbm.y + 40, bW - 1, 6)
+          ctx.strokeStyle = P.ibis
+          ctx.lineWidth = 0.8
+          ctx.strokeRect(bx, hbm.y + 40, bW - 1, 6)
+        } else {
+          ctx.fillStyle = isErr ? P.ibis : P.ocean
+          ctx.globalAlpha = isErr ? 0.35 : 0.82
+          ctx.fillRect(bx, hbm.y + 40, bW - 1, 6)
+        }
+      }
+      ctx.globalAlpha = 1
+
+      rr(l2.x, l2.y, l2.w, l2.h, 2)
+      ctx.fillStyle = isLse ? (P.isDark ? 'rgba(31,122,97,0.18)' : 'rgba(31,122,97,0.10)') : P.card
+      ctx.fill()
+      ctx.strokeStyle = isLse ? P.kelp : P.hardBorder
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isLse ? P.kelp : P.ink
+      ctx.fillText('50 MB SPLIT L2 CROSSBAR', l2.x + 10, l2.y + 18)
+      ctx.font = '500 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText(isLse ? 'Stage2: MidOut + MidLSE 跨 SM 归约' : '硬件透明缓存 · 算内无需借 L2 传 Softmax', l2.x + 10, l2.y + 33)
+      ctx.font = '700 8.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isLse ? P.kelp : P.ocean
+      ctx.fillText(isLse ? '★ Split-KV (S=8) + LSE COMBINE ACTIVE' : '✓ L2 Hit ~79% · 16B / 128B 合并访问', l2.x + 10, l2.y + 46)
+
+      arrow(hbm.x + hbm.w, hbm.y + 26, l2.x, l2.y + 26, isLse ? P.kelp : P.ocean, s1 || isLse, '', 0, 0, ph, isErr)
+
+      /* Core Row: Single UNIFIED SM Box (Showing Tensor Core + SIMT sharing SMEM & Registers in-place!) */
+      const smY = 104
+      const smH = H - smY - 10
+      const sm = { x: 10, y: smY, w: leftW - 20, h: smH }
+
+      rr(sm.x, sm.y, sm.w, sm.h, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = isErr ? P.ibis : P.hardBorder
+      ctx.lineWidth = 1.5
+      ctx.stroke()
+      ctx.fillStyle = isErr ? P.ibis : P.ocean
+      ctx.fillRect(sm.x, sm.y, sm.w, 3)
+
+      ctx.textAlign = 'left'
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isErr ? P.ibis : P.ink
+      ctx.fillText(
+        isErr ? '1× UNIFIED SM (警告：仅 16 / 132 SMs 干活，88% 空置!)' : '1× UNIFIED SM (整卡 132 SMs · 8 GPCs · 同核共享片上存储)',
+        sm.x + 12,
+        sm.y + 21
+      )
+
+      // Top inside SM: 228 KB SMEM / L1 + 256 KB Shared Register File
+      const memW = (sm.w - 36) / 2
+      const smem = { x: sm.x + 12, y: sm.y + 32, w: memW, h: 60 }
+      const regf = { x: smem.x + memW + 12, y: sm.y + 32, w: memW, h: 60 }
+
+      rr(smem.x, smem.y, smem.w, smem.h, 2)
+      ctx.fillStyle = P.subtle
+      ctx.fill()
+      ctx.strokeStyle = s1 ? P.ocean : P.border
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+      ctx.font = '700 10px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.fillText('228 KB SMEM / L1 (PER SM)', smem.x + 9, smem.y + 18)
+      ctx.font = '500 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('TMA 3-Stage 环队列 · K/V 组内复用 4×', smem.x + 9, smem.y + 33)
+      // SMEM fill gauge
+      rr(smem.x + 9, smem.y + 41, smem.w - 18, 12, 1.5)
+      ctx.fillStyle = P.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(23,23,22,0.08)'
+      ctx.fill()
+      rr(smem.x + 9, smem.y + 41, (smem.w - 18) * 0.52, 12, 1.5)
+      ctx.fillStyle = P.kelp
+      ctx.fill()
+      ctx.font = '700 8.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.textAlign = 'right'
+      ctx.fillText('116 / 228 KB ✓', smem.x + smem.w - 12, smem.y + 50.5)
+
+      rr(regf.x, regf.y, regf.w, regf.h, 2)
+      ctx.fillStyle = P.subtle
+      ctx.fill()
+      ctx.strokeStyle = s2 || s3 || s4 ? P.kelp : P.border
+      ctx.lineWidth = 1.2
+      ctx.stroke()
+      ctx.textAlign = 'left'
+      ctx.font = '700 10px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.fillText('256 KB REGISTER FILE (SHARED)', regf.x + 9, regf.y + 18)
+      ctx.font = '500 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('Q / 分数 S / 累加器 O 常驻寄存器', regf.x + 9, regf.y + 33)
+      ctx.font = '700 8.8px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.kelp
+      ctx.fillText('★ 零 L2 中转：Tensor ⇄ SIMT 原地直读', regf.x + 9, regf.y + 50)
+
+      // Bottom inside SM: 4th-Gen Tensor Core (Left) <-> CUDA SIMT / SFU (Right)
+      const compY = sm.y + 124
+      const compH = sm.h - 150
+      const tc = { x: sm.x + 12, y: compY, w: memW, h: compH }
+      const simt = { x: tc.x + memW + 12, y: compY, w: memW, h: compH }
+
+      rr(tc.x, tc.y, tc.w, tc.h, 2)
+      ctx.fillStyle = s2 || s4 ? (P.isDark ? 'rgba(216,90,38,0.22)' : 'rgba(216,90,38,0.11)') : P.subtle
+      ctx.fill()
+      ctx.strokeStyle = s2 || s4 ? P.orange : P.border
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+      ctx.textAlign = 'center'
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.orange
+      ctx.fillText('4TH-GEN TENSOR CORE', tc.x + tc.w / 2, tc.y + 24)
+      ctx.font = '600 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.fillText('WarpGroup MMA · QKᵀ & P·V', tc.x + tc.w / 2, tc.y + 44)
+      ctx.font = '500 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('989 TFLOPS BF16 · 直接写寄存器', tc.x + tc.w / 2, tc.y + 62)
+
+      rr(simt.x, simt.y, simt.w, simt.h, 2)
+      ctx.fillStyle = s3 || s4 ? (P.isDark ? 'rgba(126,87,166,0.22)' : 'rgba(126,87,166,0.11)') : P.subtle
+      ctx.fill()
+      ctx.strokeStyle = s3 || s4 ? P.plum : P.border
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+      ctx.font = '700 10.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.plum
+      ctx.fillText('CUDA SIMT / SFU CORES', simt.x + simt.w / 2, simt.y + 24)
+      ctx.font = '600 9.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.ink
+      ctx.fillText('Online Softmax (exp / max / sum)', simt.x + simt.w / 2, simt.y + 44)
+      ctx.font = '500 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText('与 Tensor Core 同处一 SM · 寄存器直通', simt.x + simt.w / 2, simt.y + 62)
+
+      // Internal SM zero-overhead links
+      arrow(smem.x + smem.w * 0.45, smem.y + smem.h, tc.x + tc.w * 0.45, tc.y, P.orange, s2 || s4, 'K/V Tile', -30, 0, ph + 0.2, isErr)
+      arrow(regf.x + regf.w * 0.55, regf.y + regf.h, simt.x + simt.w * 0.55, simt.y, P.plum, s3 || s4, 'Reg 直连', 32, 0, ph + 0.4, isErr)
+      arrow(tc.x + tc.w, tc.y + tc.h * 0.5, simt.x, simt.y + simt.h * 0.5, P.kelp, s2 || s3, '', 0, 0, ph, isErr)
+
+      ctx.textAlign = 'center'
+      ctx.font = '600 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText(
+        isLse ? 'Grid=(B, H_kv, S=8) → Stage2 LSE Combine @ 50MB L2' : 'Triton: @triton.jit · BLOCK_N=64, num_warps=4, num_stages=3',
+        sm.x + sm.w / 2,
+        sm.y + sm.h - 9
+      )
+
+      // Top DMA conduits HBM/L2 <-> SM
+      arrow(hbm.x + hbm.w * 0.38, hbm.y + hbm.h, sm.x + sm.w * 0.2, sm.y, P.ocean, s1, 'TMA cp.async (Q/K/V)', 58, 0, ph, isErr)
+      arrow(sm.x + sm.w * 0.76, sm.y, l2.x + l2.w * 0.52, l2.y + l2.h, isLse ? P.kelp : P.orange, s4 || isLse, isLse ? 'MidOut+LSE → L2' : 'Store Out → HBM', -56, 0, ph + 0.45, isErr)
+
+      /* Right Top: GH100 Monolithic 8-GPC (132 SMs) Occupancy Map */
+      const mapH = 186
+      rr(rightX, 10, rightW, mapH, 2)
+      ctx.fillStyle = P.card
+      ctx.fill()
+      ctx.strokeStyle = isErr ? P.ibis : P.border
+      ctx.lineWidth = isErr ? 1.4 : 1.1
+      ctx.stroke()
+
+      ctx.textAlign = 'left'
+      ctx.font = '700 10px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isErr ? P.ibis : P.ink
+      ctx.fillText('GH100 MONOLITHIC · 8 GPCs', rightX + 10, 28)
+      ctx.font = '500 9px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = isErr ? P.ibis : P.muted
+      ctx.fillText(isErr ? '16 / 132 SMs ACTIVE (88% IDLE!)' : isLse ? '128 / 132 SMs (Split-KV S=8)' : '132 / 132 SMs (Full Wave)', rightX + 10, 42)
+
+      const dieX = rightX + 12
+      const dieY = 52
+      const dieW = rightW - 24
+      const dieH = 112
+      rr(dieX, dieY, dieW, dieH, 2)
+      ctx.fillStyle = P.subtle
+      ctx.fill()
+      ctx.strokeStyle = P.border
+      ctx.stroke()
+
+      // Central 50MB L2 spine vertically down monolithic GH100
+      ctx.fillStyle = isLse ? P.kelp : P.ocean
+      ctx.globalAlpha = isLse ? 0.85 : 0.45
+      ctx.fillRect(dieX + dieW / 2 - 4, dieY + 6, 8, dieH - 12)
+      ctx.globalAlpha = 1
+
+      // 8 rows × 8 cols = 64 SM clusters across 8 GPC quadrants
+      const halfW = dieW / 2 - 10
+      const cw = halfW / 4
+      const ch = (dieH - 12) / 8
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const isRight = c >= 4
+          const lc = isRight ? c - 4 : c
+          const sx = isRight ? dieX + dieW / 2 + 7 + lc * cw : dieX + 4 + lc * cw
+          const sy = dieY + 6 + r * ch
+          const wv = 0.5 + 0.5 * Math.sin(tick * 0.08 - (r + c) * 0.45)
+          if (isErr) {
+            const busy = r === 0
+            ctx.fillStyle = busy ? P.ibis : P.muted
+            ctx.globalAlpha = busy ? 0.85 + 0.15 * alarm : 0.14
+          } else {
+            ctx.fillStyle = isLse && (c === 3 || c === 4) ? P.kelp : P.orange
+            ctx.globalAlpha = 0.45 + 0.5 * wv
+          }
+          ctx.fillRect(sx + 1, sy + 1, cw - 2.5, ch - 2.5)
+        }
+      }
+      ctx.globalAlpha = 1
+      ctx.textAlign = 'left'
+      ctx.font = '600 8.5px "Geist Mono Variable", ui-monospace, Menlo, monospace'
+      ctx.fillStyle = P.muted
+      ctx.fillText(isLse ? '■ 128 SMs  ■ 50MB L2 LSE 归约' : '■ 8 GPC (132 SMs)  ■ 50MB L2', rightX + 10, 10 + mapH - 8)
+
+      /* Right Bottom: 3-Stage TMA Timeline */
+      drawTimeline(
+        rightX,
+        10 + mapH + 10,
+        rightW,
+        H - (10 + mapH + 20),
+        isErr ? 'STARVED (16/132 SMs)' : isLse ? 'SPLIT-KV + LSE PIPE' : 'TMA 3-STAGE PIPE',
+        [
+          { name: 'TMA', color: P.ocean, off: 0 },
+          { name: 'Tensor', color: P.orange, off: 1 },
+          { name: 'SIMT', color: P.plum, off: 2 }
+        ],
+        isErr,
+        '88% SMs IDLE (12% BW)',
+        0.9,
+        isLse ? 'B=2 L=64K S=8 · +7.0× Speedup' : 'B=32 L=4K D=128 · 89% HBM3',
+        alarm
+      )
+    }
+
+    const render = () => {
+      const parent = dgCanvas.parentElement!
+      const W = Math.max(600, parent.clientWidth)
+      const H = parent.clientHeight || 400
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      if (dgCanvas.width !== Math.round(W * dpr) || dgCanvas.height !== Math.round(H * dpr)) {
+        dgCanvas.width = Math.round(W * dpr)
+        dgCanvas.height = Math.round(H * dpr)
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      const P = pal()
+      ctx.fillStyle = P.bg
+      ctx.fillRect(0, 0, W, H)
+      drawDraftingDots(W, H, P.dot)
+
+      const ph = tick * 0.015
+      const alarm = 0.5 + 0.5 * Math.sin(tick * 0.14)
+      if (arch === '910c') draw910C(W, H, ph, alarm)
+      else drawH100(W, H, ph, alarm)
+    }
+
+    let rafId = 0
+    const loop = () => {
+      rafId = requestAnimationFrame(loop)
+      if (!visible) return
+      if (!paused) tick++
+      render()
+    }
+
+    document.querySelectorAll<HTMLButtonElement>('#dgArchSeg button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        arch = (btn.dataset.arch as Arch) || '910c'
+        document.querySelectorAll<HTMLButtonElement>('#dgArchSeg button').forEach((b) => {
+          b.classList.toggle('active', b === btn)
+        })
+        syncUiText()
+        render()
+      })
+    })
+
+    document.querySelectorAll<HTMLButtonElement>('#dgScSeg button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        sc = (btn.dataset.sc as Sc) || 'f2'
+        document.querySelectorAll<HTMLButtonElement>('#dgScSeg button').forEach((b) => {
+          b.classList.toggle('active', b === btn)
+        })
+        syncUiText()
+        render()
+      })
+    })
+
+    document.querySelectorAll<HTMLButtonElement>('#dgStepSeg button[data-step]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        stepFocus = Number(btn.dataset.step)
+        document.querySelectorAll<HTMLButtonElement>('#dgStepSeg button[data-step]').forEach((b) => {
+          b.classList.toggle('active', b === btn)
+        })
+        syncUiText()
+        render()
+      })
+    })
+
+    pauseBtn.addEventListener('click', () => {
+      paused = !paused
+      pauseBtn.textContent = paused ? '▶' : '❚❚'
+      pauseBtn.classList.toggle('active', paused)
+    })
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        visible = entries[0]?.isIntersecting ?? true
+      },
+      { threshold: 0.05 }
+    )
+    io.observe(dgBox)
+
+    const ro = new ResizeObserver(render)
+    ro.observe(dgCanvas.parentElement!)
+
+    const mo = new MutationObserver(render)
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+
+    window.addEventListener('beforeunload', () => {
+      cancelAnimationFrame(rafId)
+      io.disconnect()
+      ro.disconnect()
+      mo.disconnect()
+    })
+
+    syncUiText()
+    loop()
+  }
+</script>
+
+<style>
+  .dg-frame {
+    background: hsl(var(--card));
+    border: 1.5px solid var(--ink-hard, #171716);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .dg-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.55rem;
+    padding: 0.62rem 0.9rem;
+    border-bottom: 1.5px solid var(--ink-hard, #171716);
+    background: hsl(var(--muted) / 0.45);
+  }
+
+  .dg-head-l {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 0.61rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: hsl(var(--foreground));
+  }
+
+  .dg-cross {
+    color: #D85A26;
+    font-weight: 700;
+  }
+
+  .dg-arch-seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    border: 1px solid var(--ink-hard, #171716);
+    background: hsl(var(--card));
+  }
+
+  .dg-seg-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    border: 0;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+  }
+
+  .dg-seg-btn + .dg-seg-btn {
+    border-left: 1px solid var(--ink-hard, #171716);
+  }
+
+  .dg-seg-btn i {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+  }
+
+  .dg-seg-btn em {
+    font-style: normal;
+    font-weight: 400;
+    opacity: 0.72;
+    font-size: 0.54rem;
+  }
+
+  .dg-seg-btn.active {
+    background: var(--ink-hard, #171716);
+    color: #F6F5F0;
+  }
+
+  :global(.dark) .dg-seg-btn.active {
+    background: #F0EFEA;
+    color: #171716;
+  }
+
+  .dg-subbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.52rem 0.9rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--muted) / 0.25);
+  }
+
+  .dg-scenarios,
+  .dg-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .dg-sc-btn,
+  .dg-step-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    font-family: var(--font-mono);
+    font-size: 0.57rem;
+    font-weight: 600;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+    transition: all 0.14s ease;
+  }
+
+  .dg-sc-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dg-sc-btn:hover,
+  .dg-step-btn:hover {
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--foreground));
+  }
+
+  .dg-sc-btn.active {
+    background: var(--ink-hard, #171716);
+    border-color: var(--ink-hard, #171716);
+    color: #F6F5F0;
+  }
+
+  :global(.dark) .dg-sc-btn.active {
+    background: #F0EFEA;
+    border-color: #F0EFEA;
+    color: #171716;
+  }
+
+  .dg-step-btn.active {
+    background: #D85A26;
+    border-color: #D85A26;
+    color: #FFFFFF;
+  }
+
+  .dg-stage {
+    position: relative;
+    width: 100%;
+    height: 396px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+
+  .dg-stage canvas {
+    display: block;
+    width: 100%;
+    min-width: 600px;
+    height: 100%;
+  }
+
+  .dg-spec-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 1rem;
+    padding: 0.72rem 0.9rem 0.78rem;
+  }
+
+  .dg-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .dg-cell span {
+    font-family: var(--font-mono);
+    font-size: 0.54rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: hsl(var(--faint));
+  }
+
+  .dg-cell strong {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: hsl(var(--foreground));
+    line-height: 1.45;
+  }
+
+  @media (max-width: 680px) {
+    .dg-stage {
+      height: 360px;
+    }
+    .dg-spec-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
