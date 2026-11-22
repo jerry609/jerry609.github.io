@@ -1,0 +1,304 @@
+---
+/**
+ * Interactive Thinking Machines (Connectionism)-styled Figure 2:
+ * Workloads -> Specialized Kernel Dispatch (kernel_1 .. kernel_4) -> 3-Regime Roofline.
+ * Click any workload regime to trace its routing path and watch its vector leap from
+ * a generic single-kernel baseline onto the physical Roofline boundary.
+ */
+---
+
+<figure class='tm-fig' id='fig-dispatch'>
+  <div class='rd-box' id='rdBox'>
+    <div class='rd-bar'>
+      <span class='rd-bar-k'>INTERACTIVE DISPATCH · CLICK A WORKLOAD</span>
+      <div class='rd-pills' id='rdPills' role='group' aria-label='选择 Workload 形态'>
+        <button class='rd-pill active' data-w='mem' type='button'>W1 · Decode / Bandwidth</button>
+        <button class='rd-pill' data-w='comp' type='button'>W2 · Prefill / GEMM</button>
+        <button class='rd-pill' data-w='lat' type='button'>W3 · Tiny Shape / Latency</button>
+        <button class='rd-pill' data-w='skew' type='button'>W4 · Skewed Varlen</button>
+      </div>
+    </div>
+
+    <svg id='rdSvg' viewBox='0 0 680 300' width='100%' role='img' aria-label='Workloads 到多 Kernel 路由与三段式 Roofline 投影图'></svg>
+
+    <div class='rd-readout' id='rdReadout'>
+      <div class='rd-metric'>
+        <span>ACTIVE ROUTE</span>
+        <strong id='rdRoute'>W1 (Decode B=16) → kernel_func1 (Vectorized Coalesced)</strong>
+      </div>
+      <div class='rd-metric'>
+        <span>TARGET CEILING</span>
+        <strong id='rdCeil' style='color:#0E9EE4'>Peak_bw (有效带宽利用率 38% → 91%)</strong>
+      </div>
+    </div>
+  </div>
+
+  <figcaption>
+    <strong>Figure 2: 从单 Kernel 退化到多 Kernel 路由（Workloads → Kernels → Roofline）。</strong>
+    点击上方 4 类代表性 Workload，观察不同输入形态如何经由四维约束诊断路由至对应特化 Kernel，并把性能从通用单 Kernel（空心灰点）垂直推向各自的三段式物理边界：带宽斜坡（<em>Peak<sub>bw</sub></em>）、算力屋顶（<em>Peak<sub>comp</sub></em>）或发射地板（<em>τ<sub>launch</sub></em>）。
+  </figcaption>
+</figure>
+
+<script>
+  const box = document.getElementById('rdBox')
+  const svg = document.getElementById('rdSvg')
+  const routeEl = document.getElementById('rdRoute')
+  const ceilEl = document.getElementById('rdCeil')
+  if (box && svg && routeEl && ceilEl) {
+    type WId = 'mem' | 'comp' | 'lat' | 'skew'
+    const DATA: Record<
+      WId,
+      {
+        label: string
+        wlY: number
+        kName: string
+        kSub: string
+        color: string
+        routeText: string
+        ceilText: string
+        baseX: number
+        baseY: number
+        optX: number
+        optY: number
+        regimeLabel: string
+      }
+    > = {
+      mem: {
+        label: 'W1 · Memory-bound',
+        wlY: 46,
+        kName: 'kernel_func1',
+        kSub: 'Vec128 · Split-K · Coalesced',
+        color: '#0E9EE4',
+        routeText: 'W1 (Decode / Reduction) → kernel_func1 (Vectorized BW)',
+        ceilText: 'Peak_bw · HBM 有效带宽逼近理论屋顶 (38% → 91%)',
+        baseX: 500,
+        baseY: 222,
+        optX: 500,
+        optY: 162,
+        regimeLabel: 'Memory-bound → Peak_bw'
+      },
+      comp: {
+        label: 'W2 · Compute-bound',
+        wlY: 108,
+        kName: 'kernel_func2',
+        kSub: 'Tensor MMA · Double-Buf',
+        color: '#E0523B',
+        routeText: 'W2 (Prefill / Large GEMM) → kernel_func2 (Tensor MMA Tile)',
+        ceilText: 'Peak_comp · Tensor/Cube 算力利用率逼近屋顶 (46% → 88%)',
+        baseX: 604,
+        baseY: 170,
+        optX: 604,
+        optY: 88,
+        regimeLabel: 'Compute-bound → Peak_comp'
+      },
+      lat: {
+        label: 'W3 · Launch-bound',
+        wlY: 170,
+        kName: 'kernel_func3',
+        kSub: 'Fused Persistent · Warp-Only',
+        color: '#7E4F8E',
+        routeText: 'W3 (Tiny Shape / Sync) → kernel_func3 (Fused Launch-Min)',
+        ceilText: 'τ_launch · 融合消除多次发射，总耗时逼近发射地板',
+        baseX: 432,
+        baseY: 244,
+        optX: 432,
+        optY: 212,
+        regimeLabel: 'Latency-bound → τ_launch'
+      },
+      skew: {
+        label: 'W4 · Skewed Varlen',
+        wlY: 232,
+        kName: 'kernel_func4',
+        kSub: 'Work-Stealing · Balanced CTA',
+        color: '#0E9972',
+        routeText: 'W4 (Varlen / MoE Skew) → kernel_func4 (Dynamic Work-Steal)',
+        ceilText: '消除尾波与长尾 CTA 木桶效应，恢复高 SM 占用',
+        baseX: 538,
+        baseY: 208,
+        optX: 538,
+        optY: 122,
+        regimeLabel: 'Balanced Occupancy → Roofline'
+      }
+    }
+
+    const order: WId[] = ['mem', 'comp', 'lat', 'skew']
+    let active: WId = 'mem'
+
+    const draw = () => {
+      const isDark = document.documentElement.classList.contains('dark')
+      const ink = isDark ? '#EAEAE6' : '#282828'
+      const muted = isDark ? '#989893' : '#676767'
+      const border = isDark ? '#343432' : '#D9D9D5'
+      const surface = isDark ? '#1E1E1D' : '#FAFAF8'
+      const cur = DATA[active]
+
+      let out = ''
+      // Column headers
+      out += `<text x="72" y="18" text-anchor="middle" font-family="Geist Mono Variable, monospace" font-size="9.5" fill="${muted}" letter-spacing="0.08em">WORKLOADS</text>`
+      out += `<text x="266" y="18" text-anchor="middle" font-family="Geist Mono Variable, monospace" font-size="9.5" fill="${muted}" letter-spacing="0.08em">KERNEL FAMILY</text>`
+      out += `<text x="526" y="18" text-anchor="middle" font-family="Geist Mono Variable, monospace" font-size="9.5" fill="${muted}" letter-spacing="0.08em">3-REGIME ROOFLINE</text>`
+
+      // Outer framing boxes for Workloads & Kernels (echoing user's red Excalidraw structure)
+      out += `<rect x="10" y="26" width="126" height="252" rx="2" fill="none" stroke="${border}" stroke-dasharray="3 3"/>`
+      out += `<rect x="190" y="26" width="152" height="252" rx="2" fill="none" stroke="${border}" stroke-dasharray="3 3"/>`
+
+      // Workload & Kernel nodes + connecting arrows
+      for (const id of order) {
+        const d = DATA[id]
+        const on = id === active
+        const fillW = on ? d.color : surface
+        const opW = on ? 0.14 : 1
+        const strokeW = on ? d.color : border
+
+        // Workload box
+        out += `<rect x="18" y="${d.wlY}" width="110" height="40" rx="2" fill="${fillW}" fill-opacity="${opW}" stroke="${strokeW}" stroke-width="${on ? 1.6 : 1}"/>`
+        out += `<text x="73" y="${d.wlY + 23}" text-anchor="middle" font-family="Geist Mono Variable, monospace" font-size="9" font-weight="${on ? 600 : 400}" fill="${on ? d.color : ink}">${d.label}</text>`
+
+        // Arrow Workload -> Kernel
+        const yMid = d.wlY + 20
+        out += `<line x1="128" y1="${yMid}" x2="195" y2="${yMid}" stroke="${on ? d.color : border}" stroke-width="${on ? 1.8 : 1}"/>`
+        out += `<polygon points="198,${yMid} 191,${yMid - 3.5} 191,${yMid + 3.5}" fill="${on ? d.color : border}"/>`
+
+        // Kernel box
+        out += `<rect x="198" y="${d.wlY}" width="136" height="40" rx="2" fill="${fillW}" fill-opacity="${opW}" stroke="${strokeW}" stroke-width="${on ? 1.6 : 1}"/>`
+        out += `<text x="266" y="${d.wlY + 17}" text-anchor="middle" font-family="Geist Mono Variable, monospace" font-size="9.5" font-weight="${on ? 600 : 500}" fill="${on ? d.color : ink}">${d.kName}</text>`
+        out += `<text x="266" y="${d.wlY + 31}" text-anchor="middle" font-family="Geist Mono Variable, monospace" font-size="7.5" fill="${muted}">${d.kSub}</text>`
+
+        // Connector from active Kernel to Roofline operating point
+        if (on) {
+          out += `<path d="M 334 ${yMid} C 368 ${yMid}, 372 ${d.optY}, ${d.optX - 10} ${d.optY}" fill="none" stroke="${d.color}" stroke-width="1.5" stroke-dasharray="4 3"/>`
+        }
+      }
+
+      // 3-Regime Roofline Plot (right panel x=392..666, y=38..264)
+      out += `<rect x="392" y="34" width="276" height="236" fill="${surface}" stroke="${border}"/>`
+      // Hairline grid
+      for (const gy of [84, 134, 184, 234]) {
+        out += `<line x1="406" y1="${gy}" x2="656" y2="${gy}" stroke="${border}" stroke-opacity="0.55" stroke-width="0.8"/>`
+      }
+      // Axes
+      out += `<line x1="406" y1="252" x2="656" y2="252" stroke="${muted}" stroke-width="1.1"/>`
+      out += `<line x1="406" y1="48" x2="406" y2="252" stroke="${muted}" stroke-width="1.1"/>`
+      // Regime split verticals
+      out += `<line x1="464" y1="54" x2="464" y2="252" stroke="${border}" stroke-dasharray="2 3"/>`
+      out += `<line x1="564" y1="54" x2="564" y2="252" stroke="${border}" stroke-dasharray="2 3"/>`
+
+      // Roofline 3-piece boundary: Launch Floor -> BW Ramp -> Compute Roof
+      out += `<polyline points="410,206 464,206" fill="none" stroke="#7E4F8E" stroke-width="2.2"/>`
+      out += `<polyline points="464,206 564,84" fill="none" stroke="#0E9EE4" stroke-width="2.2"/>`
+      out += `<polyline points="564,84 652,84" fill="none" stroke="#E0523B" stroke-width="2.2"/>`
+
+      // Direct serif inline labels (Connectionism style)
+      out += `<text x="436" y="197" text-anchor="middle" font-family="Source Serif 4 Variable, Georgia, serif" font-style="italic" font-size="10.5" fill="#7E4F8E">τ<tspan dy="2.5" font-size="7.5">launch</tspan></text>`
+      out += `<text x="504" y="131" text-anchor="middle" font-family="Source Serif 4 Variable, Georgia, serif" font-style="italic" font-size="10.5" fill="#0E9EE4">Peak<tspan dy="2.5" font-size="7.5">bw</tspan></text>`
+      out += `<text x="610" y="75" text-anchor="middle" font-family="Source Serif 4 Variable, Georgia, serif" font-style="italic" font-size="10.5" fill="#E0523B">Peak<tspan dy="2.5" font-size="7.5">comp</tspan></text>`
+
+      // Generic single-kernel baseline dot -> specialized optimal dot + vertical leap vector
+      out += `<line x1="${cur.baseX}" y1="${cur.baseY}" x2="${cur.optX}" y2="${cur.optY + 7}" stroke="${cur.color}" stroke-width="1.8"/>`
+      out += `<polygon points="${cur.optX},${cur.optY + 5} ${cur.optX - 3.5},${cur.optY + 12} ${cur.optX + 3.5},${cur.optY + 12}" fill="${cur.color}"/>`
+      out += `<circle cx="${cur.baseX}" cy="${cur.baseY}" r="4.5" fill="${surface}" stroke="${muted}" stroke-width="1.6"/>`
+      out += `<text x="${cur.baseX}" y="${cur.baseY + 14}" text-anchor="middle" font-family="Geist Mono Variable, monospace" font-size="7.5" fill="${muted}">Single Kernel</text>`
+      out += `<circle cx="${cur.optX}" cy="${cur.optY}" r="5.5" fill="${cur.color}" stroke="${isDark ? '#141413' : '#FFFFFF'}" stroke-width="1.5"/>`
+
+      // Axis caption
+      out += `<text x="531" y="266" text-anchor="middle" font-family="Geist Mono Variable, monospace" font-size="8.2" fill="${muted}">Arithmetic Intensity (FLOPs / Byte) · Log Scale</text>`
+
+      svg.innerHTML = out
+      routeEl.textContent = cur.routeText
+      ceilEl.textContent = cur.ceilText
+      ceilEl.style.color = cur.color
+    }
+
+    document.querySelectorAll<HTMLButtonElement>('#rdPills button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        active = (btn.dataset.w as WId) || 'mem'
+        document.querySelectorAll<HTMLButtonElement>('#rdPills button').forEach((b) => {
+          b.classList.toggle('active', b === btn)
+        })
+        draw()
+      })
+    })
+
+    draw()
+    new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+  }
+</script>
+
+<style>
+  .rd-box {
+    background: hsl(var(--card));
+    border: 1.5px solid var(--ink-hard, #171716);
+    padding: 0.9rem 1rem 0.85rem;
+  }
+  .rd-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-bottom: 0.7rem;
+    margin-bottom: 0.6rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .rd-bar-k {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    color: hsl(var(--faint));
+  }
+  .rd-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .rd-pill {
+    padding: 3px 8px;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 500;
+    border: 1px solid hsl(var(--border));
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .rd-pill:hover {
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--foreground));
+  }
+  .rd-pill.active {
+    background: hsl(var(--foreground));
+    border-color: hsl(var(--foreground));
+    color: hsl(var(--background));
+  }
+  .rd-readout {
+    margin-top: 0.6rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid hsl(var(--border));
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+  .rd-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .rd-metric span {
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    color: hsl(var(--faint));
+  }
+  .rd-metric strong {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: hsl(var(--foreground));
+  }
+  @media (max-width: 640px) {
+    .rd-readout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

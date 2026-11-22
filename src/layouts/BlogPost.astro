@@ -239,9 +239,17 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
 <style>
   .post {
     display: grid;
-    grid-template-columns: 14.5rem minmax(0, 46rem) minmax(0, 1fr);
+    grid-template-columns: 14.5rem minmax(0, 44rem) minmax(0, 1fr);
     gap: 2.75rem;
     margin-top: 2.5rem;
+  }
+  @media (min-width: 1320px) {
+    .post:not(.no-rail) {
+      width: min(82rem, calc(100vw - 3.5rem));
+      margin-left: calc(50% - min(41rem, calc(50vw - 1.75rem)));
+      grid-template-columns: 14rem minmax(0, 42.5rem) 16rem;
+      gap: 2.75rem;
+    }
   }
   .post.no-rail {
     grid-template-columns: minmax(0, 46rem);

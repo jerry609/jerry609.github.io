@@ -645,3 +645,93 @@ body::-webkit-scrollbar {
 .astro-code:has(> .language) > pre code::before {
   top: 0;
 }
+
+/* ---------- Thinking Machines (Connectionism) Editorial Primitives ---------- */
+.prose blockquote.epigraph {
+  margin: 1.6em 0 1.8em 0.5rem;
+  padding: 0.15em 0 0.15em 1.25rem;
+  border-left: 3px solid hsl(var(--faint) / 0.55);
+  font-family: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
+  font-style: italic;
+  font-size: 1.03em;
+  line-height: 1.65;
+  color: hsl(var(--muted-foreground));
+}
+.prose .tm-takeaways {
+  margin: 1.5rem 0 2.2rem;
+  padding: 1.1rem 1.25rem;
+  background: hsl(var(--card));
+  border: 1.5px solid var(--ink-hard, #171716);
+  border-top: 4px solid var(--c-l6, #fa6d01);
+}
+.prose .tm-takeaways-head {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-l6, #fa6d01);
+  margin-bottom: 0.55rem;
+}
+.prose .tm-takeaways ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+.prose .tm-takeaways li {
+  margin: 0.35rem 0;
+  font-size: 0.94rem;
+  line-height: 1.65;
+}
+/* Tufte right-margin sidenotes (float cleanly into the 3rd grid column on >=1320px) */
+.prose .sn-ref {
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+  font-weight: 600;
+  vertical-align: super;
+  line-height: 0;
+  margin-left: 0.12em;
+  color: var(--c-l6, #fa6d01);
+}
+.prose aside.sidenote {
+  margin: 0.9rem 0 1.25rem;
+  padding: 0.6rem 0.9rem;
+  border-left: 2px solid hsl(var(--border));
+  background: hsl(var(--band));
+  font-size: 0.84rem;
+  line-height: 1.58;
+  color: hsl(var(--muted-foreground));
+}
+.prose aside.sidenote .sn-num {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--c-l6, #fa6d01);
+  margin-right: 0.4rem;
+}
+@media (min-width: 1320px) {
+  .prose aside.sidenote {
+    float: right;
+    clear: right;
+    width: 15.2rem;
+    margin: 0.15rem -18rem 1rem 2rem;
+    padding: 0 0 0 0.85rem;
+    background: transparent;
+    border-left: 1px solid hsl(var(--border));
+    font-size: 0.8rem;
+    line-height: 1.52;
+  }
+}
+/* Connectionism borderless editorial figure styling */
+.prose figure.tm-fig {
+  margin: 2.25rem 0;
+}
+.prose figure.tm-fig figcaption {
+  margin-top: 0.75rem;
+  font-size: 0.83rem;
+  line-height: 1.58;
+  color: hsl(var(--muted-foreground));
+}
+.prose figure.tm-fig figcaption strong {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}

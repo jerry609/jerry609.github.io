@@ -1,0 +1,157 @@
+---
+title: '跨 Workload 算子优化：从四维性能约束到多 Kernel 路由'
+description: '参考 Thinking Machines (Connectionism) 研究博客范式撰写的大纲：从 Operator × Workloads × Hardware 出发，经由四维约束诊断与多 Kernel 分发逼近三段式 Roofline 边界。'
+publishDate: '2026-06-08'
+layer: systems
+cover:
+  label: 'ROOFLINE'
+  variant: 'paper'
+tags: ['kernel', 'roofline', 'gpu', 'npu', 'cuda', 'triton']
+language: 'zh-CN'
+draft: false
+---
+
+import ConstraintMatrixFig from '@/components/blog/ConstraintMatrixFig.astro'
+import RooflineDispatchFig from '@/components/blog/RooflineDispatchFig.astro'
+
+<div class="tm-takeaways">
+  <div class="tm-takeaways-head">Essay Outline · Research Blueprint (WIP)</div>
+  <ul>
+    <li><strong>核心论点</strong>：在多 Workload 真实推理与训练负载下，不存在一把通吃的“万能 Kernel”——单一参数化模板无法同时贴近带宽屋顶、算力屋顶与发射延迟地板。</li>
+    <li><strong>诊断框架</strong>：将 <code>Operator × Workloads × Hardware</code> 拆解为 4 个正交约束维度（瓶颈类型、SM 占用与波次、负载分布偏度、静态维度与片上资源边界）。</li>
+    <li><strong>系统闭环</strong>：依据四维约束把 Workload 空间切分为物理同质子域，分别映射到专门化的 <code>kernel_func1..k</code>，把每个子域推向各自的三段式 Roofline 物理极限。</li>
+  </ul>
+</div>
+
+<blockquote class="epigraph">
+  “单点最优的 Kernel 往往只赢在一张静态形状表里；跨 Workload 的性能悬崖，本质上是硬件物理边界在不同区域发生相变的结果。”
+</blockquote>
+
+## 1. 引言：打破“单 Kernel 通吃”的幻觉
+
+<aside class="sidenote">
+  <span class="sn-num">1</span>
+  写作节奏对齐 Thinking Machines Lab 的 <em>Defeating Nondeterminism in LLM Inference</em>：不以“本文提出了一个框架”开场，而是先用工程师一眼共鸣的反直觉现象击破常见误解，再层层剥开底层硬件物理机制。
+</aside>
+
+**本节写作目标**：用一个具体、可复现的反直觉观察开篇——为什么某个在基准 shape 上调到 90% 硬件利用率的 CUDA / Triton Kernel，一旦放进包含短 prompt、长上下文 decode、变长 batch 或 MoE 路由偏斜的真实 Workload 集合里，平均吞吐就会出现断崖式回落？<span class="sn-ref">1</span>
+
+- **常见误区（The Common Misconception）**：工程上习惯把性能退化归咎于“自动调优搜索轮数不够”或“缺少更细的 Tile 参数网格”。
+- **真实根因（The Physical Phase Transition）**：当输入形状与负载分布跨越硬件临界点时，算子面对的**物理敌人本身变了**——从 HBM 带宽墙切换为 Tensor/Cube 算力墙，再切换为 Kernel 发射与全局同步地板，或是陷入 SM 尾波空转与寄存器溢出。
+- **全文主线公式（三段式延迟下界）**：
+
+$$
+T_{\mathrm{ideal}}(w) = \max\!\left(\tau_{\mathrm{launch}},\;\; \frac{\mathrm{Bytes}(w)}{\mathrm{Peak}_{\mathrm{bw}}},\;\; \frac{\mathrm{FLOPs}(w)}{\mathrm{Peak}_{\mathrm{comp}}}\right)
+$$
+
+## 2. 三类性能边界家族：不同的物理敌人
+
+**本节写作目标**：把经典的双段 Roofline 显式扩展为包含发射地板的**三类优化家族**，明确每一类家族唯一需要逼近的物理指标：
+
+1. **Memory-bound 家族（带宽受限）**
+   - **目标**：把有效 HBM 带宽利用率逼近硬件理论上限 $\mathrm{Peak}_{\mathrm{bw}}$。
+   - **关键手段**：128-bit 向量化合并访存、消除冗余中间张量写回（Kernel Fusion）、Split-K / 并行归约提升并发度、L2 Cache 驻留策略。
+2. **Compute-bound 家族（算力受限）**
+   - **目标**：把有效 Tensor Core / NPU Cube 算力利用率逼近 $\mathrm{Peak}_{\mathrm{comp}}$。
+   - **关键手段**：大矩阵分块对齐 MMA/Cube 指令颗粒度、双缓冲异步预取（TMA / MTE2）掩盖访存延迟、提升算术强度使操作点落于 Ridge Point 右侧。
+3. **Launch / Latency-bound 家族（发射与同步受限）**
+   - **目标**：把端到端耗时逼近发射与同步地板 $\tau_{\mathrm{launch}}$。
+   - **关键手段**：小形状下继续调 Tile 毫无收益，核心在于多算子融合、CUDA Graph / Persistent Kernel 消除高频启动开销，以及 Warp-level 原语替代 Block-level 同步。
+
+<aside class="sidenote">
+  <span class="sn-num">2</span>
+  在 Horace He 的 <em>Defeating Nondeterminism</em>（Figure 11）中，batch size 增大时出现的锯齿状性能抖动（jigsaw pattern），正是 Tile 量化与 Wave Quantization 叠加的直接体现。
+</aside>
+
+## 3. Constraint & Performance Analysis：拆解性能的四个维度
+
+**本节写作目标**：从 `Operator + Workloads + Hardware` 三元组出发，建立一套**可量化、可诊断、可直接指导搜索空间划分**的四维分析框架<span class="sn-ref">2</span>：
+
+<ConstraintMatrixFig />
+
+### 3.1 瓶颈类型（Bottleneck Regime）
+
+- 计算给定 Workload $w$ 的算术强度 $\mathrm{AI}(w) = \mathrm{FLOPs}(w) / \mathrm{Bytes}(w)$ 与硬件拐点 $I_{\mathrm{ridge}} = \mathrm{Peak}_{\mathrm{comp}} / \mathrm{Peak}_{\mathrm{bw}}$ 的相对位置。
+- 识别何时进入 $\tau_{\mathrm{launch}}$ 支配区间（即 $\max(\mathrm{Bytes}/\mathrm{Peak}_{\mathrm{bw}}, \mathrm{FLOPs}/\mathrm{Peak}_{\mathrm{comp}}) \lesssim \tau_{\mathrm{launch}}$）。
+
+### 3.2 SM 占用与波次（SM Occupancy & Wave Quantization）
+
+- 当网格总块数 $\mathrm{GridSize}$ 不能整除芯片满载并行容量 $N_{\mathrm{SM}} \times \mathrm{CTAs/SM}$ 时，最后一个“尾波（Tail Wave）”会导致大量 SM 空转。
+- 解释为什么有时**故意缩小 Tile** 以增加 Block 数，反而能让两波变一波或填满尾波，实现净加速。
+
+### 3.3 负载分布偏度（Load Distribution Skew）
+
+- 针对变长序列（Varlen Attention）、稀疏路由（MoE）或不规则归约：全局完成时间由最慢的那个 CTA 决定（$\max_i t(\mathrm{CTA}_i)$）。
+- 静态均分调度在高偏度分布下必然退化，需要动态任务窃取（Work-Stealing）或持久队列（Persistent Queue）重新拉平负载。
+
+### 3.4 关键静态维度与片上资源边界（Static Dims & On-Chip Cliffs）
+
+- 关键维度（如 `head_dim`、`hidden_size`、`K` 维）与 Tile 参数共同决定每个 CTA 消耗的 **Shared Memory / UB** 与 **Register File**。
+- 一旦越过硬件容量阈值，驻留 CTA 数出现台阶式腰斩，甚至触发 Local Memory 寄存器溢出（Register Spill），形成性能悬崖。
+
+## 4. 从单点调优到空间划分：Workloads → Kernel Family → Roofline
+
+**本节写作目标**：解释为什么跨 Workload 算子优化的正确抽象不是“更复杂的单模板”，而是**由四维约束诱导的 Workload 空间划分与多 Kernel 家族映射**（`kernel_func1, kernel_func2, kernel_func3, ...`）。
+
+<RooflineDispatchFig />
+
+- **为什么单模板内的运行时分支不够？** 寄存器分配、Shared Memory 静态声明与循环展开均在**编译期**锁定；把 Memory-bound 路径与 Compute-bound 路径硬塞进同一个 Kernel，会导致最坏路径的寄存器压力污染所有轻路径，直接拖垮 Occupancy。
+- **多 Kernel 集合的构造原则**：
+  1. 每个子域内四维约束同质（同一物理边界、无资源悬崖跳变）；
+  2. 每个子域对应一个结构特化的 `kernel_func_i`；
+  3. 外层由轻量零分支开销的 Dispatch Table 按静态维度与硬件特征完成路由。
+
+## 5. 最小分发框架与算子案例剖析（待填实测代码）
+
+**本节写作目标**：给出一段 20 行左右的极简分发与特化代码对照（遵循 *Connectionism* 的“可读伪代码 + 真实可运行 Kernel”传统），并以 2–3 个代表性算子（如 `RMSNorm / Reduction`、`Grouped GEMM`、`FlashAttention Varlen`）逐一展开剖析。
+
+```python
+# Dispatch skeleton: route workload w to the kernel matching its physical regime
+def dispatch_operator(x, meta, hw):
+    regime = analyze_constraints(meta.shape, meta.skew, hw)
+
+    if regime.is_launch_bound:
+        # Minimize launch & barrier overhead -> approach tau_launch
+        return kernel_func3_fused_persistent(x, meta)
+    if regime.is_skewed:
+        # Flatten long-tail CTAs -> eliminate barrier stragglers
+        return kernel_func4_work_stealing(x, meta)
+    if regime.is_memory_bound:
+        # Maximize coalesced HBM throughput -> approach Peak_bw
+        return kernel_func1_vec128_splitk(x, meta)
+    # Maximize Tensor/Cube MMA pipeline -> approach Peak_comp
+    return kernel_func2_mma_double_buffered(x, meta)
+```
+
+## 6. 实验验证蓝图（待填数据与图表）
+
+**本节写作目标**：参考 *LoRA Without Regret* 与 *Defeating Nondeterminism* 的极简图表美学（白底细网格、L 型坐标轴、曲线末端直标系列名、无多余装饰），计划呈现 3 组核心实验：
+
+| 实验组 | 对比对象 | 核心观测指标 | 计划图表形式 |
+|---|---|---|---|
+| **Exp 1 · 跨 Workload 覆盖** | 单一最优 Kernel vs. 多 Kernel 家族 | 全 Workload 几何平均加速比 & 最差尾部分位 | 热力图 / 矢量迁徙 Roofline 图 |
+| **Exp 2 · 物理边界逼近度** | 三类家族分别对照理论极限 | 实测带宽 / $\mathrm{Peak}_{\mathrm{bw}}$、算力 / $\mathrm{Peak}_{\mathrm{comp}}$、耗时 / $\tau_{\mathrm{launch}}$ | 分区散点 Roofline（带直接标注） |
+| **Exp 3 · 跨硬件泛化** | GPU（SM / SRAM / TMA）⇄ NPU（Cube+Vec / UB / MTE） | 相同四维诊断迁移后的达峰率与搜索成本 | 双栏对比折线图 |
+
+## 7. 附录：Thinking Machines (*Connectionism*) 博客设计逆向笔记
+
+为了保证这篇研究长文在视觉和阅读体验上高度贴近 `thinkingmachines.ai/blog`，我们逆向提取了 *Connectionism* 的核心设计规范并已部分融入本博客模板：
+
+1. **三栏 Tufte 书卷栅格**：左侧常驻细目（`210px` 无衬线体 + 动态定位圆点）、中间黄金行宽正文（`660px` 衬线书卷体，行高 `1.6`）、右侧独立边注（`250px` 宽 + `64px` 留白通道，移动端自动折叠）。
+2. **极度克制的色彩纪律**：正文与链接全程采用暖灰单色墨水（**不使用刺眼的默认蓝链**），把全部色彩预算留给**结构示意图（哑光阶梯透明度色块 + `1px` 细括号箭头 + 衬线斜体标注）**、**实验曲线**以及**语法高亮**。
+3. **书本式层级对比**：一级/二级标题采用稳重衬线体，三级小标题采用优雅的书本斜体（`italic`），图注（`figcaption`）与数据表改用冷静的无衬线体拉开“正文叙事”与“技术元数据”的声部差异。
+4. **可引用与可复现收尾**：每篇研究博文以简短的 `Conclusion` + 开放问题收束，并附标准纯文本与 BibTeX 引用块，使单篇博客本身具备学术技术报告的归档价值。
+
+## Citation
+
+正文与实验定稿后，将按如下格式提供引用：
+
+```bibtex
+@article{zhang2026crossworkload,
+  author  = {Jerry Zhang},
+  title   = {跨 Workload 算子优化：从四维性能约束到多 Kernel 路由},
+  journal = {jerry609 Research Notes},
+  year    = {2026},
+  url     = {https://jerry609.github.io/blog/cross-workload-kernel-roofline-outline}
+}
+```

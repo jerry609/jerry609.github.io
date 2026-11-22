@@ -1,0 +1,213 @@
+---
+/**
+ * Thinking Machines (Connectionism)-styled 2x2 Small Multiples editorial SVG diagram
+ * illustrating the 4 Constraint & Performance Analysis dimensions from the user's sketch:
+ * 1. Bottleneck Regime  2. SM Occupancy & Wave Quantization
+ * 3. Load Distribution Skew  4. Static Dims & On-Chip Resource Cliffs
+ */
+---
+
+<figure class='tm-fig' id='fig-constraints'>
+  <div class='cm-grid'>
+    <!-- 1. Bottleneck Type -->
+    <div class='cm-card'>
+      <div class='cm-head'>
+        <span class='cm-idx'>01</span>
+        <span class='cm-title'>瓶颈类型 · Bottleneck Regime</span>
+      </div>
+      <svg viewBox='0 0 280 142' width='100%' role='img' aria-label='三段式瓶颈分区：Launch 地板、带宽斜坡、算力屋顶'>
+        <!-- Soft regime tint bands (Connectionism matte stepped alpha) -->
+        <rect x='30' y='18' width='62' height='98' fill='#7E4F8E' fill-opacity='0.11' />
+        <rect x='92' y='18' width='86' height='98' fill='#0E9EE4' fill-opacity='0.11' />
+        <rect x='178' y='18' width='88' height='98' fill='#E0523B' fill-opacity='0.11' />
+        <!-- Axes -->
+        <line x1='30' y1='116' x2='266' y2='116' stroke='currentColor' stroke-opacity='0.45' stroke-width='1' />
+        <line x1='30' y1='18' x2='30' y2='116' stroke='currentColor' stroke-opacity='0.45' stroke-width='1' />
+        <!-- Dashed boundaries -->
+        <line x1='92' y1='18' x2='92' y2='116' stroke='currentColor' stroke-opacity='0.22' stroke-dasharray='3 3' />
+        <line x1='178' y1='18' x2='178' y2='116' stroke='currentColor' stroke-opacity='0.22' stroke-dasharray='3 3' />
+        <!-- 3-regime Roofline curve -->
+        <polyline points='34,94 92,94' fill='none' stroke='#7E4F8E' stroke-width='2.4' />
+        <polyline points='92,94 178,34' fill='none' stroke='#0E9EE4' stroke-width='2.4' />
+        <polyline points='178,34 262,34' fill='none' stroke='#E0523B' stroke-width='2.4' />
+        <!-- Dots -->
+        <circle cx='62' cy='94' r='3.6' fill='#7E4F8E' />
+        <circle cx='135' cy='64' r='3.6' fill='#0E9EE4' />
+        <circle cx='222' cy='34' r='3.6' fill='#E0523B' />
+        <!-- Serif editorial labels -->
+        <text x='61' y='108' text-anchor='middle' class='cm-serif' fill='#7E4F8E'>τ<tspan dy='2.5' font-size='7'>launch</tspan></text>
+        <text x='135' y='51' text-anchor='middle' class='cm-serif' fill='#0E9EE4'>Peak<tspan dy='2.5' font-size='7'>bw</tspan></text>
+        <text x='222' y='28' text-anchor='middle' class='cm-serif' fill='#E0523B'>Peak<tspan dy='2.5' font-size='7'>comp</tspan></text>
+        <text x='61' y='131' text-anchor='middle' class='cm-sub'>Launch</text>
+        <text x='135' y='131' text-anchor='middle' class='cm-sub'>Memory</text>
+        <text x='222' y='131' text-anchor='middle' class='cm-sub'>Compute</text>
+      </svg>
+    </div>
+
+    <!-- 2. SM Occupancy & Wave Quantization -->
+    <div class='cm-card'>
+      <div class='cm-head'>
+        <span class='cm-idx'>02</span>
+        <span class='cm-title'>SM 占用与波次 · Wave Quantization</span>
+      </div>
+      <svg viewBox='0 0 280 142' width='100%' role='img' aria-label='Wave 1 满载与 Wave 2 尾波空转对比'>
+        <!-- Wave 1 (Full occupancy: 12 SMs active, stepped amber/terracotta) -->
+        <text x='18' y='24' class='cm-serif' fill='currentColor'>Wave 1 (100% SM)</text>
+        <g transform='translate(18, 32)'>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <rect
+              x={i * 20.5}
+              y='0'
+              width='17.5'
+              height='24'
+              rx='1'
+              fill='#E0523B'
+              fill-opacity={(0.92 - i * 0.045).toFixed(2)}
+            />
+          ))}
+        </g>
+        <!-- Wave 2 (Tail wave: only 3 SMs active, 9 SMs idle -> 38% total waste!) -->
+        <text x='18' y='78' class='cm-serif' fill='currentColor'>Wave 2 (Tail · 25% SM)</text>
+        <g transform='translate(18, 86)'>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <rect
+              x={i * 20.5}
+              y='0'
+              width='17.5'
+              height='24'
+              rx='1'
+              fill={i < 3 ? '#F59E0B' : 'none'}
+              fill-opacity={i < 3 ? (0.9 - i * 0.12).toFixed(2) : '0'}
+              stroke={i < 3 ? 'none' : 'currentColor'}
+              stroke-opacity={i < 3 ? '0' : '0.28'}
+              stroke-dasharray={i < 3 ? undefined : '2 2'}
+            />
+          ))}
+        </g>
+        <!-- Idle bracket -->
+        <path d='M 80 116 L 80 121 L 260 121 L 260 116' fill='none' stroke='currentColor' stroke-opacity='0.5' stroke-width='1' />
+        <text x='170' y='135' text-anchor='middle' class='cm-sub'>Idle SMs · Tail Wave Overhead</text>
+      </svg>
+    </div>
+
+    <!-- 3. Load Distribution Skew -->
+    <div class='cm-card'>
+      <div class='cm-head'>
+        <span class='cm-idx'>03</span>
+        <span class='cm-title'>负载分布偏度 · Load Skew</span>
+      </div>
+      <svg viewBox='0 0 280 142' width='100%' role='img' aria-label='长尾 CTA 拖慢全局 Barrier 同步'>
+        <g transform='translate(44, 18)'>
+          {[
+            { label: 'CTA 0', w: 58, c: '#0E9EE4', op: 0.72 },
+            { label: 'CTA 1', w: 46, c: '#0E9EE4', op: 0.62 },
+            { label: 'CTA 2', w: 64, c: '#0E9EE4', op: 0.78 },
+            { label: 'CTA 3', w: 204, c: '#E0523B', op: 0.9 },
+            { label: 'CTA 4', w: 52, c: '#0E9EE4', op: 0.66 }
+          ].map((b, i) => (
+            <g transform={`translate(0, ${i * 19})`}>
+              <text x='-8' y='11' text-anchor='end' class='cm-sub'>{b.label}</text>
+              <rect x='0' y='1' width={b.w} height='13' rx='1' fill={b.c} fill-opacity={b.op} />
+              {b.w < 200 && (
+                <line
+                  x1={b.w + 3}
+                  y1='7.5'
+                  x2='204'
+                  y2='7.5'
+                  stroke='currentColor'
+                  stroke-opacity='0.22'
+                  stroke-dasharray='2 2'
+                />
+              )}
+            </g>
+          ))}
+          <!-- Global sync barrier -->
+          <line x1='204' y1='-4' x2='204' y2='98' stroke='#E0523B' stroke-width='1.5' stroke-dasharray='3 2' />
+          <text x='184' y='114' text-anchor='middle' class='cm-serif' fill='#E0523B'>Barrier = max(CTA_i)</text>
+        </g>
+      </svg>
+    </div>
+
+    <!-- 4. Static Dims & On-Chip Resource Cliffs -->
+    <div class='cm-card'>
+      <div class='cm-head'>
+        <span class='cm-idx'>04</span>
+        <span class='cm-title'>静态维度与片上边界 · On-Chip Cliff</span>
+      </div>
+      <svg viewBox='0 0 280 142' width='100%' role='img' aria-label='Tile 增大导致 Shared Memory 与 Register 越界引发占用断崖'>
+        <!-- Axes -->
+        <line x1='34' y1='114' x2='262' y2='114' stroke='currentColor' stroke-opacity='0.45' stroke-width='1' />
+        <line x1='34' y1='18' x2='34' y2='114' stroke='currentColor' stroke-opacity='0.45' stroke-width='1' />
+        <!-- Resource capacity wall -->
+        <line x1='174' y1='18' x2='174' y2='114' stroke='#E0523B' stroke-width='1.3' stroke-dasharray='3 2' />
+        <text x='174' y='14' text-anchor='middle' class='cm-serif' fill='#E0523B'>SRAM / Reg Limit</text>
+        <!-- Occupancy step-down cliff (Connectionism stepped blocks) -->
+        <polyline
+          points='40,34 114,34 114,58 174,58 174,98 256,98'
+          fill='none'
+          stroke='#0E9972'
+          stroke-width='2.4'
+        />
+        <!-- Spill zone -->
+        <rect x='174' y='58' width='84' height='56' fill='#E0523B' fill-opacity='0.1' />
+        <text x='216' y='83' text-anchor='middle' class='cm-serif' fill='#E0523B'>Reg Spill</text>
+        <text x='216' y='95' text-anchor='middle' class='cm-sub'>Occupancy Drop</text>
+        <text x='77' y='29' text-anchor='middle' class='cm-serif' fill='#0E9972'>4 CTAs/SM</text>
+        <text x='144' y='53' text-anchor='middle' class='cm-serif' fill='#0E9972'>2 CTAs</text>
+        <text x='148' y='131' text-anchor='middle' class='cm-sub'>Static Dim / Tile Size (BLOCK_M, BLOCK_K)</text>
+      </svg>
+    </div>
+  </div>
+
+  <figcaption>
+    <strong>Figure 1: Constraint &amp; Performance Analysis 的四个正交诊断维度。</strong>
+    对于同一算子，仅调单一 Tile 模板无法同时解决三区物理跃迁（01）、SM 尾波空转（02）、长尾偏度木桶效应（03）与片上 SRAM / 寄存器断崖（04）；这四个维度直接决定了应该把 Workload 空间切分为哪几个专门化 Kernel 子域。
+  </figcaption>
+</figure>
+
+<style>
+  .cm-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .cm-card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    padding: 0.75rem 0.85rem 0.55rem;
+  }
+  .cm-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+  .cm-idx {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--c-l6, #fa6d01);
+  }
+  .cm-title {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: hsl(var(--foreground));
+    letter-spacing: 0.02em;
+  }
+  .cm-serif {
+    font-family: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
+    font-style: italic;
+    font-size: 9.5px;
+  }
+  .cm-sub {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    fill: hsl(var(--muted-foreground));
+  }
+  @media (max-width: 640px) {
+    .cm-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
