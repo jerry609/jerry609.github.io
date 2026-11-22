@@ -160,8 +160,8 @@
   </div>
 
   <figcaption>
-    <strong>Figure 1: Constraint &amp; Performance Analysis 的四个正交诊断维度。</strong>
-    对于同一算子，仅调单一 Tile 模板无法同时解决三区物理跃迁（01）、SM 尾波空转（02）、长尾偏度木桶效应（03）与片上 SRAM / 寄存器断崖（04）；这四个维度直接决定了应该把 Workload 空间切分为哪几个专门化 Kernel 子域。
+    <strong>Figure 1: Four orthogonal diagnostic dimensions for operator analysis.</strong>
+    同一算子在跨负载运行时，会依次面对三区物理跃迁、SM 尾波空转、长尾负载偏度与片上容量断崖。这四个维度共同决定负载空间应当切分为哪些专门化内核家族。
   </figcaption>
 </figure>
 

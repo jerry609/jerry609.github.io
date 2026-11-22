@@ -144,8 +144,8 @@ const famColor = (f: 'F1' | 'F2' | 'F3') =>
   </div>
 
   <figcaption>
-    <strong>Figure 2: 双平台真实算子的 Workload Case 分布与物理分区边界。</strong>
-    左图展示 H100 上 FlashInfer-Bench <code>gqa_decode</code> 的 36 个 case 如何沿 <code>B·H_kv = 132 SMs</code> 饱和线与长序列轴自然分裂为 <code>F1 / F2 / F3</code>；右图展示 Ascend 910 上 CANN-Bench v2.1 <code>flash_attention</code> 的 20 个 case 在 <code>192 KB UB</code> 双缓冲硬容量墙两侧发生合法性与性能断崖。
+    <strong>Figure 2: Cross-platform workload distributions and physical partition boundaries.</strong>
+    左图展示 H100 上 FlashInfer-Bench 的 36 个 <code>gqa_decode</code> 用例如何沿 132 SM 饱和线与长序列轴分裂为三个家族。右图展示 Ascend 910 上 CANN-Bench v2.1 的 20 个 <code>flash_attention</code> 用例如何在 192 KB 片上 UB 容量边界两侧发生合法性与性能跳变。
   </figcaption>
 </figure>
 

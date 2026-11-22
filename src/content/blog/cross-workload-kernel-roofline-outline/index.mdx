@@ -1,6 +1,6 @@
 ---
-title: 'Cross-Workload Kernel Dispatch: 4D Analysis to Roofline'
-description: '4D constraint analysis, workload case distributions, per-family kernels, and continuous-predicate dispatch on FlashInfer (H100 GQA) and CANN-Bench (Ascend 910).'
+title: 'Cross-Workload Kernel Dispatch'
+description: 'Four-dimensional hardware analysis, cross-platform workload distributions, per-family kernels, and continuous-predicate dispatch on H100 GQA and Ascend 910.'
 publishDate: '2026-06-08'
 layer: systems
 cover:
@@ -16,71 +16,65 @@ import WorkloadDistFig from '@/components/blog/WorkloadDistFig.astro'
 import RooflineDispatchFig from '@/components/blog/RooflineDispatchFig.astro'
 
 <div class="tm-takeaways">
-  <div class="tm-takeaways-head">Key Takeaways · Cross-Platform Kernel Case Study</div>
+  <div class="tm-takeaways-head">Summary</div>
   <ul>
-    <li><strong>不存在万能单 Kernel</strong>：即使对同一个 <code>GQA</code> 算子，输入形状与分布跨越临界点后，瓶颈会在发射地板（$\tau_{\mathrm{launch}}$）、HBM 带宽屋顶（$\mathrm{Peak}_{\mathrm{bw}}$）、算力屋顶（$\mathrm{Peak}_{\mathrm{comp}}$）与片上容量悬崖之间发生相变。</li>
-    <li><strong>双平台实证拆解</strong>：在 NVIDIA H100（FlashInfer-Bench <code>gqa_decode</code>）上，36 个 workload 沿 <code>B·H_kv = 132 SMs</code> 饱和线自然分裂为 <code>F1 / F2 / F3</code>；在 Ascend 910（CANN-Bench v2.1 <code>flash_attention</code>）上，20 个 workload 在 <code>192 KB UB</code> 双缓冲硬墙两侧呈现截然不同的合法性与最优结构。</li>
-    <li><strong>独立编写 + 连续谓词组装</strong>：为每个物理同质子域分别编写结构特化的 <code>kernel_F1 / F2 / F3</code>，再由基于物理量的连续路由谓词（严禁硬编码 <code>case_id</code>）组装为统一入口。</li>
+    <li><strong>物理瓶颈随负载切换</strong>：同一算子跨越输入形状临界点后，主导延迟会在发射地板 $\tau_{\mathrm{launch}}$、带宽屋顶 $\mathrm{Peak}_{\mathrm{bw}}$、算力屋顶 $\mathrm{Peak}_{\mathrm{comp}}$ 与片上容量边界之间迁移。</li>
+    <li><strong>双平台分布实证</strong>：H100 上 FlashInfer-Bench 的 36 个 <code>gqa_decode</code> 用例沿 132 SM 饱和线分裂为三个家族。Ascend 910 上 CANN-Bench v2.1 的 20 个 <code>flash_attention</code> 用例在 192 KB 片上 UB 容量边界两侧形成明显断崖。</li>
+    <li><strong>分族实现与连续路由</strong>：系统将四维画像、独立特化内核与连续物理谓词路由拆为三个模块，在不硬编码用例编号的前提下消除跨负载长尾退化。</li>
   </ul>
 </div>
 
 <blockquote class="epigraph">
-  “单点最优的 Kernel 往往只赢在一张静态形状表里；跨 Workload 的性能悬崖，本质上是硬件物理边界在不同区域发生相变的结果。”
+  单点最优的内核往往只赢在一张静态形状表里。跨负载的性能退化，本质上是硬件主导瓶颈在不同区域发生切换的结果。
 </blockquote>
 
-## 1. Why a Single Tuned Kernel Collapses Across Workloads
+## 1. The Single-Kernel Failure Mode
 
-<aside class="sidenote">
-  <span class="sn-num">1</span>
-  本文叙事结构参考 Thinking Machines Lab 的 <em>Defeating Nondeterminism in LLM Inference</em>：先揭示单点调优在真实 serving 分布下的反直觉退化，再通过第一性物理模型与逐段特化代码把整条优化链路讲透。
-</aside>
+在 LLM 推理与训练场景中，同一个算子经常面临跨度极大的输入分布。某个内核在中等批次形状上可以达到 88% 的 HBM 带宽利用率。然而，当它运行在包含单条短请求、高并发批处理与 128K 长上下文的完整测试集上时，整体几何平均加速比会显著下降。最差 20% 的长尾用例甚至慢于基线实现。
 
-在 LLM 推理与训练系统里，算子工程师经常遇到一个令人困惑的现象：某个在典型 shape 上跑出 88% HBM 带宽利用率的 CUDA / Triton Kernel，一旦放进完整的 benchmark 集合（同时包含 `B=1` 短上下文交互、`B=64` 高并发吞吐、以及 `128K` 长上下文或变长 ragged 请求），整体几何平均加速比会明显回落，最差 20% 长尾 case 甚至比基线更慢。<span class="sn-ref">1</span>
-
-常见直觉会认为这是“自动调优搜索轮数不够”或“Tile 网格没扫细”。但只要把算子的端到端理想耗时写成三段式物理下界，根因就会立刻浮出水面：
+工程实践常把这种回落归因于调优轮数不足或分块网格过粗。只要把算子的理想执行时间写成三段式延迟下界，真正的原因就会清晰呈现。对任意输入负载 $w$，理想延迟下界 $T_{\mathrm{ideal}}(w)$ 由发射地板 $\tau_{\mathrm{launch}}$、带宽屋顶 $\mathrm{Peak}_{\mathrm{bw}}$ 与算力屋顶 $\mathrm{Peak}_{\mathrm{comp}}$ 共同决定：
 
 $$
 T_{\mathrm{ideal}}(w) = \max\!\left(\tau_{\mathrm{launch}},\;\; \frac{\mathrm{Bytes}(w)}{\mathrm{Peak}_{\mathrm{bw}}},\;\; \frac{\mathrm{FLOPs}(w)}{\mathrm{Peak}_{\mathrm{comp}}}\right)
 $$
 
-同一个算子在不同 Workload $w$ 上面对的**物理敌人本身不同**：
+这条下界把负载空间划分成三类互斥的优化目标。**访存受限家族**需要把有效 HBM 带宽逼近带宽屋顶 $\mathrm{Peak}_{\mathrm{bw}}$。**算力受限家族**需要把矩阵计算单元利用率逼近算力屋顶 $\mathrm{Peak}_{\mathrm{comp}}$。**发射受限家族**的数据搬运与计算耗时均低于数微秒，唯一有效路径是减少启动与同步次数，使总耗时逼近发射地板 $\tau_{\mathrm{launch}}$。
 
-- **Memory-bound 家族**：把有效 HBM 带宽利用率逼近 $\mathrm{Peak}_{\mathrm{bw}}$；
-- **Compute-bound 家族**：把有效 Tensor / Cube 算力利用率逼近 $\mathrm{Peak}_{\mathrm{comp}}$；
-- **Launch / Latency-bound 家族**：小形状下访存和计算时间都小于数微秒，唯一能做的是把总耗时逼近发射与同步地板 $\tau_{\mathrm{launch}}$。
+单一参数化内核无法同时满足这三类目标。GPU 的寄存器分配与 Shared Memory 声明在编译期确定。同样地，Ascend NPU 的片上 Unified Buffer 缓冲深度也在编译期确定。如果把重流水线路径与轻量路径写进同一内核的分支里，最重路径的资源占用会降低所有轻量路径的驻留线程块数。
 
-更关键的是，GPU 的寄存器分配、Shared Memory 静态声明，以及 Ascend NPU 的 `TPipe/TQue` Unified Buffer 双缓冲决策，都在**编译期**锁定。强行把三条相反的硬件路径塞进同一个 Kernel 的 `if/else` 里，最重路径的寄存器和片上内存占用会拖垮所有轻路径的 Occupancy。
+为此，跨负载算子优化系统由三个职责分离的角色协作完成。**四维画像器**根据输入形状与硬件上限提取瓶颈特征，并把测试集划分为物理同质的负载家族。**分族内核集合**为每个家族独立编译结构特化的实现。**连续谓词路由器**在运行时按张量维度与轻量统计量选择对应内核，保证调用入口与单算子一致。
 
-## 2. Constraint & Performance Analysis: Four Orthogonal Dimensions
+## 2. Four Diagnostic Constraints
 
-<aside class="sidenote">
-  <span class="sn-num">2</span>
-  在 Horace He 的 <em>Defeating Nondeterminism</em>（Figure 11）中，batch size 连续增大时出现的锯齿状性能抖动（jigsaw pattern），正是 Tile 量化与 Wave Quantization 叠加的直观体现。
-</aside>
-
-给定三元组 `(Operator, Workloads, Hardware)`，在动手写任何一行 Kernel 代码之前，先沿四个正交维度做一次静态 + 轻量画像诊断<span class="sn-ref">2</span>：
+划分负载家族之前，四维画像器先对算子、负载集合与硬件上限三元组执行结构化诊断。每个维度都对应一类确定的硬件性能退化机制，且可直接映射为后续内核的结构决策。
 
 <ConstraintMatrixFig />
 
-1. **瓶颈类型（Bottleneck Regime）**：对比算术强度 $\mathrm{AI}(w) = \mathrm{FLOPs}(w) / \mathrm{Bytes}(w)$ 与硬件拐点 $I_{\mathrm{ridge}} = \mathrm{Peak}_{\mathrm{comp}} / \mathrm{Peak}_{\mathrm{bw}}$，同时检查 $\max(\mathrm{Bytes}/\mathrm{Peak}_{\mathrm{bw}}, \mathrm{FLOPs}/\mathrm{Peak}_{\mathrm{comp}})$ 是否已落入发射地板 $\tau_{\mathrm{launch}}$ 以内。
-2. **SM / Core 占用与波次（Wave Quantization）**：计算网格并行度与芯片核数之比 $\mathrm{wave\_ratio} = N_{\mathrm{blocks}} / N_{\mathrm{cores}}$。当 $\mathrm{wave\_ratio} \ll 1$ 时大量核心空转；当 $\mathrm{wave\_ratio} = 1.15$ 时，第二波（Tail Wave）仅占 15% 核心却拉长近一倍延迟。
-3. **负载分布偏度（Load Distribution Skew）**：在变长序列（Ragged / Varlen）或稀疏路由下，全局耗时由最慢的 CTA 决定（$\max_i t(\mathrm{CTA}_i)$），偏度比 $\mathrm{skew\_ratio} = \max(L_i) / \mathrm{mean}(L_i)$ 越大，静态均分调度退化越剧烈。
-4. **关键静态维度与片上资源边界（Static Dims & On-Chip Cliffs）**：`head_dim`、对齐粒度（CUDA `16B` vs. Ascend `32B`）与片上容量上限（H100 `228 KB` SMEM/SM vs. Ascend 910 **`192 KB` UB/AIV**）构成硬悬崖——越过阈值轻则触发 Register Spill、占用率腰斩，重则在 NPU 上直接编译/运行报错。
+**维度一：瓶颈类型。** 四维画像器首先比较负载 $w$ 的算术强度 $\mathrm{AI}(w) = \mathrm{FLOPs}(w) / \mathrm{Bytes}(w)$ 与硬件拐点 $I_{\mathrm{ridge}} = \mathrm{Peak}_{\mathrm{comp}} / \mathrm{Peak}_{\mathrm{bw}}$。如果访存下界与算力下界均不大于两倍发射地板 $\tau_{\mathrm{launch}}$，该负载归入发射受限家族。否则，系统依据算术强度位于硬件拐点左侧或右侧，将其归入访存受限或算力受限家族。
 
-## 3. Case Distribution Analysis: FlashInfer GQA vs. CANN-Bench FlashAttention
+**维度二：核心占用与波次量化。** 设网格总块数为 $N_{\mathrm{blocks}}$，芯片计算核心数为 $N_{\mathrm{cores}}$，波次比定义为 $\mathrm{wave\_ratio} = N_{\mathrm{blocks}} / N_{\mathrm{cores}}$。当波次比远小于 1 时，大部分核心处于空闲状态。当波次比略大于整数如 1.15 时，最后一个尾波仅使用 15% 的核心，却使端到端延迟接近翻倍。
 
-下面我们直接拿两个跨平台代表算子做完整的 **Case Distribution 拆解**：
+**维度三：负载分布偏度。** 在变长序列注意力或稀疏专家路由中，不同线程块承担的计算量差异显著。全局同步延迟取决于耗时最长的单个线程块。当偏度比 $\mathrm{skew\_ratio} = \max(L_i) / \mathrm{mean}(L_i)$ 超过 1.5 时，静态均分调度会导致大多数核心提前结束并空等长尾块。
 
-| 硬件平台与基准 | 代表算子 | 峰值算力 (BF16) | HBM 带宽 | 核心数 | 片上内存硬边界 | 发射地板 $\tau_{\mathrm{launch}}$ | 对齐约束 |
+**维度四：静态维度与片上容量边界。** 头维度 $D$、地址对齐粒度与片上缓存上限构成硬性物理边界。NVIDIA H100 的单个 SM 拥有 228 KB Shared Memory，对齐粒度为 16 字节。Huawei Ascend 910 的单个 Vector 核仅拥有 192 KB Unified Buffer，且搬运指令要求 32 字节对齐。分块工作集一旦越过上限，在 GPU 上会引发寄存器溢出与占用率骤降，在 Ascend 上则会直接触发片上内存溢出错误。
+
+<aside class="sidenote">
+  <span class="sn-num">Note</span>
+  在 Horace He 的 <em>Defeating Nondeterminism in LLM Inference</em> 中，随着批次增大出现的周期性锯齿抖动，正是维度二波次量化与分块量化的直接叠加表现。
+</aside>
+
+## 3. H100 GQA Decode Case Study
+
+下面我们拆解 NVIDIA H100 80GB SXM5 上 FlashInfer-Bench 的 36 个 `gqa_decode` 用例。下表先将 H100 与 Ascend 910 的关键硬件边界并列对照。
+
+| Platform | Operator | BF16 Peak | HBM BW | Cores | On-Chip Limit | Launch Floor | Align |
 |---|---|---|---|---|---|---|---|
-| **NVIDIA H100 80GB SXM5** (FlashInfer-Bench) | `gqa_decode` (36 cases) | `989 TFLOPS` | `3,350 GB/s` | `132 SMs` | `228 KB` SMEM / SM | `~4 µs` | `16 B` |
-| **Huawei Ascend 910** (CANN-Bench v2.1 L4) | `flash_attention` GQA (20 cases) | `320 TFLOPS` | `1,200 GB/s` | `32 Cores` | **`192 KB` UB / AIV** (`512 KB` L1 / AIC) | `~12 µs` | **`32 B`** |
+| NVIDIA H100 SXM5 | `gqa_decode` | 989 TFLOPS | 3,350 GB/s | 132 SMs | 228 KB SMEM | 4 µs | 16 B |
+| Huawei Ascend 910 | `flash_attention` | 320 TFLOPS | 1,200 GB/s | 32 Cores | 192 KB UB | 12 µs | 32 B |
 
 <WorkloadDistFig />
 
-### 3.1 Case A — FlashInfer-Bench `gqa_decode` on H100 (36 Workloads)
-
-设典型 Grouped-Query Attention 配置为 $H_q = 32,\; H_{kv} = 8$（分组比 $G = H_q / H_{kv} = 4$），头维度 $D = 128$，BF16（2 Bytes）。对单个 Decode step，读取整个 Paged KV Cache 的字节数与计算量近似为：
+考虑典型的分组查询注意力配置：查询头数 $H_q = 32$，键值头数 $H_{kv} = 8$，分组比 $G = H_q / H_{kv} = 4$，头维度 $D = 128$，数值精度为 BF16。对批次大小 $B$ 与键值缓存长度 $L$，单步解码的访存字节数与浮点计算量满足如下关系：
 
 $$
 \begin{aligned}
@@ -89,68 +83,61 @@ $$
 \end{aligned}
 $$
 
-两者相除得到 GQA Decode 的核心算术强度：
+将两式相除，可以得到 `gqa_decode` 的理论算术强度：
 
 $$
 \begin{aligned}
 \mathrm{AI}_{\mathrm{GQA\text{-}decode}} &\approx G\;\text{FLOPs/Byte} \\
-(G=4 &\Rightarrow 4\text{–}8\;\text{FLOPs/Byte} \ll I_{\mathrm{ridge}}^{\mathrm{H100}} = 295)
+G = 4 &\Rightarrow 4\text{–}8\;\text{FLOPs/Byte} \ll I_{\mathrm{ridge}}^{\mathrm{H100}} = 295
 \end{aligned}
 $$
 
-也就是说，GQA Decode 在宏观上几乎永远不是 Compute-bound，但 36 个 case 在 **(Batch $B$, KV 长度 $L$, 变长偏度)** 平面上仍然剧烈分裂为 **3 个互斥的物理家族**：
+这一宏观算术强度远低于 H100 的硬件拐点 295。尽管如此，全部 36 个用例按批次大小 $B$、缓存长度 $L$ 与长度偏度仍分裂为三个互斥家族。
 
-| Workload Family | Case 分布特征（36 cases） | 四维诊断画像 | 单 Kernel 为何在此退化 | 最优 Kernel 结构策略 |
-|---|---|---|---|---|
-| **F1 · Small-B / Short-KV** | 12 cases: $B \in [1, 8],\; L \in [128, 1024]$ | `Bytes ≈ 0.5–16 MB`，理想访存耗时仅 `0.15–4.8 µs`，与 $\tau_{\mathrm{launch}} \approx 4\;\mu\text{s}$ 同量级；不切分时 `B·H_kv = 8..64 ≪ 132 SMs` | 若强行套用长 KV 的两阶段 Split-KV，多一次 reduction kernel 发射（`+4 µs`）与中间结果写回，直接把总延迟拖慢 20%+ | **`kernel_F1`**：单遍 Warp-Fused GQA，一个 CTA 打包整组 $G=4$ 个 Q heads，零 Split、零全局 workspace、直接写回输出 |
-| **F2 · Mid/Large-B Streaming** | 12 cases: $B \in [16, 64],\; L \in [1024, 8192]$ | `B·H_kv = 128..512` 自然打满 `132 SMs`（`wave_ratio ≈ 1.0–3.9`）；完全处于 **Memory-bound ($\mathrm{Peak}_{\mathrm{bw}}$)** 甜区 | 过度 Split-K 反而破坏 L2 缓存局部性、引入额外同步；向量化不足或页表寻址串行化会拖低 HBM3 通道利用率 | **`kernel_F2`**：单阶段 Paged-KV 流式 Kernel，3 级异步流水（`cp.async` / `num_stages=3`），128-bit 合并读 KV 页，每个 KV 块在寄存器内被 $G$ 个 Q head 复用 $G$ 次 |
-| **F3 · Long-KV / Ragged Skew** | 12 cases: $B \in [1, 8],\; L \in [16\text{K}, 128\text{K}]$，偏度达 `2.4×` | `B·H_kv = 8..64` 仅占 H100 不到一半 SM，**SM 严重饥饿**；且变长 batch 中单个 `128K` 请求拖死全批同步（Load Skew） | 无 Split-KV 的 F2 方案在长序列上只跑几个 SM，带宽利用率暴跌至 30% 以下 | **`kernel_F3`**：两阶段 **Dynamic Split-KV + LSE Combine**，按序列长度动态计算 `num_splits` 使总块数对齐 `132 SMs` 的整数倍，长请求拆成更多块消除偏度木桶效应 |
+**家族 F1：小批次短缓存，共 12 个用例。** 该家族的批次大小 $B$ 位于 1 到 8 之间，缓存长度 $L$ 位于 128 到 1,024 之间。总访存量仅为 0.5 到 16 MB，理想带宽耗时在 0.15 到 4.8 微秒之间，与 4 微秒的发射地板处于同一量级。如果在此区域套用两阶段 Split-KV 内核，额外的一次归约内核发射和中间张量写回会使总延迟增加超过 20%。因此，F1 需要单遍融合内核，在一个线程块内打包整组 $G$ 个查询头，省去切分缓冲与二次启动。
 
-### 3.2 Case B — CANN-Bench v2.1 `flash_attention` (GQA) on Ascend 910 (20 Workloads)
+**家族 F2：中大批次流式访存，共 12 个用例。** 该家族的批次大小 $B$ 位于 16 到 64 之间，缓存长度 $L$ 位于 1,024 到 8,192 之间。基础线程块数 $B \cdot H_{kv}$ 达到 128 到 512，自然覆盖 132 个 SM，波次比落在 1.0 到 3.9 的高效区间。在此区域继续切分序列会破坏 L2 缓存局部性并增加归约开销。因此，F2 需要单阶段多级异步流式内核，每次读取一个 KV 块就在寄存器内复用 $G$ 次，把有效带宽推向 3,350 GB/s 上限。
 
-切换到华为昇腾 Ascend 910（`Ascend910_9382`）时，硬件约束的重心从“SM 波次”显著转向 **Da Vinci 解耦架构（Cube AIC 与 Vector AIV 分离）+ 严苛的 `192 KB` Unified Buffer 硬容量墙 + `32B` 内存对齐**。20 个 GQA FlashAttention case 按序列长度 $S$ 与头维度 $D$ 分裂为三个家族：
+**家族 F3：小批次超长缓存与变长偏度，共 12 个用例。** 该家族的批次大小 $B$ 位于 1 到 8 之间，缓存长度 $L$ 跨越 16K 到 128K，变长批次中的偏度比可达 2.4。如果不沿序列维切分，网格规模仅有 8 到 64 个线程块，超过一半的 SM 处于空闲状态。同时，最长的 128K 请求会阻塞整个批次的结束同步。因此，F3 采用两阶段动态 Split-KV 内核。第一阶段将每个长序列拆为多个并行块，使总块数对齐 132 个 SM。第二阶段再由数值稳定的 Log-Sum-Exp 归约内核合并局部结果。
 
-| Workload Family | Case 分布特征（20 cases） | 四维诊断画像 | 单 Kernel 为何在此退化/报错 | 最优 Kernel 结构策略 |
-|---|---|---|---|---|
-| **F1 · Short-Seq** | 7 cases: $S \in [128, 512],\; B \in [1, 4]$ | 核并行度不足 32 核，且 $\tau_{\mathrm{launch}} \approx 12\;\mu\text{s}$ 与 `MTE2/MTE3` 管线冷启动占比高 | 过大的 `Br/Bc` 分块导致核间负载不均，重型 Ping-Pong 队列初始化徒增延迟 | **`kernel_F1`**：小分块（`Br=32, Bc=64`）单遍 UB 驻留融合，尾块严格对齐 `32B`（16 个 FP16） |
-| **F2 · UB Ping-Pong Sweet Spot** | 7 cases: $S \in [1024, 4096],\; D = 128$ | `Br=64, Bc=64` 下的 `QKᵀ` 得分块与 Softmax 缓冲在 **`BUFFER_NUM = 2`** 时约占 `148 KB < 192 KB`；进入 **Compute-bound ($\mathrm{Peak}_{\mathrm{comp}}$)** 甜区 | 单缓冲无法掩盖 `GM → L1 → UB` 的 MTE 搬运延迟，Cube 单元频繁等数据 | **`kernel_F2`**：开启 **`BUFFER_NUM = 2` Ping-Pong 双缓冲**，让 `MTE2` 搬运、`Cube` 矩阵乘、`Vector` Online Softmax 三级流水完全重叠 |
-| **F3 · UB Overflow Cliff** | 6 cases: $S \in [8192, 32768]$ 或 $D = 256$ | 若沿用 F2 的 `BUFFER_NUM = 2` + `Bc=64`，片上工作集突破 `192 KB`（`exceeds_onchip_mem = True`），**直接触发 UB Overflow 硬错误** | 不仅是性能变慢，而是**编译/运行直接失败**；若盲目切太小又会造成核数不足与 MTE 碎片化 | **`kernel_F3`**：关闭 UB 双缓冲（**`BUFFER_NUM = 1`**），收窄 `Bc=32` 保证工作集严格 `< 192 KB`，同时沿 $S$ 维做 **Multi-Core Split-S** 铺满 32 核并做跨核 LSE 归并 |
+## 4. Ascend FlashAttention Case Study
 
-## 4. Writing Each Specialized Kernel Independently
+将目标平台切换为 Huawei Ascend 910 后，CANN-Bench v2.1 的 20 个 `flash_attention` 用例呈现出不同的主导约束。Da Vinci 架构将矩阵计算单元 AIC 与向量计算单元 AIV 物理分离。中间数据须经由 MTE2 与 MTE3 搬运通道显式进出 192 KB 的 Unified Buffer。片上容量上限与 32 字节对齐约束因此成为首要分族依据。
+
+**家族 F1：短序列轻负载，共 7 个用例。** 该家族的序列长度 $S$ 位于 128 到 512 之间，批次大小 $B$ 位于 1 到 4 之间。任务块数低于 32 个核心，且 12 微秒的发射与管线冷启动开销占比偏高。大尺寸分块会加剧核心间负载不均。因此，F1 采用小尺寸分块与单缓冲结构，在单次 UB 驻留循环内完成计算，并把尾部维度对齐到 32 字节。
+
+**家族 F2：UB 双缓冲适用区间，共 7 个用例。** 该家族的序列长度 $S$ 位于 1,024 到 4,096 之间，头维度 $D$ 为 128。在行分块 $B_r = 64$ 与列分块 $B_c = 64$ 的配置下，开启双缓冲 `BUFFER_NUM = 2` 时的片上工作集约为 148 KB，低于 192 KB 硬上限。此时 MTE2 数据预取、AIC 矩阵乘与 AIV 在线 Softmax 可以完全重叠，使算子进入算力受限区间并逼近 320 TFLOPS 算力屋顶。
+
+**家族 F3：UB 容量溢出悬崖，共 6 个用例。** 该家族包含 8K 到 32K 的长序列或头维度 $D = 256$ 的大通道输入。如果沿用 F2 的双缓冲与 `Bc = 64` 模板，片上工作集超过 192 KB，触发编译或运行期的 UB 溢出错误。因此，F3 必须将模板切换为单缓冲 `BUFFER_NUM = 1`，收窄列分块至 `Bc = 32` 以确保合法性，并沿序列维拆分多核任务以维持 32 核心的并行占用。
+
+## 5. Specialized Family Kernels
+
+完成双平台的分布拆解后，我们为每个家族分别编写结构独立的内核。独立编译确保每个家族只保留自身必需的寄存器与片上缓存，避免重路径拖累轻路径。
 
 <RooflineDispatchFig />
 
-下面展示如何把上述物理分析直接翻译为**彼此独立、无相互污染的专门化 Kernel**，最后再由连续谓词路由器组装起来。
+### 5.1 H100 Triton Kernels
 
-### 4.1 H100 GQA Decode — Per-Family Kernels (Triton)
-
-先写 **F1（Launch-Min 单遍融合）** 与 **F2（Paged-KV 多级流水线）**，两者均不需要全局临时缓冲与第二次 Kernel 发射：
+首先实现面向 F1 与 F2 的单遍融合内核 `gqa_decode_singlepass`。同一个程序块一次性将同组的 $G$ 个查询头载入寄存器，随后沿页表遍历 KV 缓存，使每页 HBM 数据被复用 $G$ 次。编译器会按不同编译期参数将它分别特化为低寄存器占用的 F1 二进制与三级异步流水的 F2 二进制。
 
 ```python
 import triton
 import triton.language as tl
 
-# ---------------------------------------------------------------------------
-# Family F1: Small-B / Short-KV -> Minimize tau_launch (Single-pass, zero split)
-# Each program handles 1 (batch, kv_head) and packs all G query heads together.
-# ---------------------------------------------------------------------------
 @triton.jit
-def gqa_decode_f1_singlepass(
+def gqa_decode_singlepass(
     Q, K_cache, V_cache, PageTable, SeqLens, Out,
     stride_qb, stride_qh, stride_qd,
     stride_kp, stride_kh, stride_kl, stride_kd,
     stride_pt_b, stride_pt_p,
     sm_scale,
-    G: tl.constexpr,          # H_q // H_kv (e.g. 4 or 8)
-    D: tl.constexpr,          # head_dim (e.g. 128)
-    PAGE_SIZE: tl.constexpr,  # e.g. 16
-    BLOCK_N: tl.constexpr,    # e.g. 32 (light registers, fast launch)
+    G: tl.constexpr, D: tl.constexpr,
+    PAGE_SIZE: tl.constexpr, BLOCK_N: tl.constexpr,
 ):
     b = tl.program_id(0)
     kv_h = tl.program_id(1)
     seq_len = tl.load(SeqLens + b)
 
-    # Load all G query heads once into registers: [G, D]
     offs_g = tl.arange(0, G)
     offs_d = tl.arange(0, D)
     q_ptrs = Q + b * stride_qb + (kv_h * G + offs_g[:, None]) * stride_qh + offs_d[None, :] * stride_qd
@@ -166,15 +153,10 @@ def gqa_decode_f1_singlepass(
         page_idx = tl.load(PageTable + b * stride_pt_b + (offs_n // PAGE_SIZE) * stride_pt_p, mask=mask_n, other=0)
         page_off = offs_n % PAGE_SIZE
 
-        # Read KV once, reuse across all G query heads (G-fold HBM traffic reduction)
-        k_ptrs = K_cache + page_idx[:, None] * stride_kp + kv_h * stride_kh + page_off[:, None] * stride_kl + offs_d[None, :] * stride_kd
-        v_ptrs = V_cache + page_idx[:, None] * stride_kp + kv_h * stride_kh + page_off[:, None] * stride_kl + offs_d[None, :] * stride_kd
-        k = tl.load(k_ptrs, mask=mask_n[:, None], other=0.0).to(tl.float32)
-        v = tl.load(v_ptrs, mask=mask_n[:, None], other=0.0).to(tl.float32)
+        k = tl.load(K_cache + page_idx[:, None] * stride_kp + kv_h * stride_kh + page_off[:, None] * stride_kl + offs_d[None, :] * stride_kd, mask=mask_n[:, None], other=0.0).to(tl.float32)
+        v = tl.load(V_cache + page_idx[:, None] * stride_kp + kv_h * stride_kh + page_off[:, None] * stride_kl + offs_d[None, :] * stride_kd, mask=mask_n[:, None], other=0.0).to(tl.float32)
 
-        qk = tl.dot(q, tl.trans(k)) if G >= 16 else tl.sum(q[:, None, :] * k[None, :, :], axis=2)
-        qk = tl.where(mask_n[None, :], qk, -float("inf"))
-
+        qk = tl.where(mask_n[None, :], tl.sum(q[:, None, :] * k[None, :, :], axis=2), -float("inf"))
         m_new = tl.maximum(m_i, tl.max(qk, axis=1))
         p = tl.exp(qk - m_new[:, None])
         alpha = tl.exp(m_i - m_new)
@@ -183,19 +165,12 @@ def gqa_decode_f1_singlepass(
         m_i = m_new
 
     out = (acc / l_i[:, None]).to(Out.dtype.element_ty)
-    out_ptrs = Out + b * stride_qb + (kv_h * G + offs_g[:, None]) * stride_qh + offs_d[None, :] * stride_qd
-    tl.store(out_ptrs, out)
+    tl.store(Out + b * stride_qb + (kv_h * G + offs_g[:, None]) * stride_qh + offs_d[None, :] * stride_qd, out)
 ```
 
-对于 **F2（高并发带宽流式家族）**，利用更大的 `BLOCK_N=64/128`、多级异步流水（`num_stages=3`）与更宽的 Warp 调度，在 `B·H_kv >= 132` 时直接把 HBM3 压向 `3,350 GB/s` 屋顶（代码结构与 F1 同源但以独立编译配置 `num_stages=3, num_warps=4, BLOCK_N=64` 编译为独立符号 `gqa_decode_f2_paged_stream`，避免重流水线寄存器占用污染 F1）。
-
-再看 **F3（超长 KV / 变长偏度家族）**：采用**两阶段 Split-KV + Log-Sum-Exp Combine**，把单个长序列沿 `L` 维切成 `num_splits` 段铺满 132 个 SM：
+针对 F3 的超长缓存与高偏度负载，我们编写两阶段 Split-KV 内核。第一阶段沿第三网格维切分 KV 序列，每个程序块只处理一段连续分片，并输出局部归一化结果与精确的 Log-Sum-Exp 标量。
 
 ```python
-# ---------------------------------------------------------------------------
-# Family F3 (Stage 1): Split-KV across SMs to eliminate under-utilization & skew
-# Grid = (B, H_kv, num_splits) -> writes partial (MidOut, MidLSE) per split.
-# ---------------------------------------------------------------------------
 @triton.jit
 def gqa_decode_f3_splitkv_stage1(
     Q, K_cache, V_cache, PageTable, SeqLens, MidOut, MidLSE,
@@ -205,7 +180,8 @@ def gqa_decode_f3_splitkv_stage1(
     stride_mo_b, stride_mo_h, stride_mo_s, stride_mo_d,
     stride_lse_b, stride_lse_h, stride_lse_s,
     sm_scale, num_splits,
-    G: tl.constexpr, D: tl.constexpr, PAGE_SIZE: tl.constexpr, BLOCK_N: tl.constexpr,
+    G: tl.constexpr, D: tl.constexpr,
+    PAGE_SIZE: tl.constexpr, BLOCK_N: tl.constexpr,
 ):
     b = tl.program_id(0)
     kv_h = tl.program_id(1)
@@ -218,10 +194,8 @@ def gqa_decode_f3_splitkv_stage1(
 
     offs_g = tl.arange(0, G)
     offs_d = tl.arange(0, D)
-
     if kv_start >= kv_end:
-        lse_ptrs = MidLSE + b * stride_lse_b + (kv_h * G + offs_g) * stride_lse_h + s_id * stride_lse_s
-        tl.store(lse_ptrs, -float("inf"))
+        tl.store(MidLSE + b * stride_lse_b + (kv_h * G + offs_g) * stride_lse_h + s_id * stride_lse_s, -float("inf"))
         return
 
     q = tl.load(Q + b * stride_qb + (kv_h * G + offs_g[:, None]) * stride_qh + offs_d[None, :] * stride_qd).to(tl.float32) * sm_scale
@@ -245,17 +219,14 @@ def gqa_decode_f3_splitkv_stage1(
         acc = acc * alpha[:, None] + tl.sum(p[:, :, None] * v[None, :, :], axis=1)
         m_i = m_new
 
-    # Store normalized partial output + exact log-sum-exp for numerically stable combine
     lse = m_i + tl.log(l_i)
-    mo_ptrs = MidOut + b * stride_mo_b + (kv_h * G + offs_g[:, None]) * stride_mo_h + s_id * stride_mo_s + offs_d[None, :] * stride_mo_d
-    lse_ptrs = MidLSE + b * stride_lse_b + (kv_h * G + offs_g) * stride_lse_h + s_id * stride_lse_s
-    tl.store(mo_ptrs, acc / l_i[:, None])
-    tl.store(lse_ptrs, lse)
+    tl.store(MidOut + b * stride_mo_b + (kv_h * G + offs_g[:, None]) * stride_mo_h + s_id * stride_mo_s + offs_d[None, :] * stride_mo_d, acc / l_i[:, None])
+    tl.store(MidLSE + b * stride_lse_b + (kv_h * G + offs_g) * stride_lse_h + s_id * stride_lse_s, lse)
+```
 
+第二阶段内核 `gqa_decode_f3_lse_combine` 读取各分片的局部结果与 Log-Sum-Exp 标量，在全局最大值偏移下重新加权归一化并写回最终输出。
 
-# ---------------------------------------------------------------------------
-# Family F3 (Stage 2): Numerically stable Log-Sum-Exp reduction across splits
-# ---------------------------------------------------------------------------
+```python
 @triton.jit
 def gqa_decode_f3_lse_combine(
     MidOut, MidLSE, Out,
@@ -280,55 +251,48 @@ def gqa_decode_f3_lse_combine(
     tl.store(Out + b * stride_ob + h * stride_oh + offs_d * stride_od, out)
 ```
 
-### 4.2 Ascend 910 FlashAttention (GQA) — UB-Aware Family Kernels (Ascend C)
+### 5.2 Ascend C Buffer Specialization
 
-在 CANN-Bench v2.1 上，**F2 与 F3 的核心结构差异在于编译期模板参数 `BUFFER_NUM`（Ping-Pong 双缓冲 vs. 单缓冲防溢出）与分块宽度 `Bc`**，确保每个 AIV 的 UB 工作集严格低于 `192 KB` 且单次 DMA 对齐 `32B`：
+在 Ascend 910 上，我们通过编译期模板参数 `BUFFER_NUM`、`BR` 与 `BC` 隔离三个家族的片上资源占用。Host 端切分程序先核算片上字节数不超过 192 KB，再按家族分发到对应实例化二进制。
 
 ```cpp
-// Ascend C kernel template: specialized separately into F2 (BUFFER_NUM=2) and F3 (BUFFER_NUM=1)
 template <int32_t BUFFER_NUM, int32_t BR, int32_t BC>
 class FlashAttnGqaKernel {
 public:
-  __aicore__ inline void Init(GM_ADDR q, GM_ADDR k, GM_ADDR v, GM_ADDR out, const FaTilingData &t) {
-    // 192 KB UB budget check (enforced at Host Tiling before launch):
-    // UB_bytes = BUFFER_NUM * (BR * BC * sizeof(float) + 2 * BR * D * sizeof(half)) <= 192 * 1024
-    pipe.InitBuffer(inQueK, BUFFER_NUM, BC * t.alignedD * sizeof(half));   // 32B aligned
+  __aicore__ inline void Init(GM_ADDR q, GM_ADDR k, GM_ADDR v, GM_ADDR out, const FaTiling &t) {
+    // Enforce UB_bytes <= 192 KB and 32-byte alignment at host tiling time
+    pipe.InitBuffer(inQueK, BUFFER_NUM, BC * t.alignedD * sizeof(half));
     pipe.InitBuffer(inQueV, BUFFER_NUM, BC * t.alignedD * sizeof(half));
-    pipe.InitBuffer(vecScoreBuf, BUFFER_NUM, BR * BC * sizeof(float));
+    pipe.InitBuffer(scoreBuf, BUFFER_NUM, BR * BC * sizeof(float));
     pipe.InitBuffer(outQueO, 1, BR * t.alignedD * sizeof(half));
   }
 
-  __aicore__ inline void Process(const FaTilingData &t) {
-    // F2 (BUFFER_NUM=2): MTE2 CopyIn(i+1) overlaps Cube MatMul(i) & Vector OnlineSoftmax(i)
-    // F3 (BUFFER_NUM=1): Narrow BC=32 + Multi-Core Split-S across 32 AI Cores -> zero UB overflow
-    for (int32_t step = t.kvStart; step < t.kvEnd; step += BC) {
-      CopyInKV(step);     // MTE2: GM -> L1/UB (32B aligned burst)
-      ComputeQKAndP();    // AIC Cube QK^T -> AIV Vector Online Softmax
-      AccumulatePV();     // AIC Cube P*V  -> AIV rescale accumulator
+  __aicore__ inline void Process(const FaTiling &t) {
+    for (int32_t pos = t.kvStart; pos < t.kvEnd; pos += BC) {
+      CopyInKV(pos);       // MTE2: GM -> L1/UB (32B aligned)
+      ComputeScoreAndP();  // AIC Cube QK^T -> AIV Online Softmax
+      AccumulatePV();      // AIC Cube P*V  -> AIV rescale
     }
-    CopyOutO();           // MTE3: UB -> GM
+    CopyOutO();            // MTE3: UB -> GM
   }
 private:
   AscendC::TPipe pipe;
   AscendC::TQue<AscendC::QuePosition::VECIN, BUFFER_NUM> inQueK, inQueV;
   AscendC::TQue<AscendC::QuePosition::VECOUT, 1> outQueO;
-  AscendC::TBuf<AscendC::TPosition::VECCALC> vecScoreBuf;
+  AscendC::TBuf<AscendC::TPosition::VECCALC> scoreBuf;
 };
 
-// Host-side Tiling Dispatch instantiates distinct legal binaries per family:
-//   F1 (Short-Seq):   FlashAttnGqaKernel</*BUF=*/1, /*BR=*/32, /*BC=*/64>
-//   F2 (UB-Fit Mid):  FlashAttnGqaKernel</*BUF=*/2, /*BR=*/64, /*BC=*/64>  // Ping-Pong Peak_comp
-//   F3 (UB-Safe Long):FlashAttnGqaKernel</*BUF=*/1, /*BR=*/32, /*BC=*/32>  // Multi-Core Split-S
+// Independent binaries per family:
+//   F1 (Short-Seq):    FlashAttnGqaKernel<1, 32, 64>
+//   F2 (UB Ping-Pong): FlashAttnGqaKernel<2, 64, 64>
+//   F3 (UB-Safe Long): FlashAttnGqaKernel<1, 32, 32>
 ```
 
-## 5. Continuous-Predicate Router & Final Assembly Code
+## 6. Continuous-Predicate Dispatch
 
-<aside class="sidenote">
-  <span class="sn-num">3</span>
-  工程纪律：路由器只允许读取张量维度、偏度与硬件常量等<strong>连续物理谓词</strong>，严禁出现 <code>if workload_id == "case_03"</code> 这类测试集硬编码，并且必须绑定一个经过全量验证的安全 <code>fallback</code> 分支。
-</aside>
+最后一步是将独立编译的家族内核组装为统一入口。连续谓词路由器只读取输入张量维度、序列长度统计量与硬件常量，不引用任何测试集用例编号。同时，路由器必须保留一条经过全量校验的兜底分支，保证任意未见形状都能合法执行。
 
-将独立调优好的 `kernel_F1 / F2 / F3` 组装成一个对外无感、可直接替换原算子的统一入口，需要三步：**4D 轻量画像 → 连续物理谓词路由 → 动态波次对齐参数计算**<span class="sn-ref">3</span>：
+当估算访存耗时落入两倍发射地板且最大序列长度不超过 1,024 时，路由器调用轻量级 F1 内核。当波次比低于 0.75 且最大序列达到 4,096，或偏度比达到 1.6 时，路由器调用两阶段 F3 内核并按 SM 数量动态对齐切分数。其余高并发输入统一进入 F2 多级流式内核，该路径同时充当全量安全兜底。
 
 ```python
 import math
@@ -339,25 +303,22 @@ import torch
 class H100Specs:
     num_sms: int = 132
     hbm_bw_gbps: float = 3350.0
-    smem_kb: float = 228.0
     launch_floor_us: float = 4.0
 
 def choose_wave_aligned_splits(B: int, H_kv: int, max_seq: int, num_sms: int = 132) -> int:
-    """Pick num_splits so total CTAs (B * H_kv * splits) align to SM waves."""
     base_ctas = B * H_kv
     if base_ctas >= num_sms:
         return 1
-    # Target 1-2 full waves without shrinking each split below 512 KV tokens
     target_splits = math.ceil(num_sms / base_ctas)
     max_useful = max(1, max_seq // 512)
     return max(1, min(16, target_splits, max_useful))
 
 def gqa_decode_dispatch(
-    q: torch.Tensor,          # [B, H_q, D]
-    k_cache: torch.Tensor,    # [num_pages, H_kv, PAGE_SIZE, D]
+    q: torch.Tensor,
+    k_cache: torch.Tensor,
     v_cache: torch.Tensor,
-    page_table: torch.Tensor, # [B, max_pages]
-    seq_lens: torch.Tensor,   # [B]
+    page_table: torch.Tensor,
+    seq_lens: torch.Tensor,
     hw: H100Specs = H100Specs(),
 ) -> torch.Tensor:
     B, H_q, D = q.shape
@@ -366,18 +327,17 @@ def gqa_decode_dispatch(
     sm_scale = 1.0 / math.sqrt(D)
     out = torch.empty_like(q)
 
-    # Lightweight 4D physical features (continuous predicates, zero case_id hardcoding)
+    # Continuous physical features only (no hardcoded workload IDs)
     max_seq = int(seq_lens.max().item())
     mean_seq = float(seq_lens.float().mean().item())
     skew_ratio = max_seq / max(1.0, mean_seq)
-    base_ctas = B * H_kv
-    wave_ratio = base_ctas / hw.num_sms
+    wave_ratio = (B * H_kv) / hw.num_sms
     est_bytes = 2.0 * B * H_kv * mean_seq * D * q.element_size()
     est_bw_us = (est_bytes / (hw.hbm_bw_gbps * 1e9)) * 1e6
 
-    # --- Route 1 (F1): Launch / Latency-bound -> single-pass zero-overhead warp kernel ---
+    # Route F1: launch-bound single-pass kernel
     if est_bw_us <= 2.0 * hw.launch_floor_us and max_seq <= 1024:
-        gqa_decode_f1_singlepass[(B, H_kv)](
+        gqa_decode_singlepass[(B, H_kv)](
             q, k_cache, v_cache, page_table, seq_lens, out,
             *q.stride(), *k_cache.stride(), *page_table.stride(),
             sm_scale, G=G, D=D, PAGE_SIZE=PAGE_SIZE, BLOCK_N=32,
@@ -385,7 +345,7 @@ def gqa_decode_dispatch(
         )
         return out
 
-    # --- Route 3 (F3): Long-KV SM under-utilization OR high ragged load skew -> Split-KV ---
+    # Route F3: wave-aligned Split-KV + LSE combine for long or skewed KV
     if (wave_ratio < 0.75 and max_seq >= 4096) or (skew_ratio >= 1.6 and max_seq >= 2048):
         num_splits = choose_wave_aligned_splits(B, H_kv, max_seq, hw.num_sms)
         if num_splits > 1:
@@ -408,32 +368,32 @@ def gqa_decode_dispatch(
             )
             return out
 
-    # --- Route 2 (F2 / Verified Safe Fallback): Peak_bw streaming kernel ---
-    gqa_decode_f1_singlepass[(B, H_kv)](
+    # Route F2 & verified safe fallback: pipelined streaming kernel
+    gqa_decode_singlepass[(B, H_kv)](
         q, k_cache, v_cache, page_table, seq_lens, out,
         *q.stride(), *k_cache.stride(), *page_table.stride(),
         sm_scale, G=G, D=D, PAGE_SIZE=PAGE_SIZE, BLOCK_N=64,
-        num_warps=4, num_stages=3,   # F2 multi-stage async streaming specialization
+        num_warps=4, num_stages=3,
     )
     return out
 ```
 
-## 6. Evaluation Blueprint & Open Questions
+## 7. Verification Plan
 
-待实测数据冻结后，本节将按 *Connectionism* 的极简双轴折线图规范补充三组核心曲线：
+后续实验将按三项正交指标验证跨负载分派的有效性。第一项在 H100 的 36 个 `gqa_decode` 用例上比较单一内核与多家族分派，重点观测分家族加速比与最差 20% 尾部加速比。第二项在 Ascend 910 的 20 个 `flash_attention` 用例上统计编译通过率、Roofline 达峰率与官方 HAP 综合分。该对比用于验证双缓冲与单缓冲分族如何跨越 192 KB 的 UB 容量边界。第三项测量 Host 端连续谓词路由开销，确认纯静态物理量判断在端到端延迟中的占比低于 1 微秒。
 
-| 实验组 | 平台与基准 | 关键观测指标 | 预期验证结论 |
+| Suite | Platform | Target Metrics | Baseline |
 |---|---|---|---|
-| **Exp 1 · Per-Family Speedup** | H100 FlashInfer-Bench (`gqa_decode` 36 cases) | 分家族 `F1/F2/F3` 加速比与 Worst-20% Tail Speedup | 单一长 KV Kernel 在 `F1` 回落、无 Split-KV 在 `F3` 崩塌；多家族路由在全部 36 个 case 上消除长尾塌陷 |
-| **Exp 2 · UB Cliff & HAP** | Ascend 910 CANN-Bench v2.1 (`flash_attention` 20 cases) | 编译通过率、Roofline `%SoL`、官方 `HAP` 分数 | `F2 (BUFFER_NUM=2)` 逼近 Cube 屋顶，`F3 (BUFFER_NUM=1 + Split-S)` 零 UB 溢出跨越 192 KB 硬墙 |
-| **Exp 3 · Router Overhead** | H100 + Ascend 910 | 连续谓词 Host 路由耗时占比 vs. 端到端收益 | 纯静态物理量判断耗时 `< 1 µs`，相比跨家族 1.2×–1.5× 加速几乎可忽略 |
+| FlashInfer-Bench `gqa_decode` | NVIDIA H100 SXM5 | Geomean Speedup, Worst-20% Tail, %SoL | FlashInfer |
+| CANN-Bench v2.1 `flash_attention` | Huawei Ascend 910 | Pass Rate, %SoL, Official HAP | CANN-Ops |
+| Dispatch Microbenchmark | H100 & Ascend 910 | Host Routing Latency (µs) | Single Kernel |
 
 ## Citation
 
 ```bibtex
 @article{zhang2026crossworkload,
   author  = {Jerry Zhang},
-  title   = {Cross-Workload Kernel Dispatch: 4D Analysis to Roofline},
+  title   = {Cross-Workload Kernel Dispatch},
   journal = {jerry609 Research Notes},
   year    = {2026},
   url     = {https://jerry609.github.io/blog/cross-workload-kernel-roofline-outline}
