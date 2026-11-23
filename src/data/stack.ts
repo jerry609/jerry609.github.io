@@ -107,8 +107,8 @@ export const SERIES = [
   {
     id: 'kernel-silicon',
     layer: 'systems',
-    title: '跨平台算子分派与落硅执行',
-    desc: '从四维跨负载分派与连续路由出发，深入 H100 SXM5 与 Ascend 910C 的片上微架构、DMA、Ping-Pong 流水与编译范式。',
+    title: '异构芯片算子优化笔记',
+    desc: '从多形状路由切分到硬件执行细节：H100 与 Ascend 910C 的片上缓存、DMA 搬运、Ping-Pong 流水与融合编译。',
     slugs: [
       'cross-workload-kernel-roofline-outline',
       'silicon-execution-h100-ascend910c'
