@@ -1066,6 +1066,7 @@ export class AcceleratorTeardownEngine {
   private packetTracks: PacketTrack[] = []
   private dummy = new THREE.Object3D()
   private tmpColor = new THREE.Color()
+  private tmpVec = new THREE.Vector3()
 
   // Textures that switch with arch
   private coldPlateTexGpuL: THREE.CanvasTexture
@@ -1114,12 +1115,22 @@ export class AcceleratorTeardownEngine {
   private lastX = 0
   private lastY = 0
   private visible = true
+  private docVisible = true
+  private dirty = true
+  private viewportW = 0
+  private viewportH = 0
+  private lastHoverTs = 0
   private rafId = 0
   private lastTs = 0
   private resizeObs: ResizeObserver
   private interObs: IntersectionObserver
   private themeObs: MutationObserver
   private lastTelemetryTs = 0
+  private onVisChange = () => {
+    this.docVisible = !document.hidden
+    if (this.docVisible) this.wake()
+    else this.stopLoop()
+  }
 
   constructor(
     container: HTMLElement,
@@ -1167,9 +1178,9 @@ export class AcceleratorTeardownEngine {
       canvas,
       antialias: true,
       alpha: false,
-      powerPreference: 'high-performance'
+      powerPreference: 'default'
     })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5))
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.08
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -1191,7 +1202,7 @@ export class AcceleratorTeardownEngine {
     this.keyLight = new THREE.DirectionalLight('#fffaf2', 1.65)
     this.keyLight.position.set(8.5, 14, 9.5)
     this.keyLight.castShadow = true
-    this.keyLight.shadow.mapSize.set(1024, 1024)
+    this.keyLight.shadow.mapSize.set(512, 512)
     this.keyLight.shadow.camera.near = 2
     this.keyLight.shadow.camera.far = 35
     this.keyLight.shadow.camera.left = -8
@@ -1241,15 +1252,23 @@ export class AcceleratorTeardownEngine {
     this.interObs = new IntersectionObserver(
       (entries) => {
         this.visible = entries[0]?.isIntersecting ?? true
+        if (this.visible) this.wake()
+        else this.stopLoop()
       },
       { threshold: 0.04 }
     )
     this.interObs.observe(this.container)
 
-    this.themeObs = new MutationObserver(() => this.applyTheme())
+    this.themeObs = new MutationObserver(() => {
+      this.applyTheme()
+      this.wake()
+    })
     this.themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
-    this.tick(0)
+    this.docVisible = !document.hidden
+    document.addEventListener('visibilitychange', this.onVisChange)
+
+    this.wake()
   }
 
   private tagPart(obj: THREE.Object3D, partId: Exclude<PartId, 'ALL'>) {
@@ -2308,30 +2327,51 @@ export class AcceleratorTeardownEngine {
 
   /* ---------- Public API for UI Controls ---------- */
 
+  private startLoop() {
+    if (this.rafId || !this.visible || !this.docVisible) return
+    this.rafId = requestAnimationFrame(this.tick)
+  }
+  private stopLoop() {
+    if (!this.rafId) return
+    cancelAnimationFrame(this.rafId)
+    this.rafId = 0
+  }
+  private wake() {
+    this.dirty = true
+    this.startLoop()
+  }
+
   public setArch(arch: ArchMode) {
     this.arch = arch
     this.applyArchGeometry()
+    this.wake()
   }
   public setScenario(sc: DispatchScenario) {
     this.scenario = sc
     this.applyCutawayMaterials()
+    this.wake()
   }
   public setPrecision(p: PrecisionMode) {
     this.precision = p
+    this.wake()
   }
   public setWorkload(w: WorkloadMode) {
     this.workload = w
     this.applyCutawayMaterials()
+    this.wake()
   }
   public setBatch(b: number) {
     this.batch = Math.max(1, Math.min(256, b))
+    this.wake()
   }
   public setPaused(p: boolean) {
     this.paused = p
+    this.wake()
   }
   public stepCycle(delta: number) {
     this.paused = true
     this.cycle += delta
+    this.wake()
   }
   public setCutaway(mode: CutawayMode) {
     this.cutaway = mode
@@ -2349,6 +2389,7 @@ export class AcceleratorTeardownEngine {
       this.tCutawaySlide = 0.0
     }
     this.applyCutawayMaterials()
+    this.wake()
   }
   public setExplode(val01: number) {
     this.tExplode = Math.max(0, Math.min(1, val01))
@@ -2357,6 +2398,7 @@ export class AcceleratorTeardownEngine {
       this.tCutawaySlide = 0
       this.applyCutawayMaterials()
     }
+    this.wake()
   }
   public setCameraPreset(preset: CameraPreset) {
     const p = CAMERA_PRESETS[preset]
@@ -2364,6 +2406,7 @@ export class AcceleratorTeardownEngine {
     this.tEl = p.el
     this.tDist = p.dist
     this.tTargetY = p.targetY
+    this.wake()
   }
   public setIsolate(part: PartId) {
     this.isolate = part
@@ -2371,14 +2414,17 @@ export class AcceleratorTeardownEngine {
       this.setCutaway('exploded')
     } else {
       this.applyCutawayMaterials()
+      this.wake()
     }
   }
   public setCallouts(on: boolean) {
     this.calloutsEnabled = on
+    this.wake()
   }
   public setHalo(on: boolean) {
     this.haloEnabled = on
     this.haloGroup.visible = on
+    this.wake()
   }
   public getState() {
     return {
@@ -2420,10 +2466,14 @@ export class AcceleratorTeardownEngine {
         this.lastX = e.clientX
         this.lastY = e.clientY
         this.cb.onHoverPart(null, 0, 0)
+        this.wake()
         return
       }
 
-      // Hover picking
+      // Throttled hover raycast picking (~22 Hz max)
+      const now = performance.now()
+      if (now - this.lastHoverTs < 45) return
+      this.lastHoverTs = now
       const hit = this.pickPart()
       if (hit) {
         this.cb.onHoverPart(this.getCatalog()[this.arch][hit], e.clientX - rect.left, e.clientY - rect.top)
@@ -2459,6 +2509,7 @@ export class AcceleratorTeardownEngine {
         e.preventDefault()
         this.cb.onUserInteract()
         this.tDist = Math.max(7.2, Math.min(20.5, this.tDist + e.deltaY * 0.01))
+        this.wake()
       },
       { passive: false }
     )
@@ -2488,9 +2539,12 @@ export class AcceleratorTeardownEngine {
   public resize() {
     const r = this.container.getBoundingClientRect()
     if (!r.width || !r.height) return
+    this.viewportW = r.width
+    this.viewportH = r.height
     this.camera.aspect = r.width / r.height
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(r.width, r.height, false)
+    this.wake()
   }
 
   /* ---------- Frame Update & Animation Loop ---------- */
@@ -2786,15 +2840,15 @@ export class AcceleratorTeardownEngine {
 
     // Project 3D world-space CAD callout anchors to viewport coordinates
     if (this.calloutsEnabled) {
-      const w = this.container.clientWidth
-      const h = this.container.clientHeight
+      const w = this.viewportW || this.container.clientWidth
+      const h = this.viewportH || this.container.clientHeight
       const catalog = this.getCatalog()[this.arch]
       const projected = this.calloutAnchors.map((a) => {
-        const worldPos = a.localPos.clone()
-        a.group.localToWorld(worldPos)
-        worldPos.project(this.camera)
-        const sx = (worldPos.x * 0.5 + 0.5) * w
-        const sy = (-worldPos.y * 0.5 + 0.5) * h + a.yBias
+        this.tmpVec.copy(a.localPos)
+        a.group.localToWorld(this.tmpVec)
+        this.tmpVec.project(this.camera)
+        const sx = (this.tmpVec.x * 0.5 + 0.5) * w
+        const sy = (-this.tmpVec.y * 0.5 + 0.5) * h + a.yBias
         const info = catalog[a.id]
         let liveSub = info.subtitle
         if (this.profile === 'h100_910c') {
@@ -2817,7 +2871,7 @@ export class AcceleratorTeardownEngine {
           else if (a.id === 'thermal') liveSub = `${hw.tdpWatts}W TDP · ${hw.tempC}°C DIE`
         }
         const ok =
-          worldPos.z < 1 &&
+          this.tmpVec.z < 1 &&
           sx > 24 &&
           sx < w - 24 &&
           sy > 44 &&
@@ -2842,35 +2896,50 @@ export class AcceleratorTeardownEngine {
   }
 
   private tick = (ts: number) => {
-    this.rafId = requestAnimationFrame(this.tick)
-    if (!this.visible) return
-    if (ts - this.lastTs < 24) return
-    this.lastTs = ts
+    this.rafId = 0
+    if (!this.visible || !this.docVisible) return
 
-    if (!this.reduceMotion && !this.paused) {
-      this.cycle += 0.42
-    }
+    const animate = !this.reduceMotion && !this.paused
+    const settling =
+      Math.abs(this.tAz - this.az) > 1e-4 ||
+      Math.abs(this.tEl - this.el) > 1e-4 ||
+      Math.abs(this.tDist - this.dist) > 1e-4 ||
+      Math.abs(this.tTargetY - this.targetY) > 1e-4 ||
+      Math.abs(this.tExplode - this.explode) > 1e-4 ||
+      Math.abs(this.tCutawaySlide - this.cutawaySlide) > 1e-4
 
-    const hw = computeHardwareTelemetry(
-      this.arch,
-      this.precision,
-      this.workload,
-      this.batch,
-      this.cycle,
-      this.profile,
-      this.scenario
-    )
-    this.updateScene(hw)
-    this.renderer.render(this.scene, this.camera)
+    if (animate || settling || this.dirty) {
+      if (this.dirty || ts - this.lastTs >= 32) {
+        this.lastTs = ts
+        this.dirty = false
+        if (animate) this.cycle += 0.56
 
-    if (ts - this.lastTelemetryTs >= 80) {
-      this.lastTelemetryTs = ts
-      this.cb.onTelemetry(hw)
+        const hw = computeHardwareTelemetry(
+          this.arch,
+          this.precision,
+          this.workload,
+          this.batch,
+          this.cycle,
+          this.profile,
+          this.scenario
+        )
+        this.updateScene(hw)
+        this.renderer.render(this.scene, this.camera)
+
+        if (ts - this.lastTelemetryTs >= 120 || !animate) {
+          this.lastTelemetryTs = ts
+          this.cb.onTelemetry(hw)
+        }
+      }
+      if (animate || settling) {
+        this.rafId = requestAnimationFrame(this.tick)
+      }
     }
   }
 
   public dispose() {
-    cancelAnimationFrame(this.rafId)
+    this.stopLoop()
+    document.removeEventListener('visibilitychange', this.onVisChange)
     this.resizeObs.disconnect()
     this.interObs.disconnect()
     this.themeObs.disconnect()

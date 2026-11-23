@@ -3,6 +3,7 @@ import type { CollectionEntry } from 'astro:content'
 import { getEntry, render } from 'astro:content'
 
 import katex from 'katex'
+import 'katex/dist/katex.min.css'
 import { getBlogCollection } from 'astro-pure/server'
 import PageLayout from '@/layouts/BaseLayout.astro'
 import { MATH_ROADMAP } from '@/data/math-roadmap'

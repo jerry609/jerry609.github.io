@@ -9,11 +9,29 @@ interface Props {
 
 const { selector = config.integ.mediumZoom.selector, background = 'hsl(var(--background) / 0.8)' } =
   Astro.props
+const zoomSrc = `${config.npmCDN}/medium-zoom/dist/pure/medium-zoom.min.umd.js`
 ---
 
-<script is:inline src={`${config.npmCDN}/medium-zoom/dist/pure/medium-zoom.min.umd.js`}></script>
-<script is:inline define:vars={{ selector, background }}>
-  mediumZoom(selector, { background })
+<script is:inline define:vars={{ selector, background, zoomSrc }}>
+  const initZoom = () => {
+    if (!document.querySelector(selector)) return
+    if (typeof window.mediumZoom === 'function') {
+      window.mediumZoom(selector, { background })
+      return
+    }
+    const s = document.createElement('script')
+    s.src = zoomSrc
+    s.async = true
+    s.onload = () => {
+      if (typeof window.mediumZoom === 'function') window.mediumZoom(selector, { background })
+    }
+    document.head.appendChild(s)
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initZoom, { once: true })
+  } else {
+    initZoom()
+  }
 </script>
 <style is:global>
   .medium-zoom-overlay {

@@ -91,9 +91,43 @@
       }
     }
 
+    let rafId = 0
+    let last = 0
+    let docVisible = !document.hidden
+
+    const stopLoop = () => {
+      if (!rafId) return
+      cancelAnimationFrame(rafId)
+      rafId = 0
+    }
+
+    const loop = (ts: number) => {
+      rafId = 0
+      if (!visible || !docVisible || reduce) return
+      if (ts - last >= 50) {
+        last = ts
+        tick += 0.75
+        draw(tick)
+      }
+      rafId = requestAnimationFrame(loop)
+    }
+
+    const startLoop = () => {
+      if (rafId || !visible || !docVisible || reduce) return
+      rafId = requestAnimationFrame(loop)
+    }
+
     new IntersectionObserver((es) => {
       visible = es[0]?.isIntersecting ?? true
+      if (visible) startLoop()
+      else stopLoop()
     }).observe(canvas.parentElement!)
+
+    document.addEventListener('visibilitychange', () => {
+      docVisible = !document.hidden
+      if (docVisible) startLoop()
+      else stopLoop()
+    })
 
     resize()
     new ResizeObserver(() => {
@@ -101,20 +135,8 @@
       draw(tick)
     }).observe(canvas.parentElement!)
 
-    if (reduce) {
-      draw(tick)
-    } else {
-      let last = 0
-      const loop = (ts: number) => {
-        if (visible && ts - last >= 50) {
-          last = ts
-          tick += 0.75
-          draw(tick)
-        }
-        requestAnimationFrame(loop)
-      }
-      requestAnimationFrame(loop)
-    }
+    draw(tick)
+    startLoop()
   }
 </script>
 

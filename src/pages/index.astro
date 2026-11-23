@@ -354,15 +354,34 @@ const series = SERIES.map((s) => {
 </PageLayout>
 
 <script>
-  // 10fps posterize-time risograph boil for DESSN mouse card (0.mp4 technique)
+  // 10fps posterize-time risograph boil for DESSN mouse card — paused offscreen / in background tabs
   const turb = document.getElementById('riso-turb')
+  const heroEl = document.querySelector('.hero')
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   if (turb && !reduce) {
     let seed = 2
-    window.setInterval(() => {
-      seed = (seed % 7) + 1
-      turb.setAttribute('seed', String(seed))
-    }, 100)
+    let timer: number | null = null
+    let inView = true
+    const sync = () => {
+      const shouldRun = inView && !document.hidden
+      if (shouldRun && timer === null) {
+        timer = window.setInterval(() => {
+          seed = (seed % 7) + 1
+          turb.setAttribute('seed', String(seed))
+        }, 125)
+      } else if (!shouldRun && timer !== null) {
+        clearInterval(timer)
+        timer = null
+      }
+    }
+    if (heroEl) {
+      new IntersectionObserver((es) => {
+        inView = es[0]?.isIntersecting ?? true
+        sync()
+      }).observe(heroEl)
+    }
+    document.addEventListener('visibilitychange', sync)
+    sync()
   }
 </script>
 

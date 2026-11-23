@@ -142,8 +142,36 @@ const shares = {
     showToast({ message: 'Link copied!' })
   })
 
-  // QRCode
+  // QRCode (on-demand load only when user clicks the button)
   const getQRCode = document.getElementById('get-qrcode')
-  const qrcodeContainer = document.getElementById('qrcode-container')
-  getQRCode?.addEventListener('click', () => qrcodeContainer?.classList.toggle('expanded'))
+  const qrcodeContainer = document.getElementById('qrcode-container') as HTMLElement | null
+  let qrLoading = false
+  getQRCode?.addEventListener('click', () => {
+    if (!qrcodeContainer) return
+    qrcodeContainer.classList.toggle('expanded')
+    if (qrcodeContainer.innerHTML !== '' || qrLoading) return
+    const text = qrcodeContainer.dataset.qrContent || window.location.href
+    const render = () => {
+      const QR = (window as unknown as { QRCode?: new (el: HTMLElement, text: string) => unknown }).QRCode
+      if (QR && qrcodeContainer.innerHTML === '') new QR(qrcodeContainer, text)
+    }
+    if ((window as unknown as { QRCode?: unknown }).QRCode) {
+      render()
+      return
+    }
+    const src = qrcodeContainer.dataset.qrSrc
+    if (!src) return
+    qrLoading = true
+    const s = document.createElement('script')
+    s.src = src
+    s.async = true
+    s.onload = () => {
+      qrLoading = false
+      render()
+    }
+    s.onerror = () => {
+      qrLoading = false
+    }
+    document.head.appendChild(s)
+  })
 </script>

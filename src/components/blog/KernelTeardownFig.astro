@@ -118,14 +118,13 @@
 </figure>
 
 <script>
-  import {
+  import type {
     AcceleratorTeardownEngine,
-    H100_910C_CATALOG,
-    type ArchMode,
-    type DispatchScenario,
-    type HardwareTelemetry,
-    type PartId,
-    type PartInfo
+    ArchMode,
+    DispatchScenario,
+    HardwareTelemetry,
+    PartId,
+    PartInfo
   } from '@/lib/teardown-engine'
 
   const stage = document.getElementById('ktStage') as HTMLDivElement | null
@@ -152,12 +151,19 @@
   const v4 = document.getElementById('ktV4')
 
   if (stage && canvas && calloutSvg && calloutLayer && hoverTip && tipLayer && tipTitle && tipSub) {
-    let curArch: ArchMode = 'gpu'
-    let curScenario: DispatchScenario = 'f3_opt'
-    let curIso: PartId = 'ALL'
-    let paused = false
+    let booted = false
+    const boot = async () => {
+      if (booted) return
+      booted = true
+      const { AcceleratorTeardownEngine: EngineCtor, H100_910C_CATALOG } = await import('@/lib/teardown-engine')
 
-    const syncIsoUi = (iso: PartId) => {
+      let curArch: ArchMode = 'gpu'
+      let curScenario: DispatchScenario = 'f3_opt'
+      let curIso: PartId = 'ALL'
+      let paused = false
+      let lastCalloutSig = ''
+
+      const syncIsoUi = (iso: PartId) => {
       curIso = iso
       document.querySelectorAll<HTMLButtonElement>('#ktIsoBar button').forEach((b) => {
         b.classList.toggle('active', b.dataset.iso === iso)
@@ -248,12 +254,18 @@
       const w = stage.clientWidth
       const h = stage.clientHeight
       if (!w || !h || w < 560 || !items.length) {
-        calloutSvg.innerHTML = ''
-        calloutLayer.innerHTML = ''
+        if (lastCalloutSig !== '') {
+          lastCalloutSig = ''
+          calloutSvg.innerHTML = ''
+          calloutLayer.innerHTML = ''
+        }
         return
       }
-      calloutSvg.setAttribute('viewBox', `0 0 ${w} ${h}`)
       const isDark = document.documentElement.classList.contains('dark')
+      const sig = `${isDark ? 1 : 0}|${w}|${h}|${items.map((it) => (it.visible ? `${it.id}:${Math.round(it.x)},${Math.round(it.y)}:${it.sub}:${it.color}` : '')).join(';')}`
+      if (sig === lastCalloutSig) return
+      lastCalloutSig = sig
+      calloutSvg.setAttribute('viewBox', `0 0 ${w} ${h}`)
       const lineStroke = isDark ? 'rgba(240,240,239,0.42)' : 'rgba(23,23,22,0.38)'
       let svgOut = ''
       let htmlOut = ''
@@ -287,7 +299,7 @@
 
     let engine: AcceleratorTeardownEngine | null = null
     try {
-      engine = new AcceleratorTeardownEngine(
+      engine = new EngineCtor(
         stage,
         canvas,
         {
@@ -392,7 +404,19 @@
       })
 
       window.addEventListener('beforeunload', () => eng.dispose())
+      }
     }
+
+    const lazyObs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          lazyObs.disconnect()
+          void boot()
+        }
+      },
+      { rootMargin: '260px 0px' }
+    )
+    lazyObs.observe(stage)
   }
 </script>
 

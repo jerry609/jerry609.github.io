@@ -195,16 +195,15 @@
 </section>
 
 <script>
-  import {
+  import type {
     AcceleratorTeardownEngine,
-    PART_CATALOG,
-    type ArchMode,
-    type CameraPreset,
-    type CutawayMode,
-    type HardwareTelemetry,
-    type PartId,
-    type PrecisionMode,
-    type WorkloadMode
+    ArchMode,
+    CameraPreset,
+    CutawayMode,
+    HardwareTelemetry,
+    PartId,
+    PrecisionMode,
+    WorkloadMode
   } from '@/lib/teardown-engine'
 
   const shell = document.getElementById('tdShell')
@@ -212,7 +211,12 @@
   const canvas = document.getElementById('tdCanvas') as HTMLCanvasElement | null
 
   if (shell && stage && canvas) {
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let booted = false
+    const bootBench = async () => {
+      if (booted) return
+      booted = true
+      const { AcceleratorTeardownEngine: EngineCtor, PART_CATALOG } = await import('@/lib/teardown-engine')
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     // DOM refs
     const archTitleEl = document.getElementById('tdArchTitle')!
@@ -382,7 +386,8 @@
       waveSvg.innerHTML = wHtml
     }
 
-    // Margin-pinned zero-overlap CAD Callout Renderer
+    // Margin-pinned zero-overlap CAD Callout Renderer (diff-cached to avoid DOM thrashing)
+    let lastCalloutSig = ''
     const renderCallouts = (
       items: {
         id: Exclude<PartId, 'ALL'>
@@ -398,13 +403,19 @@
       const w = stage.clientWidth
       const h = stage.clientHeight
       if (!w || !h || !items.length) {
-        calloutSvg.innerHTML = ''
-        calloutLayer.innerHTML = ''
+        if (lastCalloutSig !== '') {
+          lastCalloutSig = ''
+          calloutSvg.innerHTML = ''
+          calloutLayer.innerHTML = ''
+        }
         return
       }
+      const isDark = document.documentElement.classList.contains('dark')
+      const sig = `${isDark ? 1 : 0}|${w}|${h}|${items.map((it) => (it.visible ? `${it.id}:${Math.round(it.x)},${Math.round(it.y)}:${it.sub}` : '')).join(';')}`
+      if (sig === lastCalloutSig) return
+      lastCalloutSig = sig
       calloutSvg.setAttribute('viewBox', `0 0 ${w} ${h}`)
 
-      const isDark = document.documentElement.classList.contains('dark')
       const lineStroke = isDark ? 'rgba(240,240,239,0.45)' : 'rgba(23,23,22,0.42)'
       let svgOut = ''
       let htmlOut = ''
@@ -438,7 +449,7 @@
 
     let engine: AcceleratorTeardownEngine | null = null
     try {
-      engine = new AcceleratorTeardownEngine(stage, canvas, {
+      engine = new EngineCtor(stage, canvas, {
         onTelemetry: renderTelemetry,
         onCalloutsUpdate: renderCallouts,
         onHoverPart: (part, x, y) => {
@@ -685,7 +696,20 @@
         tourChip.classList.remove('on')
         tourText.textContent = 'REDUCED MOTION · MANUAL'
       }
+      window.addEventListener('beforeunload', () => eng.dispose())
+      }
     }
+
+    const benchObs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          benchObs.disconnect()
+          void bootBench()
+        }
+      },
+      { rootMargin: '250px 0px' }
+    )
+    benchObs.observe(shell)
   }
 </script>
 

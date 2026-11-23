@@ -20,8 +20,10 @@
 </script>
 
 <script>
-  import { Icons } from '../../libs/icons'
   import { listenThemeChange } from '../../utils'
+
+  const INFO_ICON =
+    '<path fill="currentColor" d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12S6.477 2 12 2m0 2a8 8 0 1 0 0 16a8 8 0 0 0 0-16m-.01 6c.558 0 1.01.452 1.01 1.01v5.124A1 1 0 0 1 12.5 18h-.49A1.01 1.01 0 0 1 11 16.99V12a1 1 0 1 1 0-2zM12 7a1 1 0 1 1 0 2a1 1 0 0 1 0-2"/>'
 
   // Listen for theme change event
   listenThemeChange()
@@ -31,7 +33,7 @@
     const toast = document.createElement('div')
     toast.className =
       'animate fixed bottom-8 z-20 px-4 py-2 bg-muted text-foreground rounded-lg border shadow-lg flex items-center gap-2'
-    toast.innerHTML = `<svg width='22' height='22' viewBox='0 0 24 24' fill='currentColor'>${Icons.info}</svg> <span>${message}</span>`
+    toast.innerHTML = `<svg width='22' height='22' viewBox='0 0 24 24' fill='currentColor'>${INFO_ICON}</svg> <span>${message}</span>`
     document.body.appendChild(toast)
     setTimeout(() => {
       toast.remove()

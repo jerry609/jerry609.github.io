@@ -154,7 +154,7 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
       }
 
       <Copyright {data} class='copyright' />
-      {!isDraft && enableComment && <Comment class='mt-6' />}
+      {config.integ.waline.enable && !isDraft && enableComment && <Comment class='mt-6' />}
     </article>
   </div>
 </BaseLayout>
@@ -214,24 +214,37 @@ const nextUp = [byDate[at + 1], byDate[at - 1]].filter(Boolean) as CollectionEnt
     const targets = links
       .map((a) => document.getElementById(a.dataset.rail || ''))
       .filter(Boolean) as HTMLElement[]
-    const setActive = (id: string) =>
-      links.forEach((a) => a.classList.toggle('active', a.dataset.rail === id))
-    const onScroll = () => {
+    let lastActiveId = ''
+    let lastLitCount = -1
+    let rafPending = false
+    const updateProgress = () => {
+      rafPending = false
       if (targets.length) {
         const line = window.innerHeight * 0.28
-        let current = targets[0]?.id
+        let current = targets[0]?.id ?? ''
         for (const t of targets) if (t.getBoundingClientRect().top <= line) current = t.id
-        if (current) setActive(current)
+        if (current && current !== lastActiveId) {
+          lastActiveId = current
+          links.forEach((a) => a.classList.toggle('active', a.dataset.rail === current))
+        }
       }
       if (memTiers.length && articleEl) {
         const rect = articleEl.getBoundingClientRect()
         const total = Math.max(1, rect.height - window.innerHeight * 0.5)
         const pct = Math.max(0, Math.min(1, (-rect.top + window.innerHeight * 0.25) / total))
         const litCount = pct < 0.25 ? 1 : pct < 0.55 ? 2 : pct < 0.85 ? 3 : 4
-        memTiers.forEach((el, idx) => el.classList.toggle('lit', idx < litCount))
+        if (litCount !== lastLitCount) {
+          lastLitCount = litCount
+          memTiers.forEach((el, idx) => el.classList.toggle('lit', idx < litCount))
+        }
       }
     }
-    onScroll()
+    const onScroll = () => {
+      if (rafPending) return
+      rafPending = true
+      requestAnimationFrame(updateProgress)
+    }
+    updateProgress()
     window.addEventListener('scroll', onScroll, { passive: true })
   }
 </script>

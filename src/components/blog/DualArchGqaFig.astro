@@ -196,7 +196,7 @@
       }
     }
 
-    const pal = () => {
+    const buildPal = () => {
       const isDark = document.documentElement.classList.contains('dark')
       return {
         isDark,
@@ -215,6 +215,8 @@
         ibis: '#C94032'
       }
     }
+    let cachedPal = buildPal()
+    const pal = () => cachedPal
 
     const rr = (x: number, y: number, w: number, h: number, r = 2) => {
       ctx.beginPath()
@@ -283,15 +285,6 @@
         ctx.fillText(label, mx, my + 0.5)
       }
       ctx.restore()
-    }
-
-    const drawDraftingDots = (W: number, H: number, dotCol: string) => {
-      ctx.fillStyle = dotCol
-      for (let x = 12; x < W; x += 18) {
-        for (let y = 12; y < H; y += 18) {
-          ctx.fillRect(x, y, 1.2, 1.2)
-        }
-      }
     }
 
     const drawTimeline = (
@@ -959,33 +952,57 @@
       )
     }
 
-    const render = () => {
-      const parent = dgCanvas.parentElement!
-      const W = Math.max(600, parent.clientWidth)
-      const H = parent.clientHeight || 400
-      const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      if (dgCanvas.width !== Math.round(W * dpr) || dgCanvas.height !== Math.round(H * dpr)) {
-        dgCanvas.width = Math.round(W * dpr)
-        dgCanvas.height = Math.round(H * dpr)
-      }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      const P = pal()
-      ctx.fillStyle = P.bg
-      ctx.fillRect(0, 0, W, H)
-      drawDraftingDots(W, H, P.dot)
+    let stageW = 640
+    let stageH = 396
+    let stageDpr = Math.min(window.devicePixelRatio || 1, 2)
 
-      const ph = tick * 0.015
-      const alarm = 0.5 + 0.5 * Math.sin(tick * 0.14)
-      if (arch === '910c') draw910C(W, H, ph, alarm)
-      else drawH100(W, H, ph, alarm)
+    const measureCanvas = () => {
+      const parent = dgCanvas.parentElement!
+      stageW = Math.max(600, parent.clientWidth)
+      stageH = parent.clientHeight || 396
+      stageDpr = Math.min(window.devicePixelRatio || 1, 2)
+      const pw = Math.round(stageW * stageDpr)
+      const ph = Math.round(stageH * stageDpr)
+      if (dgCanvas.width !== pw || dgCanvas.height !== ph) {
+        dgCanvas.width = pw
+        dgCanvas.height = ph
+      }
     }
 
+    const render = () => {
+      ctx.setTransform(stageDpr, 0, 0, stageDpr, 0, 0)
+      ctx.clearRect(0, 0, stageW, stageH)
+      const ph = tick * 0.025
+      const alarm = 0.5 + 0.5 * Math.sin(tick * 0.22)
+      if (arch === '910c') draw910C(stageW, stageH, ph, alarm)
+      else drawH100(stageW, stageH, ph, alarm)
+    }
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let rafId = 0
-    const loop = () => {
+    let lastTs = 0
+    let docVisible = !document.hidden
+
+    const stopLoop = () => {
+      if (!rafId) return
+      cancelAnimationFrame(rafId)
+      rafId = 0
+    }
+
+    const loop = (ts: number) => {
+      rafId = 0
+      if (!visible || !docVisible || paused || reduceMotion) return
+      if (ts - lastTs >= 33) {
+        lastTs = ts
+        tick++
+        render()
+      }
       rafId = requestAnimationFrame(loop)
-      if (!visible) return
-      if (!paused) tick++
-      render()
+    }
+
+    const startLoop = () => {
+      if (rafId || !visible || !docVisible || paused || reduceMotion) return
+      rafId = requestAnimationFrame(loop)
     }
 
     document.querySelectorAll<HTMLButtonElement>('#dgArchSeg button').forEach((btn) => {
@@ -1025,31 +1042,55 @@
       paused = !paused
       pauseBtn.textContent = paused ? '▶' : '❚❚'
       pauseBtn.classList.toggle('active', paused)
+      if (paused) stopLoop()
+      else startLoop()
     })
+
+    const onVisChange = () => {
+      docVisible = !document.hidden
+      if (docVisible) startLoop()
+      else stopLoop()
+    }
+    document.addEventListener('visibilitychange', onVisChange)
 
     const io = new IntersectionObserver(
       (entries) => {
         visible = entries[0]?.isIntersecting ?? true
+        if (visible) {
+          render()
+          startLoop()
+        } else {
+          stopLoop()
+        }
       },
       { threshold: 0.05 }
     )
     io.observe(dgBox)
 
-    const ro = new ResizeObserver(render)
+    const ro = new ResizeObserver(() => {
+      measureCanvas()
+      render()
+    })
     ro.observe(dgCanvas.parentElement!)
 
-    const mo = new MutationObserver(render)
+    const mo = new MutationObserver(() => {
+      cachedPal = buildPal()
+      render()
+    })
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
 
     window.addEventListener('beforeunload', () => {
-      cancelAnimationFrame(rafId)
+      stopLoop()
+      document.removeEventListener('visibilitychange', onVisChange)
       io.disconnect()
       ro.disconnect()
       mo.disconnect()
     })
 
+    measureCanvas()
     syncUiText()
-    loop()
+    render()
+    startLoop()
   }
 </script>
 
@@ -1211,6 +1252,14 @@
     overflow-x: auto;
     overflow-y: hidden;
     border-bottom: 1px solid hsl(var(--border));
+    background-color: #F6F5F0;
+    background-image: radial-gradient(rgba(23, 23, 22, 0.09) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+
+  :global(.dark) .dg-stage {
+    background-color: #161615;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
   }
 
   .dg-stage canvas {
